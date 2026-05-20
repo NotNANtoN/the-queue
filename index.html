@@ -1693,7 +1693,7 @@ body::before {
 </div>
 
 <!-- Mute Button -->
-<button class="mute-btn" id="mute-btn" title="Toggle audio">🔊</button>
+<button class="mute-btn" id="mute-btn" title="Toggle audio"><span id="mute-icon"></span></button>
 
 <!-- Phone Container -->
 <div class="phone-container" id="phone-container">
@@ -1705,7 +1705,7 @@ body::before {
       <span class="indicators">
         <span>●●●○○</span>
         <span id="status-battery">17%</span>
-        <span>🔋</span>
+        <span id="battery-icon"></span>
       </span>
     </div>
 
@@ -1752,16 +1752,16 @@ body::before {
     <!-- Bottom Nav -->
     <div class="bottom-nav">
       <button class="nav-tab active" data-tab="0">
-        <span class="icon">📍</span>
+        <span class="icon" id="nav-icon-0"></span>
         <span>Venue</span>
       </button>
       <button class="nav-tab" data-tab="1">
-        <span class="icon">👥</span>
+        <span class="icon" id="nav-icon-1"></span>
         <span>Squad</span>
         <span class="badge-count" id="squad-badge" style="display:none">0</span>
       </button>
       <button class="nav-tab" data-tab="2">
-        <span class="icon">🎒</span>
+        <span class="icon" id="nav-icon-2"></span>
         <span>Loadout</span>
       </button>
     </div>
@@ -1806,7 +1806,7 @@ body::before {
     <div class="queue-info">
       <span>POSITION <span class="pos-label" id="q-position">15</span></span>
       <span id="q-venue-label">Mainframe Basement</span>
-      <button class="event-log-toggle" id="log-toggle">📋 Log</button>
+      <button class="event-log-toggle" id="log-toggle"><span id="log-icon"></span> Log</button>
     </div>
     <div class="meters-row">
       <div class="meter hope-meter">
@@ -1830,19 +1830,19 @@ body::before {
   </div>
   <div class="action-panel" id="action-panel">
     <button class="action-btn" id="act-wait">
-      <span class="action-icon">⏳</span>
+      <span class="action-icon" id="act-icon-wait"></span>
       <span class="action-label">Wait 5 min</span>
     </button>
     <button class="action-btn" id="act-talk-front">
-      <span class="action-icon">💬</span>
+      <span class="action-icon" id="act-icon-front"></span>
       <span class="action-label">Talk Front</span>
     </button>
     <button class="action-btn" id="act-talk-back">
-      <span class="action-icon">🗣️</span>
+      <span class="action-icon" id="act-icon-back"></span>
       <span class="action-label">Talk Back</span>
     </button>
     <button class="action-btn" id="act-kiosk">
-      <span class="action-icon">🍺</span>
+      <span class="action-icon" id="act-icon-kiosk"></span>
       <span class="action-label">Kiosk</span>
     </button>
   </div>
@@ -1926,6 +1926,72 @@ body::before {
 <div class="toast" id="toast"></div>
 
 <script>
+// ============================================================
+// PIXEL ART ICON SYSTEM
+// ============================================================
+
+const PX = {
+  bitmaps: {
+    clock:   [0x3C,0x42,0x93,0x91,0x9E,0x80,0x42,0x3C],
+    bubble:  [0x3C,0x7E,0xFF,0xFF,0x7E,0x3C,0x08,0x04],
+    bubble2: [0x3C,0x7E,0xFF,0xFF,0x7E,0x3C,0x20,0x40],
+    beer:    [0x00,0x78,0xFC,0xFE,0xFE,0xFE,0xFC,0x78],
+    pin:     [0x18,0x3C,0x7E,0x7E,0x3C,0x18,0x18,0x08],
+    people:  [0x66,0x66,0xFF,0xFF,0x66,0x66,0x66,0xC3],
+    pack:    [0x7E,0x42,0x7E,0x7E,0x7E,0x7E,0x7E,0x3C],
+    note:    [0x0E,0x0A,0x08,0x08,0x08,0x78,0xF8,0x70],
+    coin:    [0x3C,0x7E,0xDB,0xDB,0xFF,0xDB,0x7E,0x3C],
+    fire:    [0x10,0x10,0x38,0x38,0x7C,0x7C,0x3C,0x18],
+    drop:    [0x10,0x10,0x38,0x38,0x7C,0x7C,0xFE,0x7C],
+    key:     [0x38,0x44,0x44,0x38,0x10,0x1C,0x10,0x18],
+    bolt:    [0x06,0x0C,0x18,0x3E,0x0C,0x18,0x30,0x00],
+    skull:   [0x3C,0x7E,0xDB,0xFF,0x7E,0x24,0x3C,0x00],
+    star:    [0x10,0x10,0x38,0xFE,0x7C,0x38,0x6C,0x44],
+    shield:  [0x7E,0xFF,0xFF,0xFF,0x7E,0x3C,0x18,0x00],
+    ear:     [0x3C,0x42,0x81,0xB9,0x81,0x42,0x3C,0x00],
+    gum:     [0x00,0x3C,0x7E,0x7E,0x7E,0x7E,0x3C,0x00],
+    diamond: [0x10,0x38,0x7C,0xFE,0x7C,0x38,0x10,0x00],
+    snow:    [0x10,0x54,0x38,0xFE,0x38,0x54,0x10,0x00],
+    cig:     [0x00,0x00,0x7F,0xFF,0x7F,0x00,0x00,0x00],
+    heart:   [0x00,0x66,0xFF,0xFF,0xFF,0x7E,0x3C,0x18],
+    eye:     [0x00,0x3C,0x7E,0xDB,0xDB,0x7E,0x3C,0x00],
+    pill:    [0x1C,0x3E,0x3E,0x3E,0x3E,0x3E,0x1C,0x00],
+    sound:   [0x08,0x0C,0x4E,0x5F,0x5F,0x4E,0x0C,0x08],
+    mute:    [0x08,0x0C,0x4E,0x5B,0x4D,0x46,0x0C,0x08],
+    hand:    [0x18,0x5A,0x5A,0x5E,0x3E,0x1E,0x1C,0x18],
+    bag:     [0x3C,0x42,0x42,0xFF,0xFF,0xFF,0xFF,0x7E],
+    scroll:  [0x7E,0xC3,0xFF,0xFF,0xFF,0xFF,0xC3,0x7E],
+    band:    [0x00,0x7E,0xFF,0xC3,0xC3,0xFF,0x7E,0x00],
+  },
+
+  _cache: {},
+
+  render(name, color = '#ebe4ff', size = 16) {
+    const k = name + color + size;
+    if (this._cache[k]) return this._cache[k];
+    const bits = this.bitmaps[name];
+    if (!bits) return '';
+    const c = document.createElement('canvas');
+    c.width = 8; c.height = 8;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = color;
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 8; x++) {
+        if (bits[y] & (0x80 >> x)) ctx.fillRect(x, y, 1, 1);
+      }
+    }
+    const url = c.toDataURL();
+    this._cache[k] = url;
+    return url;
+  },
+
+  i(name, color = '#ebe4ff', size = 16) {
+    const url = this.render(name, color, size);
+    if (!url) return '';
+    return `<img src="${url}" width="${size}" height="${size}" style="image-rendering:pixelated;vertical-align:middle;" alt="">`;
+  },
+};
+
 // ============================================================
 // GAME DATA
 // ============================================================
@@ -2224,11 +2290,11 @@ const CONTACTS = [
 ];
 
 const ITEMS = [
-  { id: 'gum', name: 'Gum', icon: '🫧', price: 5, desc: 'Low-value barter item, everybody wants one' },
-  { id: 'lighter', name: 'Lighter', icon: '🔥', price: 10, desc: 'Medium barter value, classic ice-breaker' },
-  { id: 'earplugs', name: 'Earplugs', icon: '👂', price: 12, desc: 'Reduces anxiety gain from loud events' },
-  { id: 'water', name: 'Water Bottle', icon: '💧', price: 15, desc: "High barter value — it's 2 AM and everyone is dehydrated" },
-  { id: 'vip', name: 'Fake VIP Wristband', icon: '📿', price: 25, desc: 'Expensive & risky — can boost or backfire at bouncer' },
+  { id: 'gum', name: 'Gum', icon: 'gum', iconColor: '#a4ff80', price: 5, desc: 'Low-value barter item, everybody wants one' },
+  { id: 'lighter', name: 'Lighter', icon: 'fire', iconColor: '#fd9927', price: 10, desc: 'Medium barter value, classic ice-breaker' },
+  { id: 'earplugs', name: 'Earplugs', icon: 'ear', iconColor: '#57f2ff', price: 12, desc: 'Reduces anxiety gain from loud events' },
+  { id: 'water', name: 'Water Bottle', icon: 'drop', iconColor: '#57f2ff', price: 15, desc: "High barter value — it's 2 AM and everyone is dehydrated" },
+  { id: 'vip', name: 'Fake VIP Wristband', icon: 'band', iconColor: '#ffd86b', price: 25, desc: 'Expensive & risky — can boost or backfire at bouncer' },
 ];
 
 // ============================================================
@@ -2551,24 +2617,24 @@ const QUEUE_CONFIG = {
 };
 
 const KIOSK_ITEMS = [
-  { id: 'beer', name: 'Beer', icon: '🍺', price: 8, desc: 'Take the edge off', effect: 'Anxiety −12', effectVal: { anxiety: -12 }, risky: true, riskDesc: 'Bouncer might smell it', trait: 'Liquid Courage' },
-  { id: 'snack', name: 'Döner Roll', icon: '🌯', price: 5, desc: 'Classic late-night fuel', effect: 'Anxiety −4', effectVal: { anxiety: -4 }, risky: false },
-  { id: 'redbull', name: 'Red Bull', icon: '⚡', price: 6, desc: 'Wings for the wait', effect: 'Hope +8', effectVal: { hope: 8 }, risky: false },
-  { id: 'cig', name: 'Cigarette', icon: '🚬', price: 3, desc: 'Social lubricant', effect: 'Anxiety −6', effectVal: { anxiety: -6 }, risky: false },
-  { id: 'glitter', name: 'Glitter ✨', icon: '💎', price: 20, desc: 'Sparkly little friend-maker', effect: 'Hope +15, Anxiety −20', effectVal: { hope: 15, anxiety: -20 }, risky: true, riskDesc: 'Dilated pupils — bouncer might notice', trait: 'The Vibe' },
-  { id: 'turbo', name: 'Turbo Tabs', icon: '⚡', price: 15, desc: 'Industrial-grade alertness', effect: 'Hope +20', effectVal: { hope: 20 }, risky: true, riskDesc: 'Jittery — anxiety spike in ~3 turns', trait: 'Motor Mouth', delayedEffect: { turns: 3, anxiety: 25 } },
-  { id: 'nosecandy', name: 'Nose Candy', icon: '❄️', price: 25, desc: 'Confidence in powder form', effect: 'Hope +10, Anxiety −10', effectVal: { hope: 10, anxiety: -10 }, risky: true, riskDesc: 'Jaw grinding — bouncer will see it', trait: 'Big Energy' },
+  { id: 'beer', name: 'Beer', icon: 'beer', iconColor: '#ffd86b', price: 8, desc: 'Take the edge off', effect: 'Anxiety −12', effectVal: { anxiety: -12 }, risky: true, riskDesc: 'Bouncer might smell it', trait: 'Liquid Courage' },
+  { id: 'snack', name: 'Döner Roll', icon: 'bag', iconColor: '#fd9927', price: 5, desc: 'Classic late-night fuel', effect: 'Anxiety −4', effectVal: { anxiety: -4 }, risky: false },
+  { id: 'redbull', name: 'Red Bull', icon: 'bolt', iconColor: '#57f2ff', price: 6, desc: 'Wings for the wait', effect: 'Hope +8', effectVal: { hope: 8 }, risky: false },
+  { id: 'cig', name: 'Cigarette', icon: 'cig', iconColor: '#ebe4ff', price: 3, desc: 'Social lubricant', effect: 'Anxiety −6', effectVal: { anxiety: -6 }, risky: false },
+  { id: 'glitter', name: 'Glitter', icon: 'diamond', iconColor: '#ff69b4', price: 20, desc: 'Sparkly little friend-maker', effect: 'Hope +15, Anxiety −20', effectVal: { hope: 15, anxiety: -20 }, risky: true, riskDesc: 'Dilated pupils — bouncer might notice', trait: 'The Vibe' },
+  { id: 'turbo', name: 'Turbo Tabs', icon: 'bolt', iconColor: '#39ff14', price: 15, desc: 'Industrial-grade alertness', effect: 'Hope +20', effectVal: { hope: 20 }, risky: true, riskDesc: 'Jittery — anxiety spike in ~3 turns', trait: 'Motor Mouth', delayedEffect: { turns: 3, anxiety: 25 } },
+  { id: 'nosecandy', name: 'Nose Candy', icon: 'snow', iconColor: '#fff', price: 25, desc: 'Confidence in powder form', effect: 'Hope +10, Anxiety −10', effectVal: { hope: 10, anxiety: -10 }, risky: true, riskDesc: 'Jaw grinding — bouncer will see it', trait: 'Big Energy' },
 ];
 
 const TRAIT_DEFS = {
-  'Liquid Courage':  { icon: '🍺', desc: '+Confidence at bouncer, slight slur risk', color: '#fd9927' },
-  'The Vibe':        { icon: '✨', desc: 'Natural charisma, dilated pupils', color: '#ff4d6d' },
-  'Motor Mouth':     { icon: '⚡', desc: 'Extra dialogue options, might say too much', color: '#57f2ff' },
-  'Big Energy':      { icon: '❄️', desc: 'Supreme confidence, jaw tension visible', color: '#fff' },
-  'Paranoid':        { icon: '😰', desc: 'Substance comedown — everything feels wrong', color: '#ff4444' },
-  'Dead Eyes':       { icon: '💀', desc: 'Too much of everything — bouncer will notice', color: '#666' },
-  'Insider Info':    { icon: '🔑', desc: 'You know something useful about tonight', color: '#39ff14' },
-  'Street Cred':     { icon: '🤝', desc: 'Made friends in line — bouncer sees social proof', color: '#ffd86b' },
+  'Liquid Courage':  { px: 'beer', desc: '+Confidence at bouncer, slight slur risk', color: '#fd9927' },
+  'The Vibe':        { px: 'diamond', desc: 'Natural charisma, dilated pupils', color: '#ff4d6d' },
+  'Motor Mouth':     { px: 'bolt', desc: 'Extra dialogue options, might say too much', color: '#57f2ff' },
+  'Big Energy':      { px: 'snow', desc: 'Supreme confidence, jaw tension visible', color: '#fff' },
+  'Paranoid':        { px: 'eye', desc: 'Substance comedown — everything feels wrong', color: '#ff4444' },
+  'Dead Eyes':       { px: 'skull', desc: 'Too much of everything — bouncer will notice', color: '#666' },
+  'Insider Info':    { px: 'key', desc: 'You know something useful about tonight', color: '#39ff14' },
+  'Street Cred':     { px: 'hand', desc: 'Made friends in line — bouncer sees social proof', color: '#ffd86b' },
 };
 
 const NEIGHBOR_NAMES = ['Marco', 'Lena', 'Tariq', 'Yuki', 'Priya', 'Jonas', 'Nadia', 'Emre', 'Sofia', 'Dex', 'Aisha', 'Viktor', 'Luna', 'Chen', 'Zara', 'Ravi', 'Ingrid', 'Kwame', 'Mika', 'Freya'];
@@ -3525,9 +3591,9 @@ function renderVenues() {
           <span class="venue-policy ${v.policyClass}">${v.policy}</span>
         </div>
         <div class="venue-meta">
-          <span class="venue-tag">🎵 ${v.music}</span>
-          <span class="venue-tag">⏱ ${v.bpm} BPM</span>
-          <span class="venue-tag" style="color:var(--neon-gold)">💰 $${v.entryPrice}/person</span>
+          <span class="venue-tag">${PX.i('note','#7b75ff',12)} ${v.music}</span>
+          <span class="venue-tag">${PX.i('clock','#ebe4ff',12)} ${v.bpm} BPM</span>
+          <span class="venue-tag" style="color:var(--neon-gold)">${PX.i('coin','#ffd86b',12)} $${v.entryPrice}/person</span>
         </div>
         <div class="venue-dress">Dress code: ${v.dressCode}</div>
         ${v.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${v.desc}</div>` : ''}
@@ -3699,7 +3765,7 @@ function renderLoadout() {
     return `
       <div class="item-card" data-item="${item.id}">
         <div class="item-left">
-          <div class="item-icon">${item.icon}</div>
+          <div class="item-icon">${PX.i(item.icon, item.iconColor || '#ebe4ff', 20)}</div>
           <div class="item-info">
             <div class="item-name">${item.name}</div>
             <div class="item-desc">${item.desc}</div>
@@ -4999,8 +5065,8 @@ const QueueEngine = {
     } else {
       state.queue.activeTraits.push(traitName);
       const def = TRAIT_DEFS[traitName];
-      showToast(`${def.icon} Trait acquired: ${traitName}`, 2000);
-      EventLog.add(`${def.icon} Trait acquired: ${traitName} — ${def.desc}`, 'trait');
+      showToast(`Trait acquired: ${traitName}`, 2000);
+      EventLog.add(`Trait acquired: ${traitName} — ${def.desc}`, 'trait');
     }
     this.renderTraits();
   },
@@ -5022,7 +5088,8 @@ const QueueEngine = {
     container.innerHTML = state.queue.activeTraits.map(t => {
       const def = TRAIT_DEFS[t];
       if (!def) return '';
-      return `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:0.5px;background:rgba(${parseInt(def.color.slice(1,3),16)},${parseInt(def.color.slice(3,5),16)},${parseInt(def.color.slice(5,7),16)},0.12);color:${def.color};border:1px solid ${def.color}33;" title="${def.desc}">${def.icon} ${t}</span>`;
+      const iconHtml = def.px ? PX.i(def.px, def.color, 12) : '';
+      return `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:0.5px;background:rgba(${parseInt(def.color.slice(1,3),16)},${parseInt(def.color.slice(3,5),16)},${parseInt(def.color.slice(5,7),16)},0.12);color:${def.color};border:1px solid ${def.color}33;" title="${def.desc}">${iconHtml} ${t}</span>`;
     }).join('');
   },
 
@@ -5139,12 +5206,13 @@ const ChatSystem = {
     for (const [id, qty] of Object.entries(allItems)) {
       if (qty <= 0) continue;
       const item = ITEMS.find(i => i.id === id) || KIOSK_ITEMS.find(i => i.id === id);
-      const icon = item?.icon || '📦';
+      const iconName = item?.icon || 'gum';
+      const iconColor = item?.iconColor || '#ebe4ff';
       const name = item?.name || id;
-      buttons.push(`<button class="chat-give-btn" data-give="${id}" title="Give ${name}">${icon} Give ${name} (${qty})</button>`);
+      buttons.push(`<button class="chat-give-btn" data-give="${id}" title="Give ${name}">${PX.i(iconName, iconColor, 14)} Give ${name} (${qty})</button>`);
     }
     if (state.cash > 0) {
-      buttons.push(`<button class="chat-give-btn" data-give="_money" title="Give some cash">💵 Give $5</button>`);
+      buttons.push(`<button class="chat-give-btn" data-give="_money" title="Give some cash">${PX.i('coin','#ffd86b',14)} Give $5</button>`);
     }
     container.innerHTML = buttons.length > 0 ? buttons.join('') : '<span style="font-size:10px;color:var(--text-muted);padding:4px;">No items to give</span>';
 
@@ -5360,7 +5428,7 @@ const KioskSystem = {
       ${KIOSK_ITEMS.map(item => `
         <div class="kiosk-item">
           <div class="kiosk-item-left">
-            <span class="kiosk-item-icon">${item.icon}</span>
+            <span class="kiosk-item-icon">${PX.i(item.icon, item.iconColor || '#ebe4ff', 22)}</span>
             <div>
               <div class="kiosk-item-name">${item.name}</div>
               <div class="kiosk-item-desc">${item.desc}</div>
@@ -6319,6 +6387,18 @@ function init() {
   const p = state.progress;
   $('rep-display').textContent = `★ ${p.reputation} rep · $${state.cash}`;
 
+  // Set pixel art icons for UI elements
+  $('nav-icon-0').innerHTML = PX.i('pin', '#7b75ff', 18);
+  $('nav-icon-1').innerHTML = PX.i('people', '#7b75ff', 18);
+  $('nav-icon-2').innerHTML = PX.i('pack', '#7b75ff', 18);
+  $('act-icon-wait').innerHTML = PX.i('clock', '#ebe4ff', 22);
+  $('act-icon-front').innerHTML = PX.i('bubble', '#ebe4ff', 22);
+  $('act-icon-back').innerHTML = PX.i('bubble2', '#ebe4ff', 22);
+  $('act-icon-kiosk').innerHTML = PX.i('beer', '#ffd86b', 22);
+  $('log-icon').innerHTML = PX.i('scroll', '#ebe4ff', 12);
+  $('mute-icon').innerHTML = PX.i('sound', '#ebe4ff', 18);
+  $('battery-icon').innerHTML = PX.i('bolt', '#ebe4ff', 10);
+
   updateStatusBar();
   setInterval(updateStatusBar, 30000);
 
@@ -6364,7 +6444,7 @@ function init() {
   muteBtn.addEventListener('click', () => {
     state.muted = !state.muted;
     ClubAudio.setMuted(state.muted);
-    muteBtn.textContent = state.muted ? '🔇' : '🔊';
+    $('mute-icon').innerHTML = PX.i(state.muted ? 'mute' : 'sound', '#ebe4ff', 18);
   });
 
   // Boot overlay — click to start
