@@ -2547,6 +2547,7 @@ const SaveSystem = {
       unlockedContacts: ['kai', 'pia', 'rissal', 'mona', 'sasha', 'felix'],
       totalRuns: 0,
       totalSuccesses: 0,
+      bonds: {},
     };
   },
 
@@ -2592,10 +2593,54 @@ const SaveSystem = {
       if (!p.venuesCleared.includes(venueId)) {
         p.venuesCleared.push(venueId);
       }
+      // Increase bonds between all squad members who succeeded together
+      const ids = state.finalSquad.map(m => {
+        const c = CONTACTS.find(ct => ct.name === m.name);
+        return c?.id;
+      }).filter(Boolean);
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const key = [ids[i], ids[j]].sort().join(':');
+          p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + 15);
+        }
+        // Bond with the player too
+        const playerKey = ['player', ids[i]].sort().join(':');
+        p.bonds[playerKey] = Math.min(100, (p.bonds[playerKey] || 0) + 10);
+      }
+    } else {
+      // Failed runs still build small bonds (shared suffering)
+      const ids = state.finalSquad.map(m => CONTACTS.find(ct => ct.name === m.name)?.id).filter(Boolean);
+      ids.forEach(id => {
+        const key = ['player', id].sort().join(':');
+        p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + 3);
+      });
     }
     p.totalCash = 50 + p.reputation * 5;
     this.save(p);
     state.progress = p;
+  },
+
+  getBond(id1, id2) {
+    const p = this.load();
+    const key = [id1, id2].sort().join(':');
+    return p.bonds[key] || 0;
+  },
+
+  getSquadBondAvg(selectedIds) {
+    if (selectedIds.length < 2) return 0;
+    const p = this.load();
+    let total = 0, count = 0;
+    for (let i = 0; i < selectedIds.length; i++) {
+      for (let j = i + 1; j < selectedIds.length; j++) {
+        const key = [selectedIds[i], selectedIds[j]].sort().join(':');
+        total += p.bonds[key] || 0;
+        count++;
+      }
+      const playerKey = ['player', selectedIds[i]].sort().join(':');
+      total += p.bonds[playerKey] || 0;
+      count++;
+    }
+    return count > 0 ? Math.round(total / count) : 0;
   },
 };
 
@@ -2643,12 +2688,28 @@ const state = {
 const MemberStats = {
   init(squad) {
     state.queue.memberStats = {};
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
     squad.forEach(member => {
       const contact = CONTACTS.find(c => c.name === member.name);
       const warmthRate = contact?.styles?.some(s => ['Dark Minimal', 'All Black', 'Chains'].includes(s)) ? 0.3 : 0.6;
+
+      // Music affinity boost to starting morale
+      let moraleBonus = 0;
+      if (contact?.musicPref && venue?.music) {
+        if (contact.musicPref === venue.music) moraleBonus = 15;
+        else moraleBonus = -5;
+      }
+
+      // Bond with other squad members boosts morale
+      const otherIds = squad.filter(m => m.name !== member.name).map(m => CONTACTS.find(c => c.name === m.name)?.id).filter(Boolean);
+      const friendBonus = otherIds.reduce((sum, otherId) => {
+        const bond = SaveSystem.getBond(contact?.id || '', otherId);
+        return sum + (bond >= 30 ? 5 : bond > 0 ? 2 : 0);
+      }, 0);
+
       state.queue.memberStats[member.name] = {
         warmth: 100,
-        morale: 80 + Math.random() * 20,
+        morale: Math.min(100, 80 + Math.random() * 20 + moraleBonus + friendBonus),
         warmthDecay: warmthRate,
         anxietyThreshold: contact?.anxiety ? contact.anxiety * 10 : 60,
       };
@@ -3272,6 +3333,23 @@ function renderContacts() {
       warning = `<div class="contact-warning">Won't go to Easy venues</div>`;
     }
 
+    // Music affinity indicator
+    let musicMatch = '';
+    if (selectedVenue && c.musicPref) {
+      if (c.musicPref === selectedVenue.music) {
+        musicMatch = `<div style="font-size:10px;color:var(--neon-green);margin-top:3px;">🎵 Loves ${selectedVenue.music} — less likely to flake</div>`;
+      } else {
+        musicMatch = `<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">🎵 Prefers ${c.musicPref}</div>`;
+      }
+    }
+
+    // Bond indicator
+    const bond = SaveSystem.getBond('player', c.id);
+    let bondLabel = '';
+    if (bond >= 60) bondLabel = `<span style="font-size:9px;color:var(--neon-gold);margin-left:4px;">💛 BFF (${bond})</span>`;
+    else if (bond >= 30) bondLabel = `<span style="font-size:9px;color:var(--neon-cyan);margin-left:4px;">🤝 Friends (${bond})</span>`;
+    else if (bond > 0) bondLabel = `<span style="font-size:9px;color:var(--text-muted);margin-left:4px;">👋 Known (${bond})</span>`;
+
     return `
       <div class="${cls.join(' ')}" data-contact="${c.id}">
         <div class="contact-avatar" style="background:${c.traitColor};border:1px solid ${c.traitBorder};">
@@ -3289,7 +3367,9 @@ function renderContacts() {
           <div class="contact-styles">
             ${c.styles.map(s => `<span class="style-pill">${s}</span>`).join('')}
           </div>
+          ${musicMatch}
           ${warning}
+          <div class="contact-name" style="margin-top:3px;">${bondLabel}</div>
         </div>
       </div>
     `;
@@ -3477,9 +3557,35 @@ async function startFlakeRoll() {
 
     await sleep(1200 + Math.random() * 1200);
 
-    // Roll for flake
+    // Flake rate modifiers
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    let effectiveFlake = contact.flakeRate;
+
+    // Music affinity: matching genre → -15% flake, mismatch → +10%
+    if (venue && contact.musicPref) {
+      if (contact.musicPref === venue.music) effectiveFlake -= 15;
+      else effectiveFlake += 10;
+    }
+
+    // Bond with player: every 20 bond points → -5% flake
+    const playerBond = SaveSystem.getBond('player', contact.id);
+    effectiveFlake -= Math.floor(playerBond / 20) * 5;
+
+    // Bonds with other selected squad: if friends are coming, less likely to flake
+    const otherSelected = state.selectedSquad.filter(id => id !== contact.id);
+    otherSelected.forEach(otherId => {
+      const bond = SaveSystem.getBond(contact.id, otherId);
+      if (bond >= 30) effectiveFlake -= 5;
+    });
+
+    // Group size bonus: more people → lower flake (social pressure)
+    if (state.selectedSquad.length >= 3) effectiveFlake -= 8;
+    else if (state.selectedSquad.length >= 2) effectiveFlake -= 3;
+
+    effectiveFlake = Math.max(2, Math.min(90, effectiveFlake));
+
     const roll = Math.random() * 100;
-    const flaked = roll < contact.flakeRate;
+    const flaked = roll < effectiveFlake;
     results.push({ contact, flaked });
 
     // Replace typing with actual message
@@ -5567,8 +5673,9 @@ async function enterQueue() {
 
   // Initialize queue state
   state.queue.position = cfg.startPos;
-  state.queue.hope = 70;
-  state.queue.anxiety = 10;
+  const groupBonus = state.finalSquad.length * 3;
+  state.queue.hope = Math.min(100, 70 + groupBonus);
+  state.queue.anxiety = Math.max(5, 10 - state.finalSquad.length);
   state.queue.gameTime = 23 * 60 + 35;
   state.queue.revealedIntel = [];
   state.queue.turnCount = 0;
