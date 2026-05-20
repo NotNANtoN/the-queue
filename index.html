@@ -1539,6 +1539,78 @@ body::before {
   box-shadow: 0 8px 32px rgba(123, 117, 255, 0.3);
 }
 
+/* === INSIDE THE CLUB === */
+.club-screen {
+  position: fixed; inset: 0; z-index: 43;
+  display: flex; flex-direction: column;
+  background: var(--bg-deep);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+  overflow: hidden;
+}
+.club-screen.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.club-visual {
+  flex: 0 0 35%;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 80%, rgba(123,117,255,0.15) 0%, transparent 60%);
+}
+.club-visual canvas { width: 100%; height: 100%; display: block; }
+.club-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  scrollbar-width: none;
+}
+.club-feed::-webkit-scrollbar { display: none; }
+.club-event {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  animation: bubbleIn 0.3s ease;
+}
+.club-event .ce-icon { font-size: 20px; flex-shrink: 0; }
+.club-event .ce-text { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.club-event .ce-effect {
+  font-size: 10px; font-weight: 700;
+  font-family: var(--font-mono);
+  margin-top: 4px;
+}
+.ce-effect.positive { color: var(--neon-green); }
+.ce-effect.negative { color: var(--neon-pink); }
+.ce-effect.special { color: var(--neon-gold); }
+.club-header {
+  padding: 16px 20px 8px;
+  text-align: center;
+  background: rgba(8, 6, 26, 0.95);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.club-header h2 {
+  font-size: 16px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.club-header .club-sub {
+  font-size: 11px; color: var(--text-muted);
+  letter-spacing: 1px; margin-top: 2px;
+}
+.club-done-btn {
+  margin: 12px 16px 20px;
+  padding: 14px;
+  border: none; border-radius: 14px;
+  background: linear-gradient(135deg, var(--neon-purple), var(--neon-pink));
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 14px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(123, 117, 255, 0.3);
+}
+
 /* === PARTICLES === */
 .particle-container {
   position: fixed; inset: 0;
@@ -1831,6 +1903,17 @@ body::before {
   </div>
 </div>
 
+<!-- Inside the Club -->
+<div class="club-screen" id="club-screen">
+  <div class="club-header">
+    <h2 id="club-name">You're In</h2>
+    <div class="club-sub" id="club-sub">The night unfolds...</div>
+  </div>
+  <div class="club-visual"><canvas id="club-canvas"></canvas></div>
+  <div class="club-feed" id="club-feed"></div>
+  <button class="club-done-btn" id="club-done" style="display:none">Leave at Sunrise →</button>
+</div>
+
 <!-- Result Overlay -->
 <div class="result-overlay" id="result-overlay">
   <div class="result-title" id="result-title"></div>
@@ -2029,6 +2112,114 @@ const CONTACTS = [
     flakeRate: 30,
     flakeMsg: "yo my connect just hit me up, I'm going to a different spot. next time 🤙",
     confirmMsg: "Already got some info on tonight's door. See you there 🤙",
+  },
+  {
+    id: 'zara',
+    name: 'Zara',
+    initials: 'Z',
+    color: '#ff69b4',
+    trait: 'The Photographer',
+    traitDesc: 'Documents everything — +reputation on success',
+    traitColor: 'rgba(255, 105, 180, 0.15)',
+    traitBorder: 'rgba(255, 105, 180, 0.3)',
+    traitTextColor: '#ff69b4',
+    styles: ['Eccentric', 'Vintage', 'Bold'],
+    musicPref: 'Deep House',
+    anxiety: 5,
+    flakeRate: 20,
+    unlockCondition: 'rep5',
+    flakeMsg: "Can't tonight, editing photos from last weekend 📸",
+    confirmMsg: "Camera charged, outfit ready. Let's make content 📸",
+  },
+  {
+    id: 'dex',
+    name: 'Dex',
+    initials: 'D',
+    color: '#00ff88',
+    trait: 'The Dealer',
+    traitDesc: 'Starts with a random substance, knows everyone',
+    traitColor: 'rgba(0, 255, 136, 0.15)',
+    traitBorder: 'rgba(0, 255, 136, 0.3)',
+    traitTextColor: '#00ff88',
+    styles: ['Streetwear', 'Dark', 'No Logo'],
+    musicPref: 'Techno',
+    anxiety: 8,
+    flakeRate: 35,
+    unlockCondition: 'venue_compliance',
+    flakeMsg: "heat outside tonight bro, laying low 🫥",
+    confirmMsg: "I got the goods. See you outside. Don't be late.",
+  },
+  {
+    id: 'yuki',
+    name: 'Yuki',
+    initials: 'Y',
+    color: '#e0aaff',
+    trait: 'The Diplomat',
+    traitDesc: 'Calms arguments, -anxiety for whole squad',
+    traitColor: 'rgba(224, 170, 255, 0.15)',
+    traitBorder: 'rgba(224, 170, 255, 0.3)',
+    traitTextColor: '#e0aaff',
+    styles: ['Smart Casual', 'Understated', 'Minimal'],
+    musicPref: 'Minimal Techno',
+    anxiety: 7,
+    flakeRate: 15,
+    unlockCondition: 'rep10',
+    flakeMsg: "Mediating a friend situation tonight, rain check 🙏",
+    confirmMsg: "I'll keep everyone calm. On my way 🧘",
+  },
+  {
+    id: 'niko',
+    name: 'Niko',
+    initials: 'N',
+    color: '#ff6b35',
+    trait: 'The Local Legend',
+    traitDesc: 'Bouncers know him — +15 starting approval',
+    traitColor: 'rgba(255, 107, 53, 0.15)',
+    traitBorder: 'rgba(255, 107, 53, 0.3)',
+    traitTextColor: '#ff6b35',
+    styles: ['Dark Minimal', 'Chains', 'All Black'],
+    musicPref: 'Industrial',
+    anxiety: 9,
+    flakeRate: 10,
+    unlockCondition: 'venue_boardroom',
+    flakeMsg: "Already inside a different club lol. Come find me tmr",
+    confirmMsg: "The bouncers know me. We're golden. 🤙",
+  },
+  {
+    id: 'priya',
+    name: 'Priya',
+    initials: 'PR',
+    color: '#ffc300',
+    trait: 'The Networker',
+    traitDesc: 'Unlocks contacts faster, +bond gains',
+    traitColor: 'rgba(255, 195, 0, 0.15)',
+    traitBorder: 'rgba(255, 195, 0, 0.3)',
+    traitTextColor: '#ffc300',
+    styles: ['Smart Casual', 'Designer', 'Bold'],
+    musicPref: 'Tech-House',
+    anxiety: 4,
+    flakeRate: 25,
+    unlockCondition: 'rep15',
+    flakeMsg: "At a networking event that's running late 💼 next time!",
+    confirmMsg: "I know like 5 people inside already. Let's GO 🔥",
+  },
+  {
+    id: 'ghost',
+    name: 'Ghost',
+    initials: 'G',
+    color: '#888',
+    trait: 'The Shadow',
+    traitDesc: 'Invisible to bouncers — doesn\'t count as group',
+    traitColor: 'rgba(136, 136, 136, 0.15)',
+    traitBorder: 'rgba(136, 136, 136, 0.3)',
+    traitTextColor: '#888',
+    styles: ['Dark Minimal', 'No Logo', 'Understated'],
+    musicPref: 'Minimal Techno',
+    anxiety: 10,
+    flakeRate: 5,
+    unlockCondition: 'venue_florians',
+    flakeMsg: "...",
+    confirmMsg: ".",
   },
 ];
 
@@ -2588,6 +2779,21 @@ const SaveSystem = {
       if (v.id === 'florians' && p.venuesCleared.length >= 3) v.locked = false;
       if (v.id === 'audit' && p.venuesCleared.length >= 5) v.locked = false;
     });
+
+    // Unlock contacts based on conditions
+    CONTACTS.forEach(c => {
+      if (p.unlockedContacts.includes(c.id)) return;
+      if (!c.unlockCondition) return;
+      let unlocked = false;
+      if (c.unlockCondition === 'rep5' && p.reputation >= 5) unlocked = true;
+      if (c.unlockCondition === 'rep10' && p.reputation >= 10) unlocked = true;
+      if (c.unlockCondition === 'rep15' && p.reputation >= 15) unlocked = true;
+      if (c.unlockCondition === 'venue_compliance' && p.venuesCleared.includes('compliance')) unlocked = true;
+      if (c.unlockCondition === 'venue_boardroom' && p.venuesCleared.includes('boardroom')) unlocked = true;
+      if (c.unlockCondition === 'venue_florians' && p.venuesCleared.includes('florians')) unlocked = true;
+      if (unlocked) p.unlockedContacts.push(c.id);
+    });
+    this.save(p);
   },
 
   recordRun(success, venueId) {
@@ -5230,12 +5436,26 @@ const BOUNCERS = [
     trigger: 'Hates people who don\'t know the lineup',
     portraitProps: { skin: '#c68642', hairColor: '#4a90d9', hairStyle: 'mohawk', shirtColor: '#3c1053', accessory: 'headband', faceWidth: 6, faceHeight: 8, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.5 },
   },
+  {
+    id: 'silent', name: 'The Silent One',
+    personality: 'Says almost nothing. Just stares.',
+    softSpot: 'Evaluates pure style and composure',
+    trigger: 'Any talking makes it worse',
+    portraitProps: { skin: '#6b3e26', hairColor: '#1a1a2e', hairStyle: 'bald', shirtColor: '#0d0b22', accessory: 'sunglasses', faceWidth: 8, faceHeight: 9, eyeSpacing: 4, noseSize: 2, earSize: 1, seed: 0.9 },
+  },
+  {
+    id: 'mira', name: 'Desk Lady Mira',
+    personality: 'Clipboard, guest list, bureaucratic precision',
+    softSpot: 'Names on the list, proper credentials',
+    trigger: 'Arguing or showing attitude',
+    portraitProps: { skin: '#f0c5a0', hairColor: '#3d2b1f', hairStyle: 'bob', shirtColor: '#2d2d2d', accessory: 'glasses', faceWidth: 6, faceHeight: 7, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.2 },
+  },
 ];
 
 const EXCHANGE_POOL = [
   {
     id: 'names', category: 'greeting', weight: 10,
-    lines: { florian: '"Names."', marko: '"Who are you?"', kai: '"Yo, who\'s trying to get in?"' },
+    lines: { florian: '"Names."', marko: '"Who are you?"', kai: '"Yo, who\'s trying to get in?"', silent: '*holds up one finger, then points at you*', mira: '*flips through clipboard* "Name, please."' },
     options: [
       { text: '"We\'re on DJ Synthax\'s list."', score: 30, intel: 'name_drop' },
       { text: '"Just us — we\'re here for the music."', score: 5 },
@@ -5244,7 +5464,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'shoes', category: 'appearance', weight: 8,
-    lines: { florian: '*looks at your shoes* "Interesting choice."', marko: '"Those shoes clean?"', kai: '"Nice kicks... or not."' },
+    lines: { florian: '*looks at your shoes* "Interesting choice."', marko: '"Those shoes clean?"', kai: '"Nice kicks... or not."', silent: '*stares at your feet for five seconds*', mira: '*glances down, makes a note on clipboard*' },
     options: [
       { text: '"Yeah, I know the dress code — no white sneakers tonight."', score: 25, intel: 'shoe_rule' },
       { text: '"Thanks, they\'re comfortable."', score: 5 },
@@ -5253,7 +5473,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'why', category: 'motivation', weight: 10,
-    lines: { florian: '"Why should I let you in?"', marko: '"Give me one good reason."', kai: '"What brings you out tonight?"' },
+    lines: { florian: '"Why should I let you in?"', marko: '"Give me one good reason."', kai: '"What brings you out tonight?"', silent: '*crosses arms tighter*', mira: '"And what is the purpose of your visit tonight?"' },
     options: [
       { text: '"Because we know the residents playing tonight."', score: 30, intel: 'dj_set' },
       { text: '"We just want to dance."', score: 5 },
@@ -5262,7 +5482,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'password', category: 'knowledge', weight: 7,
-    lines: { florian: '"There\'s a word for tonight. You know it?"', marko: '"Magic word?"', kai: '"What\'s the vibe check?"' },
+    lines: { florian: '"There\'s a word for tonight. You know it?"', marko: '"Magic word?"', kai: '"What\'s the vibe check?"', silent: '*raises one eyebrow almost imperceptibly*', mira: '"There\'s a reservation code. Do you have it?"' },
     options: [
       { text: '"Systematic Review."', score: 35, intel: 'password' },
       { text: '"Uh... please?"', score: 0 },
@@ -5271,7 +5491,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'group', category: 'assessment', weight: 8,
-    lines: { florian: '*counts your group* "How many?"', marko: '"Big group tonight, huh?"', kai: '"Squad deep or what?"' },
+    lines: { florian: '*counts your group* "How many?"', marko: '"Big group tonight, huh?"', kai: '"Squad deep or what?"', silent: '*slowly counts heads, expression unchanged*', mira: '"Party size?"' },
     options: [
       { text: '"Three of us — that\'s the sweet spot tonight, right?"', score: 25, intel: 'group_size' },
       { text: `"${(state.finalSquad?.length || 0) + 1} of us."`, score: 5 },
@@ -5280,7 +5500,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'mood', category: 'reading', weight: 6,
-    lines: { florian: '*says nothing, just stares*', marko: '"You nervous?"', kai: '"You good? You look tense."' },
+    lines: { florian: '*says nothing, just stares*', marko: '"You nervous?"', kai: '"You good? You look tense."', silent: '*...stares...*', mira: '*looks up from clipboard* "Everything alright?"' },
     options: [
       { text: '"All good. Heard you\'re in a strict mood tonight — we respect that."', score: 20, intel: 'mood' },
       { text: '"Yeah, we\'re fine. Just excited."', score: 5 },
@@ -5289,7 +5509,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'bouncer_name', category: 'personal', weight: 5,
-    lines: { florian: '"You been here before?"', marko: '"First time?"', kai: '"I don\'t recognize you."' },
+    lines: { florian: '"You been here before?"', marko: '"First time?"', kai: '"I don\'t recognize you."', silent: '*tilts head slightly*', mira: '"I don\'t see you in our system."' },
     options: [
       { text: `"Yeah, Florian let us in last time — good to see you again."`, score: 25, intel: 'bouncer_name' },
       { text: '"Once or twice. Great spot."', score: 5 },
@@ -5298,7 +5518,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'music_test', category: 'knowledge', weight: 9,
-    lines: { florian: '"You know who\'s spinning tonight?"', marko: '"What kind of music we play here?"', kai: '"Quick — name one DJ on the lineup."' },
+    lines: { florian: '"You know who\'s spinning tonight?"', marko: '"What kind of music we play here?"', kai: '"Quick — name one DJ on the lineup."', silent: '*glances at a flyer on the wall, then back at you*', mira: '"Are you familiar with tonight\'s program?"' },
     options: [
       { text: '"Koze is headlining. Can\'t miss that set."', score: 30, intel: 'dj_set' },
       { text: '"I heard it\'s going to be good tonight."', score: 5 },
@@ -5307,7 +5527,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'confidence', category: 'vibe', weight: 7,
-    lines: { florian: '"You look like you want something."', marko: '"How bad do you want in?"', kai: '"Rate your energy 1 to 10."' },
+    lines: { florian: '"You look like you want something."', marko: '"How bad do you want in?"', kai: '"Rate your energy 1 to 10."', silent: '*...the silence is deafening...*', mira: '"On a scale of 1-10, how would you rate your commitment to having a good evening?"' },
     options: [
       { text: '"We belong inside. Simple as that."', score: 15, trait: 'Big Energy' },
       { text: '"Honestly? We\'ve been waiting and we\'re ready."', score: 10 },
@@ -5316,7 +5536,7 @@ const EXCHANGE_POOL = [
   },
   {
     id: 'style_check', category: 'appearance', weight: 8,
-    lines: { florian: '*scans your outfit slowly*', marko: '"You dressed for this?"', kai: '"Outfit check... hmm."' },
+    lines: { florian: '*scans your outfit slowly*', marko: '"You dressed for this?"', kai: '"Outfit check... hmm."', silent: '*eyes move slowly from head to toe and back*', mira: '*checks a dress code reference card* "Hmm."' },
     options: [
       { text: '*stands confidently, outfit on point*', score: 10, trait: 'Liquid Courage' },
       { text: '"We tried our best."', score: 5 },
@@ -5674,8 +5894,10 @@ const BouncerSystem = {
 
       await sleep(2500);
 
-      $('bouncer-screen').classList.remove('active');
-      this.showResult(true, venue);
+      // Go to in-club phase before result screen
+      const venueForClub = venue;
+      ClubScene.start(venueForClub);
+      return;
     } else {
       $('bouncer-line').textContent = `"Not tonight."`;
       EventLog.add('"Not tonight." — rejected at the door.', 'negative');
@@ -5753,6 +5975,206 @@ const BouncerSystem = {
       }
       restartPlanning();
     };
+  },
+};
+
+// ============================================================
+// INSIDE THE CLUB PHASE
+// ============================================================
+
+const CLUB_EVENTS = [
+  { icon: '💃', text: 'The dance floor is packed. Your crew finds a spot near the speakers.', effect: '+Bond with squad', type: 'positive', bondBoost: 5 },
+  { icon: '🎵', text: 'The DJ drops a massive tune. Everyone loses their minds.', effect: 'Hope +10', type: 'positive', hope: 10 },
+  { icon: '🍹', text: 'You grab drinks at the bar. The bartender is fast tonight.', effect: '-$8, Anxiety −10', type: 'positive', cost: 8, anxiety: -10 },
+  { icon: '🤝', text: (sq) => `${sq.length > 0 ? sq[0].name : 'You'} bumps into someone they know from another scene. Numbers exchanged.`, effect: 'New connection possible', type: 'special', contactChance: true },
+  { icon: '🔑', text: 'You overhear the next DJ mention a secret after-party location.', effect: 'Intel for future runs', type: 'special', futureIntel: true },
+  { icon: '💎', text: 'Someone drops a lighter on the dance floor. Finders keepers.', effect: '+Lighter', type: 'positive', item: 'lighter' },
+  { icon: '📸', text: 'Your crew takes a group photo in the neon light. Memories made.', effect: '+Bond, +Reputation', type: 'positive', bondBoost: 8, rep: 1 },
+  { icon: '😵', text: 'The bass is relentless. One of you needs fresh air.', effect: 'Squad morale test', type: 'negative' },
+  { icon: '🗣️', text: (sq) => `A stranger compliments ${sq.length > 0 ? sq[Math.floor(Math.random() * sq.length)].name + "'s" : 'your'} outfit.`, effect: '+Vibe', type: 'positive', hope: 5 },
+  { icon: '🚰', text: 'You all drink water. Staying hydrated like responsible adults.', effect: 'Anxiety −5', type: 'positive', anxiety: -5 },
+  { icon: '🎧', text: 'The headliner starts their set. The whole room shifts energy.', effect: 'Hope +15', type: 'positive', hope: 15 },
+  { icon: '🌅', text: 'The lights slowly come up. It\'s 6 AM. What a night.', effect: 'Final event', type: 'special', final: true },
+  { icon: '💰', text: 'You find $10 on the bathroom floor. Don\'t ask questions.', effect: '+$10', type: 'positive', cash: 10 },
+  { icon: '🤮', text: 'The substances are catching up. The room spins for a moment.', effect: 'Substance comedown', type: 'negative', conditionalOnSubstance: true },
+  { icon: '🎉', text: (sq) => `${sq.length > 1 ? sq[0].name + ' and ' + sq[1].name : 'You and a stranger'} have an amazing conversation about life.`, effect: '+Deep bond', type: 'special', bondBoost: 15 },
+];
+
+const ClubScene = {
+  eventIndex: 0,
+  events: [],
+  timer: null,
+
+  async start(venue) {
+    state.phase = 'CLUB';
+    $('bouncer-screen').classList.remove('active');
+    $('club-screen').classList.add('active');
+    $('club-name').textContent = venue.name;
+    $('club-sub').textContent = `${venue.music} · ${venue.bpm} BPM · The night unfolds...`;
+    $('club-feed').innerHTML = '';
+    $('club-done').style.display = 'none';
+
+    // Draw club atmosphere on canvas
+    this.drawClubViz(venue);
+
+    // Select 6-8 events, always end with sunrise
+    const pool = CLUB_EVENTS.filter(e => {
+      if (e.final) return false;
+      if (e.conditionalOnSubstance && state.queue.activeTraits.filter(t => ['The Vibe', 'Motor Mouth', 'Big Energy'].includes(t)).length === 0) return false;
+      return true;
+    });
+    const shuffled = pool.sort(() => Math.random() - 0.5);
+    this.events = shuffled.slice(0, 6 + Math.floor(Math.random() * 3));
+    this.events.push(CLUB_EVENTS.find(e => e.final));
+    this.eventIndex = 0;
+
+    await sleep(1500);
+    this.nextEvent();
+  },
+
+  async nextEvent() {
+    if (this.eventIndex >= this.events.length) {
+      $('club-done').style.display = 'block';
+      return;
+    }
+
+    const evt = this.events[this.eventIndex];
+    const feed = $('club-feed');
+
+    const text = typeof evt.text === 'function' ? evt.text(state.finalSquad) : evt.text;
+
+    const el = document.createElement('div');
+    el.className = 'club-event';
+    el.innerHTML = `
+      <span class="ce-icon">${evt.icon}</span>
+      <div>
+        <div class="ce-text">${text}</div>
+        <div class="ce-effect ${evt.type}">${evt.effect}</div>
+      </div>
+    `;
+    feed.appendChild(el);
+    feed.scrollTop = feed.scrollHeight;
+
+    // Apply effects
+    if (evt.bondBoost) {
+      const p = SaveSystem.load();
+      const ids = state.finalSquad.map(m => CONTACTS.find(c => c.name === m.name)?.id).filter(Boolean);
+      ids.forEach(id => {
+        const key = ['player', id].sort().join(':');
+        p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + evt.bondBoost);
+      });
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const key = [ids[i], ids[j]].sort().join(':');
+          p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + evt.bondBoost);
+        }
+      }
+      SaveSystem.save(p);
+    }
+    if (evt.rep) {
+      const p = SaveSystem.load();
+      p.reputation += evt.rep;
+      SaveSystem.save(p);
+    }
+    if (evt.cash) state.cash += evt.cash;
+    if (evt.cost) state.cash = Math.max(0, state.cash - evt.cost);
+    if (evt.item) state.inventory[evt.item] = (state.inventory[evt.item] || 0) + 1;
+    if (evt.hope) state.queue.hope = Math.min(100, state.queue.hope + evt.hope);
+    if (evt.anxiety) state.queue.anxiety = Math.max(0, state.queue.anxiety + evt.anxiety);
+
+    if (evt.contactChance) {
+      const p = SaveSystem.load();
+      const allIds = CONTACTS.map(c => c.id);
+      const locked = allIds.filter(id => !p.unlockedContacts.includes(id));
+      if (locked.length > 0 && Math.random() < 0.5) {
+        const newId = locked[Math.floor(Math.random() * locked.length)];
+        p.unlockedContacts.push(newId);
+        const key = ['player', newId].sort().join(':');
+        p.bonds[key] = Math.max(p.bonds[key] || 0, 25);
+        SaveSystem.save(p);
+        const c = CONTACTS.find(ct => ct.id === newId);
+        const unlockEl = document.createElement('div');
+        unlockEl.className = 'club-event';
+        unlockEl.innerHTML = `<span class="ce-icon">🆕</span><div><div class="ce-text" style="color:var(--neon-green)">You exchanged numbers with ${c?.name || 'someone new'}! New contact unlocked.</div></div>`;
+        await sleep(800);
+        feed.appendChild(unlockEl);
+        feed.scrollTop = feed.scrollHeight;
+      }
+    }
+
+    this.eventIndex++;
+
+    if (!evt.final) {
+      await sleep(2500 + Math.random() * 1500);
+      this.nextEvent();
+    } else {
+      $('club-done').style.display = 'block';
+    }
+  },
+
+  drawClubViz(venue) {
+    const canvas = $('club-canvas');
+    const ctx = canvas.getContext('2d');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const wrap = canvas.parentElement;
+    const W = wrap.clientWidth, H = wrap.clientHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Animated club interior with pulsing lights
+    let t = 0;
+    const draw = () => {
+      if (state.phase !== 'CLUB') return;
+      t += 0.016;
+
+      // Dark background
+      ctx.fillStyle = '#030210';
+      ctx.fillRect(0, 0, W, H);
+
+      // Pulsing colored lights
+      const colors = ['rgba(123,117,255,', 'rgba(255,77,109,', 'rgba(57,255,20,', 'rgba(253,153,39,'];
+      for (let i = 0; i < 4; i++) {
+        const x = W * (0.15 + i * 0.23);
+        const y = H * 0.3;
+        const pulse = 0.08 + Math.abs(Math.sin(t * 2 + i * 1.5)) * 0.12;
+        const r = 60 + Math.sin(t * 3 + i) * 20;
+        const glow = ctx.createRadialGradient(x, y, 5, x, y, r);
+        glow.addColorStop(0, colors[i] + (pulse + 0.1) + ')');
+        glow.addColorStop(1, 'transparent');
+        ctx.fillStyle = glow;
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+
+      // Laser beams
+      ctx.globalAlpha = 0.15 + Math.sin(t * 4) * 0.1;
+      ctx.strokeStyle = '#7b75ff';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        const angle = Math.sin(t * 0.5 + i * 2) * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(W * 0.5, 0);
+        ctx.lineTo(W * 0.5 + Math.sin(angle) * W * 0.6, H);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // Dancing silhouettes
+      const groundY = H * 0.85;
+      for (let i = 0; i < 12; i++) {
+        const x = W * 0.08 + i * (W * 0.08);
+        const bounce = Math.abs(Math.sin(t * 3 + i * 0.8)) * 5;
+        const sway = Math.sin(t * 1.5 + i * 1.2) * 3;
+        ctx.fillStyle = `rgba(255,255,255,${0.08 + Math.random() * 0.04})`;
+        ctx.beginPath();
+        ctx.arc(x + sway, groundY - 15 - bounce, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(x + sway - 3, groundY - 11 - bounce, 6, 12);
+      }
+
+      requestAnimationFrame(draw);
+    };
+    draw();
   },
 };
 
@@ -6004,6 +6426,13 @@ function init() {
     if (e.key === 'Enter') ChatSystem.sendMessage($('chat-input').value);
   });
   $('chat-close').addEventListener('click', () => ChatSystem.close());
+
+  // Club scene: leave at sunrise
+  $('club-done').addEventListener('click', () => {
+    $('club-screen').classList.remove('active');
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    BouncerSystem.showResult(true, venue);
+  });
 }
 
 init();
