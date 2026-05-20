@@ -1539,6 +1539,65 @@ body::before {
   box-shadow: 0 8px 32px rgba(123, 117, 255, 0.3);
 }
 
+/* === PARTICLES === */
+.particle-container {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 49;
+  overflow: hidden;
+}
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  animation: particleFly linear forwards;
+}
+@keyframes particleFly {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-120vh) scale(0.3); }
+}
+@keyframes confettiFall {
+  0% { opacity: 0.9; transform: translateY(0) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(110vh) rotate(720deg); }
+}
+
+/* === PER-MEMBER STATS === */
+.squad-status-bar {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 6px 16px;
+  background: rgba(8, 6, 26, 0.95);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.member-status {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 10px;
+}
+.member-status .ms-name { font-weight: 700; color: var(--text-secondary); }
+.member-status .ms-bar {
+  width: 30px; height: 3px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px; overflow: hidden;
+}
+.member-status .ms-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 0.5s ease;
+}
+.member-status.cold .ms-fill { background: var(--neon-cyan); }
+.member-status.warm .ms-fill { background: var(--neon-green); }
+.member-status.danger .ms-fill { background: var(--neon-pink); }
+
+/* === REPUTATION DISPLAY === */
+.rep-display {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 700;
+  color: var(--neon-gold);
+  font-family: var(--font-mono);
+}
+
 /* === QUEUE TIME LABEL === */
 .queue-time-display {
   text-align: center;
@@ -1582,6 +1641,7 @@ body::before {
     <div class="app-header">
       <h1>Friday Night</h1>
       <div class="night-label">Plan your move</div>
+      <div class="rep-display" id="rep-display">★ 0 rep · $50</div>
     </div>
 
     <!-- Tab Content -->
@@ -2473,6 +2533,73 @@ Remember: 1-2 sentences max per reply. Stay in character. Your quirk (${neighbor
 }
 
 // ============================================================
+// SAVE / PROGRESSION SYSTEM
+// ============================================================
+
+const SaveSystem = {
+  KEY: 'thequeue_save_v1',
+
+  defaultProgress() {
+    return {
+      reputation: 0,
+      totalCash: 50,
+      venuesCleared: [],
+      unlockedContacts: ['kai', 'pia', 'rissal', 'mona', 'sasha', 'felix'],
+      totalRuns: 0,
+      totalSuccesses: 0,
+    };
+  },
+
+  load() {
+    try {
+      const raw = localStorage.getItem(this.KEY);
+      if (raw) return { ...this.defaultProgress(), ...JSON.parse(raw) };
+    } catch (e) {}
+    return this.defaultProgress();
+  },
+
+  save(progress) {
+    try {
+      localStorage.setItem(this.KEY, JSON.stringify(progress));
+    } catch (e) {}
+  },
+
+  clear() {
+    localStorage.removeItem(this.KEY);
+  },
+
+  applyToState() {
+    const p = this.load();
+    state.progress = p;
+    state.cash = 50 + p.reputation * 5;
+    state.startingCash = state.cash;
+
+    // Unlock venues based on clears
+    VENUES.forEach(v => {
+      if (!v.locked) return;
+      if (v.id === 'boardroom' && p.venuesCleared.length >= 2) v.locked = false;
+      if (v.id === 'florians' && p.venuesCleared.length >= 3) v.locked = false;
+      if (v.id === 'audit' && p.venuesCleared.length >= 5) v.locked = false;
+    });
+  },
+
+  recordRun(success, venueId) {
+    const p = this.load();
+    p.totalRuns++;
+    p.reputation += success ? 3 : 1;
+    if (success) {
+      p.totalSuccesses++;
+      if (!p.venuesCleared.includes(venueId)) {
+        p.venuesCleared.push(venueId);
+      }
+    }
+    p.totalCash = 50 + p.reputation * 5;
+    this.save(p);
+    state.progress = p;
+  },
+};
+
+// ============================================================
 // GAME STATE
 // ============================================================
 
@@ -2487,6 +2614,7 @@ const state = {
   audioStarted: false,
   muted: false,
   finalSquad: [],
+  progress: null,
   // Phase 1 state
   queue: {
     position: 15,
@@ -2503,8 +2631,151 @@ const state = {
     animFrame: null,
     activeTraits: [],
     delayedEffects: [],
+    memberStats: {},
   },
   llm: { loaded: false, scripted: false },
+};
+
+// ============================================================
+// PER-MEMBER STATS
+// ============================================================
+
+const MemberStats = {
+  init(squad) {
+    state.queue.memberStats = {};
+    squad.forEach(member => {
+      const contact = CONTACTS.find(c => c.name === member.name);
+      const warmthRate = contact?.styles?.some(s => ['Dark Minimal', 'All Black', 'Chains'].includes(s)) ? 0.3 : 0.6;
+      state.queue.memberStats[member.name] = {
+        warmth: 100,
+        morale: 80 + Math.random() * 20,
+        warmthDecay: warmthRate,
+        anxietyThreshold: contact?.anxiety ? contact.anxiety * 10 : 60,
+      };
+    });
+  },
+
+  tick(minutes) {
+    const stats = state.queue.memberStats;
+    for (const name of Object.keys(stats)) {
+      const s = stats[name];
+      s.warmth = Math.max(0, s.warmth - s.warmthDecay * minutes);
+      s.morale = Math.max(0, s.morale - 0.2 * minutes);
+
+      if (state.queue.anxiety > s.anxietyThreshold) {
+        s.morale = Math.max(0, s.morale - 0.5 * minutes);
+      }
+
+      if (s.warmth <= 10 || s.morale <= 10) {
+        this.memberLeaves(name);
+      }
+    }
+    this.render();
+  },
+
+  memberLeaves(name) {
+    const idx = state.finalSquad.findIndex(m => m.name === name);
+    if (idx < 0) return;
+    const gone = state.finalSquad.splice(idx, 1)[0];
+    delete state.queue.memberStats[name];
+
+    const reason = state.queue.memberStats[name]?.warmth <= 10
+      ? `${name} is freezing and went home`
+      : `${name}'s morale collapsed — they left`;
+    showToast(reason, 2500);
+    EventLog.add(reason, 'negative');
+    QueueEngine.modHope(-8);
+    this.render();
+  },
+
+  boostWarmth(name, amount) {
+    const s = state.queue.memberStats[name];
+    if (s) s.warmth = Math.min(100, s.warmth + amount);
+    this.render();
+  },
+
+  boostMorale(name, amount) {
+    const s = state.queue.memberStats[name];
+    if (s) s.morale = Math.min(100, s.morale + amount);
+    this.render();
+  },
+
+  render() {
+    let container = $('squad-status-bar');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'squad-status-bar';
+      container.className = 'squad-status-bar';
+      const timeDisplay = $('queue-time-display');
+      if (timeDisplay) timeDisplay.after(container);
+    }
+    if (state.finalSquad.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+    container.style.display = 'flex';
+    container.innerHTML = state.finalSquad.map(m => {
+      const s = state.queue.memberStats[m.name];
+      if (!s) return '';
+      const warmthPct = s.warmth;
+      const moralePct = s.morale;
+      const cls = warmthPct < 30 ? 'danger' : warmthPct < 60 ? 'cold' : 'warm';
+      return `<div class="member-status ${cls}">
+        <span class="ms-name" style="color:${m.color || '#ebe4ff'}">${m.name}</span>
+        <span title="Warmth ${Math.round(warmthPct)}%">🌡<span class="ms-bar"><span class="ms-fill" style="width:${warmthPct}%"></span></span></span>
+        <span title="Morale ${Math.round(moralePct)}%">😊<span class="ms-bar"><span class="ms-fill" style="width:${moralePct}%;background:${moralePct < 30 ? 'var(--neon-pink)' : 'var(--neon-gold)'}"></span></span></span>
+      </div>`;
+    }).join('');
+  },
+};
+
+// ============================================================
+// PARTICLE SYSTEM (visual polish)
+// ============================================================
+
+const Particles = {
+  container: null,
+
+  init() {
+    if (this.container) return;
+    this.container = document.createElement('div');
+    this.container.className = 'particle-container';
+    document.body.appendChild(this.container);
+  },
+
+  burst(count = 40, colors = ['#39ff14', '#57f2ff', '#7b75ff', '#ff4d6d', '#ffd86b']) {
+    this.init();
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement('div');
+      el.className = 'particle';
+      const size = 4 + Math.random() * 8;
+      const x = 20 + Math.random() * 60;
+      const dur = 1.5 + Math.random() * 2;
+      const delay = Math.random() * 0.5;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      el.style.cssText = `width:${size}px;height:${size}px;background:${color};left:${x}%;bottom:-10px;animation-duration:${dur}s;animation-delay:${delay}s;box-shadow:0 0 ${size * 2}px ${color};`;
+      this.container.appendChild(el);
+      setTimeout(() => el.remove(), (dur + delay) * 1000 + 100);
+    }
+  },
+
+  confetti(count = 60) {
+    this.init();
+    const colors = ['#39ff14', '#57f2ff', '#7b75ff', '#ff4d6d', '#ffd86b', '#fd9927', '#a4ff80'];
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement('div');
+      const w = 3 + Math.random() * 6;
+      const h = 6 + Math.random() * 10;
+      const x = Math.random() * 100;
+      const dur = 2 + Math.random() * 3;
+      const delay = Math.random() * 0.8;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const rot = Math.random() * 360;
+      el.style.cssText = `position:absolute;width:${w}px;height:${h}px;background:${color};left:${x}%;top:-20px;border-radius:2px;transform:rotate(${rot}deg);animation:confettiFall ${dur}s ${delay}s ease-in forwards;opacity:0.9;`;
+      this.container.appendChild(el);
+      setTimeout(() => el.remove(), (dur + delay) * 1000 + 100);
+    }
+  },
 };
 
 // ============================================================
@@ -3268,14 +3539,17 @@ function showFlakeResult(venue, squad, allResults) {
     subtitle = `${flakeCount} down, ${survivorCount} standing. Let's go.`;
   }
 
-  const memberDots = squad.length > 0 ? squad.map(c => `
-    <div class="flake-squad-member">
-      <div class="member-dot" style="background:${c.traitColor};border:2px solid ${c.color};">
-        <span style="color:${c.color}">${c.initials}</span>
+  const memberDots = squad.length > 0 ? squad.map(c => {
+    const props = Portrait.randomProps();
+    props.shirtColor = c.color || props.shirtColor;
+    const portrait = Portrait.generate(props, 'friendly', []);
+    return `<div class="flake-squad-member">
+      <div class="member-dot" style="background:${c.traitColor};border:2px solid ${c.color};overflow:hidden;border-radius:50%;">
+        <img src="${portrait}" style="width:48px;height:48px;image-rendering:pixelated;border-radius:50%;" alt="${c.name}">
       </div>
       <div class="member-name">${c.name}</div>
-    </div>
-  `).join('') : '';
+    </div>`;
+  }).join('') : '';
 
   const youDot = `
     <div class="flake-squad-member">
@@ -4103,10 +4377,9 @@ const QueueEngine = {
 
   advanceTime(minutes) {
     state.queue.gameTime += minutes;
-    // Passive anxiety increase over time
     this.modAnxiety(minutes * 0.4);
-    // Passive hope decay
     this.modHope(-minutes * 0.3);
+    MemberStats.tick(minutes);
   },
 
   modHope(delta) {
@@ -5252,10 +5525,27 @@ const BouncerSystem = {
       <div class="result-row"><span class="rl">Cash remaining</span><span class="rv">$${state.cash}</span></div>
     `;
 
-    $('result-btn').textContent = success ? 'Next Friday' : 'Try Again';
+    // Progression
+    SaveSystem.recordRun(success, venue?.id);
+    const prog = SaveSystem.load();
+
+    $('result-stats').innerHTML += `
+      <div class="result-row" style="border-top:1px solid rgba(255,255,255,0.06);margin-top:4px;padding-top:8px;">
+        <span class="rl">Reputation</span><span class="rv" style="color:var(--neon-gold);">★ ${prog.reputation}</span>
+      </div>
+      <div class="result-row"><span class="rl">Venues cleared</span><span class="rv">${prog.venuesCleared.length} / ${VENUES.length}</span></div>
+      <div class="result-row"><span class="rl">Next budget</span><span class="rv">$${prog.totalCash}</span></div>
+    `;
+
+    // Particles!
+    if (success) {
+      Particles.burst(50);
+      setTimeout(() => Particles.confetti(60), 500);
+    }
+
+    $('result-btn').textContent = success ? 'Next Friday →' : 'Try Again';
     $('result-btn').onclick = () => {
       overlay.classList.remove('active');
-      // Reset audio filter
       if (ClubAudio.ctx && ClubAudio.lpFilter) {
         ClubAudio.lpFilter.frequency.setValueAtTime(280, ClubAudio.ctx.currentTime);
       }
@@ -5286,6 +5576,9 @@ async function enterQueue() {
   state.queue.actionLocked = false;
   state.queue.neighborFront = generateNeighbor(state.selectedVenue, []);
   state.queue.neighborBack = generateNeighbor(state.selectedVenue, []);
+  state.queue.activeTraits = [];
+  state.queue.delayedEffects = [];
+  state.queue.memberStats = {};
 
   // Show loading overlay
   $('loading-overlay').classList.add('active');
@@ -5337,6 +5630,9 @@ function startQueuePhase(venue, cfg) {
   // Update HUD
   QueueEngine.updateMeters();
 
+  // Initialize per-member stats
+  MemberStats.init(state.finalSquad);
+
   // Show queue screen
   $('queue-screen').classList.add('active');
 
@@ -5358,14 +5654,23 @@ function restartPlanning() {
   state.selectedVenue = null;
   state.selectedSquad = [];
   state.inventory = {};
-  state.cash = state.startingCash;
   state.finalSquad = [];
+
+  // Apply progression
+  SaveSystem.applyToState();
 
   QueueCanvas.stopLoop();
   $('queue-screen').classList.remove('active');
+  $('bouncer-screen').classList.remove('active');
   $('flake-overlay').classList.remove('active');
   $('loading-overlay').classList.remove('active');
   $('phone-container').classList.add('active');
+
+  // Update reputation display
+  const repEl = $('rep-display');
+  if (repEl && state.progress) {
+    repEl.textContent = `★ ${state.progress.reputation} rep · $${state.cash}`;
+  }
 
   switchTab(0);
   renderVenues();
@@ -5380,6 +5685,11 @@ function restartPlanning() {
 // ============================================================
 
 function init() {
+  // Load progression from localStorage
+  SaveSystem.applyToState();
+  const p = state.progress;
+  $('rep-display').textContent = `★ ${p.reputation} rep · $${state.cash}`;
+
   updateStatusBar();
   setInterval(updateStatusBar, 30000);
 
