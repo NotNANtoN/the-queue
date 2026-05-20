@@ -4874,7 +4874,6 @@ const QueueCanvas = {
     }
 
     // Draw people (back to front, so closer = drawn last)
-    const people = state.queue.queuePeople;
     for (let i = people.length - 1; i >= 0; i--) {
       const p = people[i];
       this.drawPerson(ctx, p, p.baseX, groundY, this.time);
