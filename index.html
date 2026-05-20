@@ -1661,6 +1661,107 @@ body::before {
 .member-status.warm .ms-fill { background: var(--neon-green); }
 .member-status.danger .ms-fill { background: var(--neon-pink); }
 
+/* === CREW PROFILE CARD === */
+.crew-profile {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.crew-profile:hover { background: var(--bg-card-hover); }
+.crew-profile.expanded { background: rgba(123, 117, 255, 0.04); border-color: var(--border-glow); }
+.crew-top {
+  display: flex; gap: 12px; align-items: center;
+}
+.crew-portrait {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid var(--border-subtle);
+}
+.crew-portrait img {
+  width: 48px; height: 48px;
+  image-rendering: pixelated;
+}
+.crew-portrait.locked {
+  filter: brightness(0.2);
+  border-color: rgba(255,255,255,0.04);
+}
+.crew-header {
+  flex: 1; min-width: 0;
+}
+.crew-name-row {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 2px;
+}
+.crew-name { font-size: 14px; font-weight: 800; }
+.crew-loyalty {
+  font-size: 9px; font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+.crew-trait-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.crew-stats-row {
+  display: flex; gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.crew-stat {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 44px;
+}
+.crew-stat-val {
+  font-size: 14px; font-weight: 800;
+  font-family: var(--font-mono);
+}
+.crew-stat-label {
+  font-size: 8px; font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.crew-detail {
+  display: none;
+  padding-top: 12px;
+  margin-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.crew-profile.expanded .crew-detail { display: block; }
+.crew-bar {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6px;
+  font-size: 10px;
+}
+.crew-bar-label {
+  min-width: 50px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.crew-bar-track {
+  flex: 1; height: 5px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px; overflow: hidden;
+}
+.crew-bar-fill {
+  height: 100%; border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.crew-music-pref {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
 /* === REPUTATION DISPLAY === */
 .rep-display {
   display: flex; align-items: center; gap: 6px;
@@ -2089,8 +2190,9 @@ const CONTACTS = [
     musicPref: 'Deep House',
     anxiety: 6,
     flakeRate: 15,
-    flakeMsg: "YOOO I just got to the afters already 😂 skip the queue lol",
-    confirmMsg: "let's goooo 🔥 omw",
+    portraitProps: { skin: '#c68642', hairColor: '#1a1a2e', hairStyle: 'short', shirtColor: '#0d1b2a', accessory: null, faceWidth: 7, faceHeight: 8, eyeSpacing: 4, noseSize: 1, earSize: 1, seed: 0.42 },
+    flakeMsg: "YOOO I just got to the afters already, skip the queue lol",
+    confirmMsg: "let's goooo, omw",
   },
   {
     id: 'pia',
@@ -2106,8 +2208,9 @@ const CONTACTS = [
     musicPref: 'Tech-House',
     anxiety: 5,
     flakeRate: 40,
-    flakeMsg: "babe the promoter just called, I'm going to another thing sorryyy 💋",
-    confirmMsg: "Yesss I'll be there in 20 💋",
+    portraitProps: { skin: '#f5d0a9', hairColor: '#3d2b1f', hairStyle: 'long', shirtColor: '#ff4d6d', accessory: null, faceWidth: 6, faceHeight: 7, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.18 },
+    flakeMsg: "babe the promoter just called, I'm going to another thing sorryyy",
+    confirmMsg: "Yesss I'll be there in 20",
   },
   {
     id: 'rissal',
@@ -2124,7 +2227,8 @@ const CONTACTS = [
     anxiety: 9,
     flakeRate: 5,
     startsWithItems: ['gum', 'lighter'],
-    flakeMsg: "deploy broke prod, can't come 😭",
+    portraitProps: { skin: '#8d5524', hairColor: '#2d2d2d', hairStyle: 'buzz', shirtColor: '#1b4332', accessory: 'glasses', faceWidth: 7, faceHeight: 8, eyeSpacing: 4, noseSize: 2, earSize: 1, seed: 0.65 },
+    flakeMsg: "deploy broke prod, can't come",
     confirmMsg: "k. omw.",
   },
   {
@@ -2142,8 +2246,9 @@ const CONTACTS = [
     anxiety: 4,
     flakeRate: 20,
     refusesEasy: true,
+    portraitProps: { skin: '#f0c5a0', hairColor: '#d14070', hairStyle: 'bob', shirtColor: '#7b75ff', accessory: 'earring', faceWidth: 6, faceHeight: 7, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.82 },
     flakeMsg: "I just saw what everyone's wearing on insta. hard pass.",
-    confirmMsg: "Outfit ready. I'll be iconic tonight ✨",
+    confirmMsg: "Outfit ready. I'll be iconic tonight.",
   },
   {
     id: 'sasha',
@@ -2159,8 +2264,9 @@ const CONTACTS = [
     musicPref: 'Drum & Bass',
     anxiety: 7,
     flakeRate: 25,
-    flakeMsg: "LMAOOO I'm already in the wrong part of town, my uber went rogue 🤷",
-    confirmMsg: "BRO I JUST DID SOMETHING CRAZY but I'm coming 😂",
+    portraitProps: { skin: '#dba270', hairColor: '#e84a5f', hairStyle: 'curly', shirtColor: '#ff6b35', accessory: 'piercing', faceWidth: 7, faceHeight: 7, eyeSpacing: 4, noseSize: 1, earSize: 1, seed: 0.37 },
+    flakeMsg: "LMAOOO I'm already in the wrong part of town, my uber went rogue",
+    confirmMsg: "BRO I JUST DID SOMETHING CRAZY but I'm coming",
   },
   {
     id: 'felix',
@@ -2176,8 +2282,9 @@ const CONTACTS = [
     musicPref: 'Minimal Techno',
     anxiety: 6,
     flakeRate: 30,
-    flakeMsg: "yo my connect just hit me up, I'm going to a different spot. next time 🤙",
-    confirmMsg: "Already got some info on tonight's door. See you there 🤙",
+    portraitProps: { skin: '#e8b88a', hairColor: '#c4931a', hairStyle: 'ponytail', shirtColor: '#2d2d2d', accessory: null, faceWidth: 6, faceHeight: 8, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.55 },
+    flakeMsg: "yo my connect just hit me up, I'm going to a different spot. next time",
+    confirmMsg: "Already got some info on tonight's door. See you there.",
   },
   {
     id: 'zara',
@@ -2194,8 +2301,9 @@ const CONTACTS = [
     anxiety: 5,
     flakeRate: 20,
     unlockCondition: 'rep5',
-    flakeMsg: "Can't tonight, editing photos from last weekend 📸",
-    confirmMsg: "Camera charged, outfit ready. Let's make content 📸",
+    portraitProps: { skin: '#6b3e26', hairColor: '#1a1a2e', hairStyle: 'afro', shirtColor: '#e84a5f', accessory: null, faceWidth: 6, faceHeight: 7, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.72 },
+    flakeMsg: "Can't tonight, editing photos from last weekend",
+    confirmMsg: "Camera charged, outfit ready. Let's make content.",
   },
   {
     id: 'dex',
@@ -2212,7 +2320,8 @@ const CONTACTS = [
     anxiety: 8,
     flakeRate: 35,
     unlockCondition: 'venue_compliance',
-    flakeMsg: "heat outside tonight bro, laying low 🫥",
+    portraitProps: { skin: '#c68642', hairColor: '#2d2d2d', hairStyle: 'short', shirtColor: '#1a1a2e', accessory: 'sunglasses', faceWidth: 7, faceHeight: 8, eyeSpacing: 4, noseSize: 2, earSize: 1, seed: 0.91 },
+    flakeMsg: "heat outside tonight bro, laying low",
     confirmMsg: "I got the goods. See you outside. Don't be late.",
   },
   {
@@ -2230,8 +2339,9 @@ const CONTACTS = [
     anxiety: 7,
     flakeRate: 15,
     unlockCondition: 'rep10',
-    flakeMsg: "Mediating a friend situation tonight, rain check 🙏",
-    confirmMsg: "I'll keep everyone calm. On my way 🧘",
+    portraitProps: { skin: '#fce0c5', hairColor: '#1a1a2e', hairStyle: 'bun', shirtColor: '#e0aaff', accessory: null, faceWidth: 6, faceHeight: 7, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.28 },
+    flakeMsg: "Mediating a friend situation tonight, rain check",
+    confirmMsg: "I'll keep everyone calm. On my way.",
   },
   {
     id: 'niko',
@@ -2248,6 +2358,7 @@ const CONTACTS = [
     anxiety: 9,
     flakeRate: 10,
     unlockCondition: 'venue_boardroom',
+    portraitProps: { skin: '#dba270', hairColor: '#1a1a2e', hairStyle: 'mohawk', shirtColor: '#1a1a2e', accessory: 'earring', faceWidth: 8, faceHeight: 8, eyeSpacing: 4, noseSize: 2, earSize: 2, seed: 0.63 },
     flakeMsg: "Already inside a different club lol. Come find me tmr",
     confirmMsg: "The bouncers know me. We're golden. 🤙",
   },
@@ -2266,8 +2377,9 @@ const CONTACTS = [
     anxiety: 4,
     flakeRate: 25,
     unlockCondition: 'rep15',
-    flakeMsg: "At a networking event that's running late 💼 next time!",
-    confirmMsg: "I know like 5 people inside already. Let's GO 🔥",
+    portraitProps: { skin: '#8d5524', hairColor: '#3d2b1f', hairStyle: 'long', shirtColor: '#ffc300', accessory: 'glasses', faceWidth: 6, faceHeight: 7, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.45 },
+    flakeMsg: "At a networking event that's running late, next time!",
+    confirmMsg: "I know like 5 people inside already. Let's GO.",
   },
   {
     id: 'ghost',
@@ -2284,6 +2396,7 @@ const CONTACTS = [
     anxiety: 10,
     flakeRate: 5,
     unlockCondition: 'venue_florians',
+    portraitProps: { skin: '#f5d0a9', hairColor: '#2d2d2d', hairStyle: 'bald', shirtColor: '#111', accessory: null, faceWidth: 6, faceHeight: 8, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.99 },
     flakeMsg: "...",
     confirmMsg: ".",
   },
@@ -2811,6 +2924,7 @@ const SaveSystem = {
       totalRuns: 0,
       totalSuccesses: 0,
       bonds: {},
+      contactStats: {},
     };
   },
 
@@ -2871,6 +2985,11 @@ const SaveSystem = {
       if (!p.venuesCleared.includes(venueId)) {
         p.venuesCleared.push(venueId);
       }
+      // Track success for each squad member
+      state.finalSquad.forEach(m => {
+        const c = CONTACTS.find(ct => ct.name === m.name);
+        if (c) this.updateContactStat(c.id, { success: true });
+      });
       // Increase bonds between all squad members who succeeded together
       const ids = state.finalSquad.map(m => {
         const c = CONTACTS.find(ct => ct.name === m.name);
@@ -2886,6 +3005,11 @@ const SaveSystem = {
         p.bonds[playerKey] = Math.min(100, (p.bonds[playerKey] || 0) + 10);
       }
     } else {
+      // Track failure for each squad member
+      state.finalSquad.forEach(m => {
+        const c = CONTACTS.find(ct => ct.name === m.name);
+        if (c) this.updateContactStat(c.id, { fail: true });
+      });
       // Failed runs still build small bonds (shared suffering)
       const ids = state.finalSquad.map(m => CONTACTS.find(ct => ct.name === m.name)?.id).filter(Boolean);
       ids.forEach(id => {
@@ -2925,6 +3049,24 @@ const SaveSystem = {
     p.totalCash = 50 + p.reputation * 5;
     this.save(p);
     state.progress = p;
+  },
+
+  getContactStat(contactId) {
+    const p = this.load();
+    return p.contactStats[contactId] || { runsTogether: 0, successes: 0, flakes: 0, loyalty: 0 };
+  },
+
+  updateContactStat(contactId, updates) {
+    const p = this.load();
+    if (!p.contactStats[contactId]) {
+      p.contactStats[contactId] = { runsTogether: 0, successes: 0, flakes: 0, loyalty: 0 };
+    }
+    const s = p.contactStats[contactId];
+    if (updates.run) s.runsTogether++;
+    if (updates.success) { s.successes++; s.loyalty = Math.min(100, s.loyalty + 8); }
+    if (updates.fail) s.loyalty = Math.min(100, s.loyalty + 2);
+    if (updates.flake) { s.flakes++; s.loyalty = Math.max(0, s.loyalty - 5); }
+    this.save(p);
   },
 
   getPendingUnlocks() {
@@ -3638,78 +3780,74 @@ function renderContacts() {
     const venueBlock = c.refusesEasy && selectedVenue?.policy === 'Easy';
     const disabled = atMax || venueBlock;
 
-    const cls = ['contact-card'];
+    const cls = ['crew-profile'];
     if (selected) cls.push('selected');
-    if (disabled && !selected) cls.push('disabled');
 
-    const anxPct = (c.anxiety / 10) * 100;
-    const anxColor = c.anxiety >= 7 ? 'var(--neon-green)' : c.anxiety >= 4 ? 'var(--neon-orange)' : 'var(--neon-pink)';
+    const bond = SaveSystem.getBond('player', c.id);
+    const stats = SaveSystem.getContactStat(c.id);
+    const portrait = c.portraitProps ? Portrait.generate(c.portraitProps, 'friendly', []) : '';
+
+    const loyaltyLevel = stats.loyalty >= 80 ? 'Ride or Die' : stats.loyalty >= 50 ? 'Solid' : stats.loyalty >= 20 ? 'Warming Up' : 'New';
+    const loyaltyColor = stats.loyalty >= 80 ? 'var(--neon-green)' : stats.loyalty >= 50 ? 'var(--neon-cyan)' : stats.loyalty >= 20 ? 'var(--neon-gold)' : 'var(--text-muted)';
+    const loyaltyBg = stats.loyalty >= 80 ? 'rgba(57,255,20,0.12)' : stats.loyalty >= 50 ? 'rgba(87,242,255,0.12)' : stats.loyalty >= 20 ? 'rgba(255,216,107,0.12)' : 'rgba(255,255,255,0.04)';
+
+    let musicNote = '';
+    if (selectedVenue && c.musicPref) {
+      musicNote = c.musicPref === selectedVenue.music
+        ? `<span style="color:var(--neon-green);font-size:10px;">${PX.i('note','#39ff14',10)} Into it</span>`
+        : `<span style="color:var(--text-muted);font-size:10px;">${PX.i('note','#666',10)} Meh</span>`;
+    }
 
     let warning = '';
-    if (venueBlock) {
-      warning = `<div class="contact-warning">Won't go to Easy venues</div>`;
-    }
-
-    // Music affinity indicator
-    let musicMatch = '';
-    if (selectedVenue && c.musicPref) {
-      if (c.musicPref === selectedVenue.music) {
-        musicMatch = `<div style="font-size:10px;color:var(--neon-green);margin-top:3px;">🎵 Loves ${selectedVenue.music} — less likely to flake</div>`;
-      } else {
-        musicMatch = `<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">🎵 Prefers ${c.musicPref}</div>`;
-      }
-    }
-
-    // Bond indicator
-    const bond = SaveSystem.getBond('player', c.id);
-    let bondLabel = '';
-    if (bond >= 60) bondLabel = `<span style="font-size:9px;color:var(--neon-gold);margin-left:4px;">💛 BFF (${bond})</span>`;
-    else if (bond >= 30) bondLabel = `<span style="font-size:9px;color:var(--neon-cyan);margin-left:4px;">🤝 Friends (${bond})</span>`;
-    else if (bond > 0) bondLabel = `<span style="font-size:9px;color:var(--text-muted);margin-left:4px;">👋 Known (${bond})</span>`;
+    if (venueBlock) warning = `<div style="font-size:10px;color:var(--neon-orange);margin-top:4px;">Won't go to Easy venues</div>`;
+    if (disabled && !selected && !venueBlock) warning = `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Squad full (3/3)</div>`;
 
     return `
-      <div class="${cls.join(' ')}" data-contact="${c.id}">
-        <div class="contact-avatar" style="background:${c.traitColor};border:1px solid ${c.traitBorder};">
-          <span style="color:${c.color}">${c.initials}</span>
-          <span class="check">✓</span>
-        </div>
-        <div class="contact-info">
-          <div class="contact-name">${c.name}</div>
-          <span class="contact-trait" style="background:${c.traitColor};border:1px solid ${c.traitBorder};color:${c.traitTextColor};">${c.trait}</span>
-          <div class="contact-details">
-            <span class="detail">🎵 ${c.musicPref}</span>
-            <span class="detail">😰 <span class="anxiety-bar"><span class="fill" style="width:${anxPct}%;background:${anxColor};"></span></span> ${c.anxiety}/10</span>
-            <span class="detail">💨 ${c.flakeRate}%</span>
+      <div class="${cls.join(' ')} ${disabled && !selected ? 'disabled' : ''}" data-contact="${c.id}" style="${selected ? 'border-color:' + c.color + ';box-shadow:0 0 16px ' + c.color + '22;' : ''}">
+        <div class="crew-top">
+          <div class="crew-portrait"><img src="${portrait}" alt="${c.name}"></div>
+          <div class="crew-header">
+            <div class="crew-name-row">
+              <span class="crew-name" style="color:${selected ? c.color : '#fff'}">${c.name}</span>
+              <span class="crew-loyalty" style="color:${loyaltyColor};background:${loyaltyBg};border:1px solid ${loyaltyColor}33;">${loyaltyLevel}</span>
+              ${musicNote}
+            </div>
+            <div class="crew-trait-label" style="color:${c.traitTextColor}">${c.trait}</div>
           </div>
-          <div class="contact-styles">
-            ${c.styles.map(s => `<span class="style-pill">${s}</span>`).join('')}
-          </div>
-          ${musicMatch}
-          ${warning}
-          <div class="contact-name" style="margin-top:3px;">${bondLabel}</div>
+          ${selected ? `<span style="color:${c.color};font-size:18px;font-weight:900;">✓</span>` : ''}
         </div>
+        <div class="crew-stats-row">
+          <div class="crew-stat"><span class="crew-stat-val" style="color:var(--neon-cyan)">${stats.runsTogether}</span><span class="crew-stat-label">Runs</span></div>
+          <div class="crew-stat"><span class="crew-stat-val" style="color:var(--neon-green)">${stats.successes}</span><span class="crew-stat-label">Wins</span></div>
+          <div class="crew-stat"><span class="crew-stat-val" style="color:var(--neon-pink)">${stats.flakes}</span><span class="crew-stat-label">Flakes</span></div>
+          <div class="crew-stat"><span class="crew-stat-val" style="color:var(--neon-gold)">${bond}</span><span class="crew-stat-label">Bond</span></div>
+          <div class="crew-stat"><span class="crew-stat-val" style="color:${loyaltyColor}">${stats.loyalty}</span><span class="crew-stat-label">Loyalty</span></div>
+        </div>
+        ${warning}
       </div>
     `;
   }).join('');
 
-  // Show locked contacts as silhouettes
+  // Locked contacts
   if (lockedContacts.length > 0) {
     container.innerHTML += `<div class="section-header" style="padding-top:12px;">Unknown — meet them out there</div>`;
-    container.innerHTML += lockedContacts.map(c => `
-      <div class="contact-card disabled" style="opacity:0.25;">
-        <div class="contact-avatar" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);">
-          <span style="color:var(--text-muted)">?</span>
+    container.innerHTML += lockedContacts.map(c => {
+      const portrait = c.portraitProps ? Portrait.generate(c.portraitProps, 'neutral', []) : '';
+      const hint = c.unlockCondition === 'rep5' ? 'Reach 5 rep' : c.unlockCondition === 'rep10' ? 'Reach 10 rep' : c.unlockCondition === 'rep15' ? 'Reach 15 rep' : c.unlockCondition?.startsWith('venue_') ? 'Clear a venue' : 'Go out more';
+      return `<div class="crew-profile" style="opacity:0.3;cursor:default;">
+        <div class="crew-top">
+          <div class="crew-portrait locked">${portrait ? `<img src="${portrait}" alt="?">` : ''}</div>
+          <div class="crew-header">
+            <div class="crew-name-row"><span class="crew-name" style="color:var(--text-muted)">???</span></div>
+            <div class="crew-trait-label">Unknown</div>
+          </div>
         </div>
-        <div class="contact-info">
-          <div class="contact-name" style="color:var(--text-muted)">???</div>
-          <span class="contact-trait" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);color:var(--text-muted);">Unknown</span>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Meet new people by going out</div>
-        </div>
-      </div>
-    `).join('');
+        <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">${PX.i('key','#666',10)} ${hint}</div>
+      </div>`;
+    }).join('');
   }
 
-  container.querySelectorAll('.contact-card[data-contact]').forEach(card => {
+  container.querySelectorAll('.crew-profile[data-contact]').forEach(card => {
     card.addEventListener('click', () => {
       if (card.classList.contains('disabled') && !card.classList.contains('selected')) {
         const contact = CONTACTS.find(c => c.id === card.dataset.contact);
@@ -3947,6 +4085,9 @@ async function startFlakeRoll() {
     const roll = Math.random() * 100;
     const flaked = roll < effectiveFlake;
     results.push({ contact, flaked });
+
+    // Track stats
+    SaveSystem.updateContactStat(contact.id, { run: true, flake: flaked });
 
     // Replace typing with actual message
     typingEl.innerHTML = `
