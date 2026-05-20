@@ -177,12 +177,12 @@ body::before {
 }
 .tab-slider {
   display: flex;
-  width: 300%;
+  width: 400%;
   height: 100%;
   transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .tab-panel {
-  width: calc(100% / 3);
+  width: calc(100% / 4);
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -512,6 +512,85 @@ body::before {
 }
 .budget-amount .currency { font-size: 14px; }
 
+/* === LOOK PANEL === */
+.look-preview {
+  display: flex; justify-content: center; padding: 20px 0 16px;
+}
+.look-options {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.look-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.look-row-label {
+  font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.look-row-controls {
+  display: flex; align-items: center; gap: 10px;
+}
+.look-cycle-btn {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--bg-card-hover); border: 1px solid var(--border-subtle);
+  color: var(--text-secondary); font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.look-cycle-btn:hover { border-color: var(--neon-purple); color: #fff; }
+.look-value {
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  min-width: 80px; text-align: center;
+}
+.look-swatch {
+  width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2);
+}
+
+/* === PLAYER BADGE === */
+.player-badge {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 18px;
+  background: rgba(8, 6, 26, 0.78);
+  border: 1px solid rgba(123, 117, 255, 0.22);
+  box-shadow: 0 0 28px rgba(123, 117, 255, 0.10);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  pointer-events: none;
+}
+.player-badge canvas {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 2px solid var(--neon-purple);
+  image-rendering: pixelated;
+}
+.player-badge-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.player-badge-name {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.player-badge-job {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--neon-gold);
+}
+
 .item-card {
   display: flex; justify-content: space-between; align-items: center;
   background: var(--bg-card);
@@ -840,20 +919,6 @@ body::before {
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
-.loading-skip {
-  margin-top: 32px;
-  padding: 10px 24px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: none;
-  color: var(--text-muted);
-  font-family: var(--font-sans);
-  font-size: 12px; font-weight: 600;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.loading-skip:hover { border-color: var(--neon-purple); color: var(--text-secondary); }
 
 /* === QUEUE SCREEN === */
 .queue-screen {
@@ -937,6 +1002,8 @@ body::before {
   gap: 6px;
   padding: 8px 16px 16px;
   background: rgba(8, 6, 26, 0.95);
+  max-height: 200px;
+  overflow-y: auto;
 }
 .action-btn {
   padding: 14px 12px;
@@ -1893,6 +1960,15 @@ body::before {
 <!-- Mute Button -->
 <button class="mute-btn" id="mute-btn" title="Toggle audio"><span id="mute-icon"></span></button>
 
+<!-- Persistent Player Badge -->
+<div class="player-badge" id="player-badge">
+  <canvas id="player-badge-canvas" width="42" height="42"></canvas>
+  <div class="player-badge-meta">
+    <div class="player-badge-name">You</div>
+    <div class="player-badge-job" id="player-badge-job">Barista</div>
+  </div>
+</div>
+
 <!-- Phone Container -->
 <div class="phone-container" id="phone-container">
   <div class="phone">
@@ -1944,6 +2020,15 @@ body::before {
           <div class="loadout-note" id="loadout-note"></div>
         </div>
 
+        <!-- Tab 4: Look -->
+        <div class="tab-panel" id="panel-look">
+          <div class="section-header">Your look tonight</div>
+          <div class="look-preview">
+            <canvas id="look-canvas" width="80" height="80" style="image-rendering:pixelated;border-radius:50%;border:2px solid var(--neon-purple);"></canvas>
+          </div>
+          <div class="look-options" id="look-options"></div>
+        </div>
+
       </div>
     </div>
 
@@ -1961,6 +2046,10 @@ body::before {
       <button class="nav-tab" data-tab="2">
         <span class="icon" id="nav-icon-2"></span>
         <span>Loadout</span>
+      </button>
+      <button class="nav-tab" data-tab="3">
+        <span class="icon" id="nav-icon-3"></span>
+        <span>Look</span>
       </button>
     </div>
 
@@ -1990,7 +2079,6 @@ body::before {
     <div class="loading-subtitle">Loading on-device AI for your queue neighbors.<br>First time takes a minute — cached after that.</div>
     <div class="loading-bar-track"><div class="loading-bar-fill" id="loading-fill"></div></div>
     <div class="loading-status" id="loading-status">Initializing...</div>
-    <button class="loading-skip" id="loading-skip">Skip — use scripted mode</button>
   </div>
 </div>
 
@@ -2050,6 +2138,22 @@ body::before {
     <button class="action-btn" id="act-intel">
       <span class="action-icon" id="act-icon-intel"></span>
       <span class="action-label">Intel</span>
+    </button>
+    <button class="action-btn" id="act-eavesdrop">
+      <span class="action-icon" id="act-icon-eavesdrop"></span>
+      <span class="action-label">Eavesdrop</span>
+    </button>
+    <button class="action-btn" id="act-scout">
+      <span class="action-icon" id="act-icon-scout"></span>
+      <span class="action-label">Scout Door</span>
+    </button>
+    <button class="action-btn" id="act-flirt">
+      <span class="action-icon" id="act-icon-flirt"></span>
+      <span class="action-label">Flirt</span>
+    </button>
+    <button class="action-btn" id="act-alliance">
+      <span class="action-icon" id="act-icon-alliance"></span>
+      <span class="action-label">Alliance</span>
     </button>
   </div>
 </div>
@@ -2546,6 +2650,25 @@ const CONTACTS = [
     flakeMsg: "...",
     confirmMsg: ".",
   },
+  {
+    id: 'jasper',
+    name: 'Jasper',
+    initials: 'J',
+    color: '#00e5ff',
+    trait: 'The Algorithm',
+    traitDesc: 'Predicts queue movement — reduces wait time variance',
+    traitColor: 'rgba(0, 229, 255, 0.15)',
+    traitBorder: 'rgba(0, 229, 255, 0.3)',
+    traitTextColor: '#00e5ff',
+    styles: ['Minimal', 'No Logo', 'Streetwear'],
+    musicPref: 'Deep House',
+    anxiety: 8,
+    flakeRate: 20,
+    unlockCondition: 'rep5',
+    portraitProps: { skin: '#f0c5a0', hairColor: '#e8d44d', hairStyle: 'short', shirtColor: '#0d1b2a', accessory: null, faceWidth: 7, faceHeight: 8, eyeSpacing: 4, noseSize: 1, earSize: 1, eyeColor: '#4a90d9', seed: 0.47 },
+    flakeMsg: "training run just converged at 3AM, can't leave now sorry",
+    confirmMsg: "I modeled the queue dynamics. Optimal arrival: now. omw.",
+  },
 ];
 
 const ITEMS = [
@@ -2731,7 +2854,7 @@ const Portrait = {
     // Iris color hint
     if (!isDilated && !isWasted) {
       const irisColors = ['#4a6741','#5a3e2b','#3a5f8a','#6b5b3a','#2d4a3a'];
-      ctx.fillStyle = irisColors[Math.floor(props.seed * irisColors.length)];
+      ctx.fillStyle = props.eyeColor || irisColors[Math.floor(props.seed * irisColors.length)];
       if (eh >= 2) {
         ctx.fillRect(lx - 1, ey + lOff, 1, 1);
         ctx.fillRect(rx + pw, ey, 1, 1);
@@ -2894,6 +3017,9 @@ const TRAIT_DEFS = {
   'Dead Eyes':       { px: 'skull', desc: 'Too much of everything — bouncer will notice', color: '#666' },
   'Insider Info':    { px: 'key', desc: 'You know something useful about tonight', color: '#39ff14' },
   'Street Cred':     { px: 'hand', desc: 'Made friends in line — bouncer sees social proof', color: '#ffd86b' },
+  'Queue Alliance':  { px: 'hand', desc: 'Allied with a neighbor — they may vouch for you at the door', color: '#7b75ff' },
+  'Charmer':         { px: 'heart', desc: 'Flirted your way through the queue — confidence boost', color: '#ff4d6d' },
+  'Scout Intel':     { px: 'eye', desc: 'Observed bouncer behavior up close', color: '#57f2ff' },
 };
 
 // ============================================================
@@ -2901,7 +3027,7 @@ const TRAIT_DEFS = {
 // ============================================================
 
 const DJ_POOL = {
-  'Deep House': ['Koze', 'Solomun', 'Dixon', 'Âme', 'Mano Le Tough', 'DJ Kicks', 'Satori'],
+  'Deep House': ['Koze', 'Solomun', 'Dixon', 'Âme', 'Mano Le Tough', 'Todd Terje', 'Satori'],
   'Techno': ['DJ Synthax', 'Blawan', 'Rebekah', 'Kobosil', 'FJAAK', 'Ellen Allien', 'Shed'],
   'Drum & Bass': ['Noisia', 'Camo & Krooked', 'Calibre', 'High Contrast', 'Alix Perez', 'Roni Size'],
   'Tech-House': ['Fisher', 'Patrick Topping', 'Hot Since 82', 'Jamie Jones', 'Solardo'],
@@ -3148,6 +3274,24 @@ If you want to end the conversation (bored, annoyed, etc.), put on its own line:
 ${neighbor.canUnlock ? `If affinity gets very high (you really like them), you might offer to exchange numbers:
 [UNLOCK: I like you, let's hang out sometime]` : ''}
 
+LEAVING THE QUEUE: If the player convinces you that the queue isn't worth it — maybe they tell you about bad vibes, say the bouncer is turning everyone away, or offer you something better — AND your affinity is low or your disposition makes you uncertain, you MIGHT decide to leave.
+${neighbor.disposition === 'anxious' ? 'You are very susceptible to being talked out of waiting. If someone says it looks bad tonight, you might bail easily.' :
+neighbor.disposition === 'drunk' ? 'You can be easily swayed if someone suggests going somewhere else or if the wait seems too long.' :
+neighbor.disposition === 'hostile' ? 'You are already annoyed. If given a good reason, you might just say "screw this" and leave.' :
+neighbor.disposition === 'friendly' ? 'You are committed and rarely leave, but extreme persuasion or a really good offer might work.' :
+'You are patient. It takes a LOT to make you leave.'}
+When leaving, put on its own line: [LEAVE_QUEUE: your reason for leaving]
+Only do this if genuinely convinced. Don't leave easily — you came here for a reason.
+
+SWAPPING SPOTS: If the player asks nicely to swap positions and you like them (high affinity) or they give you something good, you might agree. You're more likely to swap if you're not in a rush or if they seem more eager than you.
+${neighbor.disposition === 'friendly' ? 'You might swap if asked nicely and affinity is decent.' :
+neighbor.disposition === 'drunk' ? 'You barely care about position. You might swap for fun or if they seem cool.' :
+neighbor.disposition === 'anxious' ? 'You want to get in ASAP — very unlikely to swap unless they really convince you it helps both of you.' :
+neighbor.disposition === 'hostile' ? 'No way you are swapping unless they give you something valuable.' :
+'You would swap for a fair trade or if affinity is high.'}
+When agreeing to swap, put on its own line: [SWAP_SPOTS: your reason for agreeing]
+Only do this if you genuinely would — don't be a pushover.
+
 Remember: 1-2 sentences max per reply. Stay in character. Your quirk (${neighbor.quirk}) can come up naturally in conversation.`;
   return prompt;
 }
@@ -3157,11 +3301,11 @@ Remember: 1-2 sentences max per reply. Stay in character. Your quirk (${neighbor
 // ============================================================
 
 const WARDROBE = [
-  { id: 'leather_jacket', name: 'Black Leather Jacket', styles: ['Dark Minimal', 'Chains'], price: 20, icon: 'shield', iconColor: '#666', groupBonus: 0, desc: 'Classic. Never wrong at a dark venue.' },
-  { id: 'vintage_sneakers', name: 'Vintage Sneakers', styles: ['Streetwear', 'Eccentric'], price: 15, icon: 'star', iconColor: '#fd9927', groupBonus: 0, desc: 'Loud but fun. Not for All Black venues.' },
-  { id: 'designer_watch', name: 'Designer Watch', styles: ['Smart Casual', 'Designer'], price: 30, icon: 'clock', iconColor: '#ffd86b', groupBonus: 0, desc: 'Subtle flex. Boardroom approved.' },
-  { id: 'band_tee', name: 'Obscure Band Tee', styles: ['No Logo', 'Eccentric'], price: 10, icon: 'note', iconColor: '#7b75ff', groupBonus: 0, desc: 'Shows you have taste. Or pretend to.' },
-  { id: 'gold_chain', name: 'Gold Chain', styles: ['Chains', 'Bold'], price: 25, icon: 'diamond', iconColor: '#ffd86b', groupBonus: 0, desc: 'Drip. Pure drip.' },
+  { id: 'leather_jacket', name: 'Black Leather Jacket', styles: ['Dark Minimal', 'Chains'], price: 20, icon: 'shield', iconColor: '#666', groupBonus: 0, desc: 'Classic. Never wrong at a dark venue.', shirtOverride: '#1a1a1a' },
+  { id: 'vintage_sneakers', name: 'Vintage Sneakers', styles: ['Streetwear', 'Eccentric'], price: 15, icon: 'star', iconColor: '#fd9927', groupBonus: 0, desc: 'Loud but fun. Not for All Black venues.', accentOverride: '#fd9927' },
+  { id: 'designer_watch', name: 'Designer Watch', styles: ['Smart Casual', 'Designer'], price: 30, icon: 'clock', iconColor: '#ffd86b', groupBonus: 0, desc: 'Subtle flex. Boardroom approved.', accentOverride: '#ffd86b' },
+  { id: 'band_tee', name: 'Obscure Band Tee', styles: ['No Logo', 'Eccentric'], price: 10, icon: 'note', iconColor: '#7b75ff', groupBonus: 0, desc: 'Shows you have taste. Or pretend to.', shirtOverride: '#2d1b4e' },
+  { id: 'gold_chain', name: 'Gold Chain', styles: ['Chains', 'Bold'], price: 25, icon: 'diamond', iconColor: '#ffd86b', groupBonus: 0, desc: 'Drip. Pure drip.', accentOverride: '#ffd86b' },
   { id: 'flask', name: 'Hip Flask', styles: [], price: 12, icon: 'beer', iconColor: '#fd9927', groupBonus: 3, desc: 'Share drinks, boost morale. +3 group hope.' },
   { id: 'bluetooth_speaker', name: 'Portable Speaker', styles: [], price: 18, icon: 'sound', iconColor: '#57f2ff', groupBonus: 5, desc: 'Pre-game in the queue. +5 group hope.' },
   { id: 'hand_warmers', name: 'Hand Warmers', styles: [], price: 8, icon: 'fire', iconColor: '#ff6b35', groupBonus: 0, warmthBonus: 20, desc: 'Keep warm. Squad warmth +20.' },
@@ -3197,6 +3341,7 @@ const SaveSystem = {
       contactStats: {},
       ownedOutfits: [],
       equippedOutfits: [],
+      playerLook: null,
       djHistory: {},
       venueVisits: {},
     };
@@ -3227,6 +3372,7 @@ const SaveSystem = {
     // Auto-upgrade job based on reputation
     const bestJob = this.JOBS.slice().reverse().find(j => p.reputation >= j.minRep) || this.JOBS[0];
     p.job = bestJob.id;
+    if (p.playerLook) state.playerLook = { ...state.playerLook, ...p.playerLook };
 
     // Weekly budget = job pay + savings
     const pay = bestJob.pay;
@@ -3385,6 +3531,19 @@ const SaveSystem = {
 // GAME STATE
 // ============================================================
 
+const PLAYER_OPTIONS = {
+  skin: ['#f5d0a9', '#e8b88a', '#dba270', '#c68642', '#8d5524', '#6b3e26', '#3d2217'],
+  hair: ['#1a1a2e', '#2d2d2d', '#6b4c2a', '#c4931a', '#e8d44d', '#d14070', '#4a90d9', '#e84a5f', '#ff6b35'],
+  hairStyle: ['short', 'buzz', 'curly', 'mohawk', 'long', 'bob', 'ponytail', 'afro', 'bun'],
+  shirt: ['#7b75ff', '#0d1b2a', '#1b4332', '#2d2d2d', '#ff4d6d', '#39ff14', '#fd9927', '#e84a5f', '#3c1053'],
+  eyeColor: ['#3a5f8a', '#4a90d9', '#4a6741', '#5a3e2b', '#6b5b3a', '#2d4a3a'],
+  faceWidth: [6, 7, 8],
+  faceHeight: [7, 8, 9],
+  eyeSpacing: [3, 4],
+  noseSize: [1, 2],
+  earSize: [1, 2],
+};
+
 const state = {
   phase: 'BOOT',
   selectedVenue: null,
@@ -3397,6 +3556,7 @@ const state = {
   muted: false,
   finalSquad: [],
   progress: null,
+  playerLook: { skin: 1, hair: 0, hairStyle: 0, shirt: 0, eyeColor: 1, faceWidth: 1, faceHeight: 1, eyeSpacing: 1, noseSize: 0, earSize: 0 },
   // Phase 1 state
   queue: {
     position: 15,
@@ -3415,7 +3575,7 @@ const state = {
     delayedEffects: [],
     memberStats: {},
   },
-  llm: { loaded: false, scripted: false },
+  llm: { loaded: false },
 };
 
 // ============================================================
@@ -4031,7 +4191,7 @@ function updateStatusBar() {
 
 function switchTab(idx) {
   state.currentTab = idx;
-  $('tab-slider').style.transform = `translateX(-${idx * (100 / 3)}%)`;
+  $('tab-slider').style.transform = `translateX(-${idx * (100 / 4)}%)`;
   document.querySelectorAll('.nav-tab').forEach((btn, i) => {
     btn.classList.toggle('active', i === idx);
   });
@@ -4366,6 +4526,8 @@ function renderLoadout() {
       SaveSystem.save(p);
       showToast(`Bought ${w.name}`, 1500);
       renderLoadout();
+      renderLookPanel();
+      renderPlayerBadge();
       updateConfirmBar();
     });
   });
@@ -4381,8 +4543,148 @@ function renderLoadout() {
       else p.equippedOutfits.push(wId);
       SaveSystem.save(p);
       renderLoadout();
+      renderLookPanel();
+      renderPlayerBadge();
     });
   });
+}
+
+// ============================================================
+// RENDER: PLAYER LOOK
+// ============================================================
+
+function renderLookPanel() {
+  const opts = $('look-options');
+  const look = state.playerLook;
+  const prog = SaveSystem.load();
+  const equipped = (prog.equippedOutfits || []).map(id => WARDROBE.find(w => w.id === id)).filter(Boolean);
+  const labels = {
+    skin: 'Skin Tone',
+    hair: 'Hair Color',
+    hairStyle: 'Hair Style',
+    shirt: 'Shirt Color',
+    eyeColor: 'Eye Color',
+    faceWidth: 'Face Width',
+    faceHeight: 'Face Height',
+    eyeSpacing: 'Eye Spacing',
+    noseSize: 'Nose',
+    earSize: 'Ears',
+  };
+
+  const optionRows = Object.keys(PLAYER_OPTIONS).map(key => {
+    const values = PLAYER_OPTIONS[key];
+    const idx = look[key];
+    const val = values[idx];
+    let display;
+    if (['skin', 'hair', 'shirt', 'eyeColor'].includes(key)) {
+      display = `<span class="look-swatch" style="background:${val}"></span>`;
+    } else if (key === 'hairStyle') {
+      display = `<span class="look-value">${val}</span>`;
+    } else {
+      display = `<span class="look-value">${val}</span>`;
+    }
+    return `
+      <div class="look-row">
+        <span class="look-row-label">${labels[key]}</span>
+        <div class="look-row-controls">
+          <button class="look-cycle-btn" data-key="${key}" data-dir="-1">‹</button>
+          ${display}
+          <button class="look-cycle-btn" data-key="${key}" data-dir="1">›</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const equippedRows = equipped.length > 0 ? `
+    <div style="margin-top:12px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:0 4px;">Equipped Outfits</div>
+    ${equipped.map(w => `
+      <div class="look-row" style="opacity:0.85;">
+        <span class="look-row-label" style="display:flex;align-items:center;gap:6px;">${PX.i(w.icon, w.iconColor, 14)} ${w.name}</span>
+        ${w.shirtOverride ? `<span class="look-swatch" style="background:${w.shirtOverride}"></span>` : ''}
+        ${w.accentOverride ? `<span class="look-swatch" style="background:${w.accentOverride}"></span>` : ''}
+        ${!w.shirtOverride && !w.accentOverride ? '<span class="look-value" style="font-size:10px">no visual</span>' : ''}
+      </div>
+    `).join('')}
+  ` : '';
+
+  opts.innerHTML = optionRows + equippedRows;
+
+  opts.querySelectorAll('.look-cycle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const dir = parseInt(btn.dataset.dir);
+      const max = PLAYER_OPTIONS[key].length;
+      state.playerLook[key] = (state.playerLook[key] + dir + max) % max;
+      const progress = SaveSystem.load();
+      progress.playerLook = { ...state.playerLook };
+      SaveSystem.save(progress);
+      renderLookPanel();
+      renderPlayerBadge();
+    });
+  });
+
+  // Draw preview
+  const canvas = $('look-canvas');
+  if (canvas) {
+    const props = getPlayerPortraitProps(true);
+    const url = Portrait.generate(props, 'friendly', []);
+    const img = new Image();
+    img.onload = () => {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, 80, 80);
+      ctx.drawImage(img, 0, 0, 80, 80);
+    };
+    img.src = url;
+  }
+}
+
+function getPlayerPortraitProps(includeWardrobe = false) {
+  const look = state.playerLook;
+  const props = {
+    skin: PLAYER_OPTIONS.skin[look.skin],
+    hairColor: PLAYER_OPTIONS.hair[look.hair],
+    hairStyle: PLAYER_OPTIONS.hairStyle[look.hairStyle],
+    shirtColor: PLAYER_OPTIONS.shirt[look.shirt],
+    eyeColor: PLAYER_OPTIONS.eyeColor[look.eyeColor],
+    accessory: null,
+    faceWidth: PLAYER_OPTIONS.faceWidth[look.faceWidth],
+    faceHeight: PLAYER_OPTIONS.faceHeight[look.faceHeight],
+    eyeSpacing: PLAYER_OPTIONS.eyeSpacing[look.eyeSpacing],
+    noseSize: PLAYER_OPTIONS.noseSize[look.noseSize],
+    earSize: PLAYER_OPTIONS.earSize[look.earSize],
+    seed: 0.5,
+  };
+  if (includeWardrobe) {
+    const prog = SaveSystem.load();
+    for (const wId of (prog.equippedOutfits || [])) {
+      const w = WARDROBE.find(i => i.id === wId);
+      if (w?.shirtOverride) props.shirtColor = w.shirtOverride;
+    }
+  }
+  return props;
+}
+
+function getCurrentJob() {
+  const prog = state.progress || SaveSystem.load();
+  return SaveSystem.JOBS.slice().reverse().find(j => prog.reputation >= j.minRep) || SaveSystem.JOBS[0];
+}
+
+function renderPlayerBadge() {
+  const canvas = $('player-badge-canvas');
+  if (!canvas) return;
+
+  const job = getCurrentJob();
+  $('player-badge-job').textContent = job.name;
+
+  const url = Portrait.generate(getPlayerPortraitProps(true), 'friendly', []);
+  const img = new Image();
+  img.onload = () => {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  };
+  img.src = url;
 }
 
 // ============================================================
@@ -4713,8 +5015,18 @@ const QueueCanvas = {
       const neighbor = isPlayer || isSquad ? null : (isBehind ? behindNeighbors[behindIdx] : allNeighbors[i]);
 
       if (isPlayer) {
-        skin = '#e8b88a'; hair = '#2d2d2d'; shirt = '#7b75ff'; accent = '#fff';
+        skin = PLAYER_OPTIONS.skin[state.playerLook.skin];
+        hair = PLAYER_OPTIONS.hair[state.playerLook.hair];
+        shirt = PLAYER_OPTIONS.shirt[state.playerLook.shirt];
+        accent = '#fff';
         hasHat = false; hasPhone = false; hasBag = false; personName = 'You';
+        // Apply equipped wardrobe visuals
+        const prog = SaveSystem.load();
+        for (const wId of (prog.equippedOutfits || [])) {
+          const w = WARDROBE.find(i => i.id === wId);
+          if (w?.shirtOverride) shirt = w.shirtOverride;
+          if (w?.accentOverride) accent = w.accentOverride;
+        }
       } else if (isSquad) {
         const sc = squad[squadIdx];
         const contact = CONTACTS.find(c => c.name === sc?.name);
@@ -5417,6 +5729,8 @@ const NEIGHBOR_TOOLS = [
   { type: 'function', function: { name: 'change_affinity', description: 'How much you like or dislike this person after their message', parameters: { type: 'object', properties: { delta: { type: 'number', description: '-15 to +15' } }, required: ['delta'] } } },
   { type: 'function', function: { name: 'exchange_numbers', description: 'Offer to become contacts and stay in touch', parameters: { type: 'object', properties: {}, required: [] } } },
   { type: 'function', function: { name: 'end_conversation', description: 'End the conversation', parameters: { type: 'object', properties: { reason: { type: 'string' } }, required: ['reason'] } } },
+  { type: 'function', function: { name: 'leave_queue', description: 'Decide to leave the queue entirely — give up and go home', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you are leaving' } }, required: ['reason'] } } },
+  { type: 'function', function: { name: 'swap_spots', description: 'Agree to swap your queue position with the player', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you agreed' } }, required: ['reason'] } } },
 ];
 
 const BOUNCER_TOOLS = [
@@ -5481,20 +5795,76 @@ const LLM = {
 
       if (Array.isArray(generated)) {
         const last = generated[generated.length - 1];
-        // Check for tool_calls in the response message
         if (last?.tool_calls && last.tool_calls.length > 0) {
           return { text: last.content || '', toolCalls: last.tool_calls };
         }
         return { text: last?.content || '', toolCalls: [] };
       }
 
-      // String response — try to parse tool calls from Gemma 4 format
       const text = typeof generated === 'string' ? generated : '';
       const toolCalls = this._parseToolCalls(text);
       const cleanText = text.replace(/call:\w+\{[^}]*\}/g, '').trim();
       return { text: cleanText, toolCalls };
     } catch (e) {
       console.error('LLM chat error:', e);
+      return null;
+    }
+  },
+
+  async chatStream(messages, tools = null, maxTokens = 150, onToken = null) {
+    if (!this.loaded || !this.pipeline) return null;
+    try {
+      const { TextStreamer } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.1.0');
+
+      let fullText = '';
+      let visibleText = '';
+      const streamer = new TextStreamer(this.pipeline.tokenizer, {
+        skip_prompt: true,
+        skip_special_tokens: true,
+        callback_function: (token) => {
+          fullText += token;
+          // Strip tool call patterns from visible text for live display
+          const clean = fullText
+            .replace(/call:\w+\{[^}]*\}/g, '')
+            .replace(/\[[A-Z_]+(?::.*?)?\]/g, '')
+            .trim();
+          if (clean !== visibleText) {
+            visibleText = clean;
+            onToken?.(visibleText);
+          }
+        },
+      });
+
+      const opts = {
+        max_new_tokens: maxTokens,
+        temperature: 0.8,
+        top_p: 0.92,
+        do_sample: true,
+        streamer,
+      };
+      if (tools) opts.tools = tools;
+
+      const output = await this.pipeline(messages, opts);
+      const generated = output[0]?.generated_text;
+
+      // Parse final result for tool calls
+      if (Array.isArray(generated)) {
+        const last = generated[generated.length - 1];
+        if (last?.tool_calls && last.tool_calls.length > 0) {
+          return { text: last.content || '', toolCalls: last.tool_calls };
+        }
+        const rawText = last?.content || '';
+        const toolCalls = this._parseToolCalls(rawText);
+        const cleanText = rawText.replace(/call:\w+\{[^}]*\}/g, '').replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
+        return { text: cleanText, toolCalls };
+      }
+
+      const text = typeof generated === 'string' ? generated : fullText;
+      const toolCalls = this._parseToolCalls(text);
+      const cleanText = text.replace(/call:\w+\{[^}]*\}/g, '').replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
+      return { text: cleanText, toolCalls };
+    } catch (e) {
+      console.error('LLM stream error:', e);
       return null;
     }
   },
@@ -5545,7 +5915,8 @@ const LLM = {
         'give_money': 'give_money', 'affinity': 'change_affinity', 'unlock': 'exchange_numbers',
         'end': 'end_conversation', 'approve': 'approve', 'disapprove': 'disapprove',
         'let_in': 'let_in', 'reject': 'reject', 'ban': 'ban', 'inspect_bag': 'inspect_bag',
-        'score': 'approve',
+        'score': 'approve', 'leave_queue': 'leave_queue', 'swap_spots': 'swap_spots',
+        'leave': 'leave_queue', 'swap': 'swap_spots',
       };
       const fnName = tagMap[tag];
       if (fnName) {
@@ -5557,137 +5928,12 @@ const LLM = {
         else if (fnName === 'approve') { const n = parseInt(val); args.amount = Math.abs(n) || 10; args.reason = val.replace(/^[+-]?\d+\s*/, ''); }
         else if (fnName === 'disapprove') { const n = parseInt(val); args.amount = Math.abs(n) || 10; args.reason = val.replace(/^-?\d+\s*/, ''); }
         else if (fnName === 'end_conversation') args.reason = val;
+        else if (fnName === 'leave_queue') args.reason = val;
+        else if (fnName === 'swap_spots') args.reason = val;
         calls.push({ function: { name: fnName, arguments: args } });
       }
     }
     return calls;
-  },
-};
-
-// Scripted fallback for when LLM is not available
-const ScriptedChat = {
-  responses: {
-    friendly: {
-      greetings: [
-        "Hey! Yeah, been here like 40 minutes. Wild night.",
-        "What's up! You just got here? Lucky, the line was way longer before.",
-        "Yo! Finally someone who looks normal. Half these people are sketchy.",
-      ],
-      general: [
-        "Haha yeah, totally. This city is crazy on Fridays.",
-        "Right? I can't believe how long this is taking.",
-        "For real. At least the music sounds decent from out here.",
-      ],
-    },
-    drunk: {
-      greetings: [
-        "HEYYY! *stumbles* Dude you gotta hear this... *hiccup*",
-        "Brooo this line is... what was I saying? Oh yeah, hi!",
-        "Yooo bestie!! I feel like I know you from somewhere!",
-      ],
-      general: [
-        "Hahahaha yeahhh man... *leans on you* ...sorry.",
-        "Wait wait wait I know something about tonight... what was it...",
-        "You want some of my drink? No? Your loss, this is premium stuff.",
-      ],
-    },
-    hostile: {
-      greetings: [
-        "...what do you want?",
-        "*doesn't look at you* ...what.",
-        "We're all waiting. Make it quick.",
-      ],
-      general: [
-        "Look, I don't do small talk. You got something for me or not?",
-        "Maybe if you had something useful I'd talk. A lighter? Gum? Anything?",
-        "*stares at phone* ...you're still here?",
-      ],
-    },
-    neutral: {
-      greetings: [
-        "Hey. Yeah, it's been a while.",
-        "Oh, hi. You just got here?",
-        "What's up. Crazy line tonight, huh.",
-      ],
-      general: [
-        "Yeah, I guess so.",
-        "Mm. We'll see if we even get in.",
-        "Could be worse. Last week was way longer.",
-      ],
-    },
-    anxious: {
-      greetings: [
-        "Oh god, do you think we'll even get in? I'm freaking out.",
-        "Hey... is it just me or did the line stop moving completely?",
-        "Hi! Sorry, I'm a mess. My friends ditched me and I'm solo.",
-      ],
-      general: [
-        "What if they close the door? That happens sometimes right??",
-        "I should have just stayed home... no, I need this. I need to go out.",
-        "Do I look okay? Be honest. Is this outfit too much? Too little?",
-      ],
-    },
-  },
-
-  intelShared: false,
-  msgCount: 0,
-
-  reset() { this.intelShared = false; this.msgCount = 0; },
-
-  getResponse(neighbor, playerMsg) {
-    this.msgCount++;
-    const pool = this.responses[neighbor.disposition] || this.responses.neutral;
-    const affinityDelta = neighbor.disposition === 'hostile' ? -3 : neighbor.disposition === 'friendly' ? 5 : 2;
-
-    if (this.msgCount === 1) {
-      return pool.greetings[Math.floor(Math.random() * pool.greetings.length)] + `\n[AFFINITY: ${affinityDelta}]`;
-    }
-
-    // Disposition-aware value delivery
-    const intelThreshold = { friendly: 2, drunk: 1, hostile: 3, neutral: 2, anxious: 2 };
-    const threshold = intelThreshold[neighbor.disposition] || 2;
-
-    // Maybe want an item first (hostile always asks, others sometimes)
-    if (neighbor.wants.length > 0 && this.msgCount === 2) {
-      const askChance = neighbor.disposition === 'hostile' ? 1.0 : 0.5;
-      if (Math.random() < askChance) {
-        return `${neighbor.disposition === 'hostile' ? "Look, you got " : "Hey, you wouldn't happen to have "}${neighbor.wants[0]}${neighbor.disposition === 'hostile' ? "? Then maybe we can talk." : ", would you?"}\n[WANT: ${neighbor.wants[0]}]`;
-      }
-    }
-
-    // Share intel based on disposition timing
-    if (!this.intelShared && neighbor.intel && this.msgCount >= threshold) {
-      this.intelShared = true;
-      const intelText = resolveIntelText(neighbor.intel.text);
-      return pool.general[Math.floor(Math.random() * pool.general.length)] + '\n[INTEL: ' + intelText + ']';
-    }
-
-    // Offer items early
-    if (neighbor.items.length > 0 && this.msgCount >= 2 && Math.random() < 0.7) {
-      const item = neighbor.items.shift();
-      return `Hey, want a ${item}? I got a spare.\n[OFFER: ${item}]\n[AFFINITY: +3]`;
-    }
-
-    // Offer substance
-    if (neighbor.hasSubstance && this.msgCount >= 2 && Math.random() < 0.6) {
-      const sub = neighbor.hasSubstance;
-      neighbor.hasSubstance = null;
-      return `You seem chill. Want some... *lowers voice* ...you know?\n[OFFER: ${sub}]\n[AFFINITY: +5]`;
-    }
-
-    // Offer money
-    if (neighbor.money > 0 && this.msgCount >= 2 && Math.random() < 0.5) {
-      const amt = neighbor.money;
-      neighbor.money = 0;
-      return `Here, take this. You need it more than me.\n[GIVE_MONEY: ${amt}]\n[AFFINITY: +5]`;
-    }
-
-    // End conversation eventually
-    if (this.msgCount >= 5 && Math.random() < 0.4) {
-      return "Anyway, I'm gonna zone out for a bit. Good luck in there.\n[END: done chatting]";
-    }
-
-    return pool.general[Math.floor(Math.random() * pool.general.length)];
   },
 };
 
@@ -5748,7 +5994,7 @@ const GroupChat = {
 
     let msg = '';
 
-    if (LLM.loaded && !state.llm.scripted && Math.random() < 0.5) {
+    if (LLM.loaded && Math.random() < 0.5) {
       const contact = CONTACTS.find(c => c.name === speaker.name);
       const venue = VENUES.find(v => v.id === state.selectedVenue);
       try {
@@ -5760,7 +6006,6 @@ const GroupChat = {
     }
 
     if (!msg) {
-      // Scripted fallback based on state
       let pool;
       const hasSubstance = state.queue.activeTraits.some(t => ['The Vibe', 'Motor Mouth', 'Big Energy'].includes(t));
       if (hasSubstance && Math.random() < 0.3) pool = this.SCRIPTED.substance;
@@ -6145,6 +6390,238 @@ const QueueEngine = {
 };
 
 // ============================================================
+// PHASE 1: SOCIAL ACTIONS (Persuade, Eavesdrop, Scout, Flirt, Alliance)
+// ============================================================
+
+const SocialActions = {
+  scoutUsed: false,
+  allianceFormed: false,
+  flirtTarget: null,
+
+  reset() {
+    this.scoutUsed = false;
+    this.allianceFormed = false;
+    this.flirtTarget = null;
+  },
+
+  eavesdrop() {
+    state.queue.actionLocked = true;
+    const available = getIntelPool().filter(i => !state.queue.revealedIntel.includes(i.key));
+
+    const successChance = 0.30;
+    const success = Math.random() < successChance && available.length > 0;
+
+    if (success) {
+      const intel = available[Math.floor(Math.random() * available.length)];
+      const event = {
+        icon: '👂', title: 'Overheard Something',
+        desc: `You lean in slightly and catch a fragment of conversation from people nearby...`,
+        effects: [{ label: 'Intel gained', cls: 'positive' }],
+        choices: [{ label: `🔑 "${intel.text}"`, action: () => {
+          if (!state.queue.revealedIntel.includes(intel.key)) {
+            state.queue.revealedIntel.push(intel.key);
+          }
+          QueueEngine.modHope(3);
+          EventLog.add(`👂 Overheard intel: ${intel.text}`, 'intel');
+        }}],
+      };
+      QueueEngine.advanceTime(3);
+      QueueEngine.showEvent(event);
+    } else {
+      const fragments = [
+        "...something about the music being different tonight...",
+        "...can't make out what they're saying over the bass...",
+        "...they're just talking about their week...",
+        "...you catch a name but can't place it...",
+        "...just gossip about someone's ex...",
+      ];
+      const frag = fragments[Math.floor(Math.random() * fragments.length)];
+      const event = {
+        icon: '👂', title: 'Nothing Useful',
+        desc: frag,
+        effects: [{ label: 'Time wasted', cls: 'negative' }],
+        choices: [{ label: 'Oh well', action: () => {
+          QueueEngine.modAnxiety(2);
+          EventLog.add('Tried to eavesdrop — heard nothing useful', 'info');
+        }}],
+      };
+      QueueEngine.advanceTime(3);
+      QueueEngine.showEvent(event);
+    }
+  },
+
+  scoutDoor() {
+    if (this.scoutUsed) {
+      showToast("You already scouted — can't leave the line again", 1500);
+      return;
+    }
+    state.queue.actionLocked = true;
+    this.scoutUsed = true;
+
+    const spotStolen = Math.random() < 0.25;
+    const available = getIntelPool().filter(i => !state.queue.revealedIntel.includes(i.key));
+    const intelGain = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+
+    const effects = [];
+    if (intelGain) effects.push({ label: 'Intel gained', cls: 'positive' });
+    effects.push({ label: 'Trait: Scout Intel', cls: 'positive' });
+    if (spotStolen) effects.push({ label: 'Position −2', cls: 'negative' });
+
+    const desc = spotStolen
+      ? `You sneak forward to observe the bouncer. When you get back, a group has edged into your spot!`
+      : `You slip out of line and get close enough to watch the bouncer work. No one takes your spot.`;
+
+    const event = {
+      icon: '🔭', title: 'Scout the Door',
+      desc,
+      effects,
+      choices: [{ label: spotStolen ? '😩 Worth it?' : '😎 Nice recon', action: () => {
+        if (intelGain && !state.queue.revealedIntel.includes(intelGain.key)) {
+          state.queue.revealedIntel.push(intelGain.key);
+          EventLog.add(`🔭 Scouted intel: ${intelGain.text}`, 'intel');
+        }
+        QueueEngine.addTrait('Scout Intel');
+        if (spotStolen) {
+          state.queue.position += 2;
+          QueueEngine.modHope(-6);
+          QueueEngine.rebuildQueueViz();
+          EventLog.add('Lost 2 spots while scouting — someone stole your place', 'negative');
+        } else {
+          QueueEngine.modHope(4);
+          EventLog.add('Scouted the door successfully — no spot lost', 'positive');
+        }
+      }}],
+    };
+
+    QueueEngine.advanceTime(5);
+    QueueEngine.showEvent(event);
+  },
+
+  flirt() {
+    const front = state.queue.neighborFront;
+    const back = state.queue.neighborBack;
+    if (!front && !back) { showToast('No one nearby to flirt with', 1500); return; }
+    state.queue.actionLocked = true;
+
+    // Pick target: prefer someone with higher base affinity
+    const target = (front && back)
+      ? ((front.affinity || 50) >= (back.affinity || 50) ? front : back)
+      : (front || back);
+
+    const baseDifficulty = target.disposition === 'friendly' ? 0.55 :
+                           target.disposition === 'drunk' ? 0.65 :
+                           target.disposition === 'anxious' ? 0.35 :
+                           target.disposition === 'hostile' ? 0.15 : 0.30;
+    const affinityBonus = ((target.affinity || 50) - 50) * 0.004;
+    const chance = Math.min(0.80, Math.max(0.10, baseDifficulty + affinityBonus));
+    const success = Math.random() < chance;
+
+    if (success) {
+      const event = {
+        icon: '💫', title: 'Smooth Talker',
+        desc: `You turn on the charm with ${target.name}. They're into it — laughing, leaning in...`,
+        effects: [
+          { label: 'Affinity +20', cls: 'positive' },
+          { label: 'Anxiety −8', cls: 'positive' },
+          { label: 'Trait: Charmer', cls: 'positive' },
+        ],
+        choices: [{ label: '😏 Still got it', action: () => {
+          target.affinity = Math.min(100, (target.affinity || 50) + 20);
+          QueueEngine.modAnxiety(-8);
+          QueueEngine.addTrait('Charmer');
+          // Flirting can unlock intel faster if they have it
+          if (target.intel && !state.queue.revealedIntel.includes(target.intel.key)) {
+            state.queue.revealedIntel.push(target.intel.key);
+            showToast(`${target.name} whispers something useful...`, 2000);
+            EventLog.add(`💫 Flirted intel from ${target.name}: ${target.intel.text}`, 'intel');
+          }
+          EventLog.add(`Charmed ${target.name} — they're smitten`, 'positive');
+        }}],
+      };
+      QueueEngine.advanceTime(3);
+      QueueEngine.showEvent(event);
+    } else {
+      const reactions = [
+        `${target.name} smiles politely but turns away.`,
+        `${target.name} raises an eyebrow. "Seriously?"`,
+        `${target.name} is clearly not interested.`,
+        `${target.name} laughs awkwardly and checks their phone.`,
+      ];
+      const event = {
+        icon: '💫', title: 'Swing and a Miss',
+        desc: reactions[Math.floor(Math.random() * reactions.length)],
+        effects: [
+          { label: 'Anxiety +5', cls: 'negative' },
+          { label: 'Affinity −10', cls: 'negative' },
+        ],
+        choices: [{ label: '😅 Moving on...', action: () => {
+          target.affinity = Math.max(0, (target.affinity || 50) - 10);
+          QueueEngine.modAnxiety(5);
+          EventLog.add(`Failed to flirt with ${target.name} — cringe`, 'negative');
+        }}],
+      };
+      QueueEngine.advanceTime(2);
+      QueueEngine.showEvent(event);
+    }
+  },
+
+  formAlliance() {
+    if (this.allianceFormed) {
+      showToast('You already have a queue alliance', 1500);
+      return;
+    }
+    const front = state.queue.neighborFront;
+    const back = state.queue.neighborBack;
+    const candidates = [front, back].filter(n => n && (n.affinity || 50) >= 55);
+
+    if (candidates.length === 0) {
+      showToast('No one trusts you enough yet (need affinity ≥55)', 2000);
+      return;
+    }
+    state.queue.actionLocked = true;
+
+    const ally = candidates[0];
+    const chance = ally.disposition === 'friendly' ? 0.75 :
+                   ally.disposition === 'drunk' ? 0.60 :
+                   ally.disposition === 'anxious' ? 0.50 :
+                   ally.disposition === 'hostile' ? 0.20 : 0.40;
+    const success = Math.random() < chance;
+
+    if (success) {
+      this.allianceFormed = true;
+      state.queue.allyData = { name: ally.name, disposition: ally.disposition };
+      const event = {
+        icon: '🤝', title: 'Alliance Formed!',
+        desc: `${ally.name} agrees to vouch for you at the door. "I'll tell the bouncer we're together."`,
+        effects: [
+          { label: 'Trait: Queue Alliance', cls: 'positive' },
+          { label: 'Hope +10', cls: 'positive' },
+        ],
+        choices: [{ label: '🤝 Solid', action: () => {
+          QueueEngine.addTrait('Queue Alliance');
+          QueueEngine.modHope(10);
+          EventLog.add(`Formed alliance with ${ally.name} — they'll vouch at the door`, 'positive');
+        }}],
+      };
+      QueueEngine.advanceTime(2);
+      QueueEngine.showEvent(event);
+    } else {
+      const event = {
+        icon: '🤝', title: 'No Deal',
+        desc: `${ally.name} shrugs. "I barely know you. Not risking my spot for a stranger."`,
+        effects: [{ label: 'Hope −3', cls: 'negative' }],
+        choices: [{ label: 'Fair enough', action: () => {
+          QueueEngine.modHope(-3);
+          EventLog.add(`${ally.name} declined the alliance`, 'info');
+        }}],
+      };
+      QueueEngine.advanceTime(2);
+      QueueEngine.showEvent(event);
+    }
+  },
+};
+
+// ============================================================
 // PHASE 1: CHAT SYSTEM
 // ============================================================
 
@@ -6157,7 +6634,6 @@ const ChatSystem = {
     this.currentNeighbor = neighbor;
     this.messages = neighbor.chatHistory.length > 0 ? [...neighbor.chatHistory] : [];
     this.generating = false;
-    ScriptedChat.reset();
 
     $('chat-name').textContent = neighbor.name;
     $('chat-disp').textContent = neighbor.disposition + ` · ${neighbor.affinity || 50}/100`;
@@ -6310,15 +6786,16 @@ const ChatSystem = {
 
     this.messages.push({ role: 'user', content: playerText });
 
-    let response = null;
-
     let llmResult = null;
-    if (LLM.loaded && !state.llm.scripted) {
+    if (LLM.loaded) {
       const llmMessages = [
         { role: 'system', content: systemPrompt },
         ...this.messages.slice(-8),
       ];
-      llmResult = await LLM.chat(llmMessages, NEIGHBOR_TOOLS);
+      llmResult = await LLM.chatStream(llmMessages, NEIGHBOR_TOOLS, 150, (visibleText) => {
+        typingEl.textContent = visibleText;
+        $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
+      });
     }
 
     let dialogText = '';
@@ -6327,20 +6804,13 @@ const ChatSystem = {
     if (llmResult) {
       dialogText = llmResult.text || '';
       toolCalls = llmResult.toolCalls || [];
-      // Clean any remaining bracket tags from text
       dialogText = dialogText.replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
     }
 
     if (!dialogText && toolCalls.length === 0) {
-      // Fallback to scripted
-      const scripted = ScriptedChat.getResponse(this.currentNeighbor, playerText);
-      // Parse bracket tags from scripted response
-      const parsed = LLM._parseToolCalls(scripted);
-      toolCalls = parsed;
-      dialogText = scripted.replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
+      dialogText = '...';
+      await sleep(500);
     }
-
-    await sleep(500 + Math.random() * 800);
 
     // Handle tool calls
     for (const tc of toolCalls) {
@@ -6360,6 +6830,12 @@ const ChatSystem = {
         case 'exchange_numbers': this.handleUnlock(''); break;
         case 'end_conversation':
           setTimeout(() => { this.addBubble(`${this.currentNeighbor.name} turned away.`, 'system-msg negative'); setTimeout(() => this.close(), 1000); }, 500);
+          break;
+        case 'leave_queue':
+          this._handleLeaveQueue(args.reason || '');
+          break;
+        case 'swap_spots':
+          this._handleSwapSpots(args.reason || '');
           break;
       }
     }
@@ -6468,6 +6944,51 @@ const ChatSystem = {
         state.inventory[normalized] = (state.inventory[normalized] || 0) + 1;
       }
     }, 200);
+  },
+
+  _handleLeaveQueue(reason) {
+    const neighbor = this.currentNeighbor;
+    if (!neighbor) return;
+    setTimeout(() => {
+      this.addBubble(`👋 ${neighbor.name} decides to leave the queue.`, 'system-msg');
+      if (reason) this.addBubble(`"${reason}"`, 'system-msg');
+      EventLog.add(`${neighbor.name} left the queue! Position +1`, 'positive');
+      state.queue.position = Math.max(0, state.queue.position - 1);
+      QueueEngine.modHope(8);
+      // Remove from neighbor lists
+      state.queue.allNeighbors = state.queue.allNeighbors.filter(n => n !== neighbor);
+      state.queue.behindNeighbors = state.queue.behindNeighbors.filter(n => n !== neighbor);
+      state.queue.neighborFront = state.queue.allNeighbors[state.queue.allNeighbors.length - 1] || null;
+      state.queue.neighborBack = state.queue.behindNeighbors[0] || null;
+      QueueEngine.rebuildQueueViz();
+      setTimeout(() => this.close(), 1500);
+      if (state.queue.position <= 0) setTimeout(() => QueueEngine.reachFront(), 2000);
+    }, 300);
+  },
+
+  _handleSwapSpots(reason) {
+    const neighbor = this.currentNeighbor;
+    if (!neighbor) return;
+    const isFront = state.queue.allNeighbors.includes(neighbor);
+    if (!isFront) {
+      this.addBubble(`(They're behind you — swap doesn't help here)`, 'system-msg');
+      return;
+    }
+    setTimeout(() => {
+      this.addBubble(`🔄 ${neighbor.name} steps back and lets you ahead.`, 'system-msg');
+      if (reason) this.addBubble(`"${reason}"`, 'system-msg');
+      EventLog.add(`Swapped spots with ${neighbor.name}! Position +1`, 'positive');
+      state.queue.position = Math.max(0, state.queue.position - 1);
+      QueueEngine.modHope(5);
+      // Move neighbor from front to behind
+      state.queue.allNeighbors = state.queue.allNeighbors.filter(n => n !== neighbor);
+      state.queue.behindNeighbors.unshift(neighbor);
+      state.queue.neighborFront = state.queue.allNeighbors[state.queue.allNeighbors.length - 1] || null;
+      state.queue.neighborBack = state.queue.behindNeighbors[0] || null;
+      QueueEngine.rebuildQueueViz();
+      setTimeout(() => this.close(), 1500);
+      if (state.queue.position <= 0) setTimeout(() => QueueEngine.reachFront(), 2000);
+    }, 300);
   },
 };
 
@@ -6673,6 +7194,111 @@ const EXCHANGE_POOL = [
 const VENUE_THRESHOLDS = { Easy: 40, Moderate: 60, Ruthless: 85, Nightmare: 100 };
 
 // ============================================================
+// PHASE 2: BOUNCER INTERJECTIONS (Alliance Vouch + Squad Chime-in)
+// ============================================================
+
+const BouncerInterjections = {
+  async generateAllyVouch(allyData, bouncerName, venueName) {
+    const { name, disposition } = allyData;
+    const dispDesc = disposition === 'friendly' ? 'warm and confident' :
+                     disposition === 'drunk' ? 'tipsy and loud' :
+                     disposition === 'anxious' ? 'nervous but trying' :
+                     disposition === 'hostile' ? 'reluctant and terse' : 'calm and measured';
+
+    if (LLM.loaded) {
+      try {
+        const result = await LLM.chat([
+          { role: 'system', content: `You are ${name}, a ${dispDesc} person who just walked up to vouch for your friends at a club door. The bouncer's name is ${bouncerName}. The club is ${venueName}.
+Write ONE sentence (max 15 words) that you say to the bouncer to vouch for the group. Stay in character — if you're drunk, slur a bit. If you're nervous, stammer. If you're hostile, be minimal. If you're friendly, be warm and natural.
+Reply with ONLY the spoken line, no quotes, no narration.` },
+          { role: 'user', content: 'What do you say to the bouncer?' },
+        ], null, 40);
+        if (result?.text?.trim()) return result.text.trim();
+      } catch (e) {}
+    }
+
+    const fallbacks = {
+      friendly: [`Hey ${bouncerName}, they're with me — good people, I promise.`, `These are my friends, we come here all the time.`],
+      drunk: [`${bouncerName}!! These are my BEST friends, let them innnn!`, `Brooo they're cool I swear, I know them!`],
+      anxious: [`Um, hey — they're, uh, they're with me? If that helps?`, `I can vouch for them... they're really nice, I think.`],
+      hostile: [`They're fine. Let them in.`, `I know them. That's all you need.`],
+      neutral: [`${bouncerName}, they're with me tonight.`, `I can confirm they're good people.`],
+    };
+    const pool = fallbacks[disposition] || fallbacks.neutral;
+    return pool[Math.floor(Math.random() * pool.length)];
+  },
+
+  async generateSquadChimeIn(member, bouncerName, venueName, conversationContext) {
+    const contact = CONTACTS.find(c => c.name === member.name);
+    const trait = contact?.trait || 'unknown';
+    const musicPref = contact?.musicPref || '';
+
+    const traitDesc = trait === 'Hype Engine' ? 'loud, energetic, always hyping everything up' :
+                      trait === 'Connected Promoter' ? 'well-connected, name-drops naturally, socially savvy' :
+                      trait === 'The Chill Coder' ? 'quiet, calm, minimal words but grounding presence' :
+                      trait === 'The Fashionista' ? 'fashion-obsessed, style-conscious, a bit vain' :
+                      trait === 'Chaos Agent' ? 'unpredictable, wild, says whatever comes to mind' :
+                      trait === 'The Insider' ? 'knows the scene well, drops knowledge casually' :
+                      trait === 'The Photographer' ? 'artsy, observant, always framing things visually' :
+                      trait === 'The Dealer' ? 'street-smart, transactional, reads people quickly' :
+                      'a regular person in the group';
+
+    if (LLM.loaded) {
+      try {
+        const result = await LLM.chat([
+          { role: 'system', content: `You are ${member.name}, standing behind your friend at the door of ${venueName}. The bouncer ${bouncerName} is deciding whether to let your group in.
+Your personality: ${traitDesc}. ${musicPref ? `You love ${musicPref}.` : ''}
+The conversation so far: the bouncer just spoke and your friend just replied.
+
+You decide to chime in with ONE short sentence (max 12 words). Stay in character.
+- If you're a Hype Engine: be enthusiastic but it might be too much
+- If you're a Promoter: name-drop or mention connections
+- If you're a Chill Coder: say something calm and grounding
+- If you're a Fashionista: comment on style or the venue's aesthetic
+- If you're a Chaos Agent: say something completely random or wild
+- If you're an Insider: drop a relevant fact about the venue/scene
+Reply with ONLY the spoken line, no quotes, no narration.` },
+          { role: 'user', content: `Context: ${conversationContext}\nWhat do you say?` },
+        ], null, 40);
+        if (result?.text?.trim()) return result.text.trim();
+      } catch (e) {}
+    }
+
+    const fallbacks = {
+      'Hype Engine': ["LET'S GO! Best night of the year!", "We're SO ready for this!", "The energy tonight is INSANE!"],
+      'Connected Promoter': [`We know the promoter — check with them.`, `Sven said we're good tonight.`, `The whole crew is inside already.`],
+      'The Chill Coder': ["We're just here for the music, nothing crazy.", "*nods calmly*", "Good vibes only, promise."],
+      'The Fashionista': ["We dressed specifically for tonight.", "*adjusts outfit confidently*", "Notice the coordination? We planned this."],
+      'Chaos Agent': ["I once got in by doing a backflip. Want to see?", "My horoscope said tonight's THE night.", "You remind me of my therapist. That's a compliment."],
+      'The Insider': [`${tonightsDJs?.headliner || 'The headliner'} is a friend.`, "Been coming here since opening week.", "I know the sound system better than the sound guy."],
+      'The Photographer': ["I'm shooting content tonight — the venue looks incredible.", "This lighting is perfect for the series I'm working on."],
+      'The Dealer': ["We're good people. No trouble.", "Business and pleasure — we know the difference."],
+    };
+    const pool = fallbacks[trait] || ["We're cool, promise.", "Yeah, what they said."];
+    return pool[Math.floor(Math.random() * pool.length)];
+  },
+
+  shouldAllyFire(exchangeCount, allyFired) {
+    if (!state.queue.allyData || allyFired) return false;
+    if (exchangeCount < 2 || exchangeCount > 4) return false;
+    return Math.random() < 0.75;
+  },
+
+  shouldSquadChimeIn(exchangeCount, chimeInCount) {
+    if (state.finalSquad.length === 0) return false;
+    if (chimeInCount >= 2) return false;
+    if (exchangeCount < 1) return false;
+    return Math.random() < 0.25;
+  },
+
+  pickSquadMember(chimeInCount) {
+    const available = state.finalSquad.filter(m => !m._chimedIn);
+    if (available.length === 0) return state.finalSquad[Math.floor(Math.random() * state.finalSquad.length)];
+    return available[Math.floor(Math.random() * available.length)];
+  },
+};
+
+// ============================================================
 // PHASE 2: BOUNCER ENGINE
 // ============================================================
 
@@ -6717,6 +7343,9 @@ const BouncerSystem = {
     if (state.queue.activeTraits.includes('Big Energy')) visible.push('One of them is subtly grinding their jaw.');
     if (state.queue.beerDebuff) visible.push('They smell faintly of beer.');
     if (state.queue.activeTraits.includes('Liquid Courage')) visible.push('One of them seems a bit tipsy but confident.');
+    if (state.queue.activeTraits.includes('Queue Alliance')) visible.push('Someone in line vouches for them — they seem to know people here.');
+    if (state.queue.activeTraits.includes('Charmer')) visible.push('One of them has confident, flirtatious energy — socially smooth.');
+    if (state.queue.activeTraits.includes('Scout Intel')) visible.push('They seem to know exactly how you operate — like they\'ve been watching.');
 
     // Build inventory description for INSPECT_BAG
     const bagContents = [];
@@ -6799,7 +7428,14 @@ CRITICAL RULES:
 - Make a decision ([LET_IN] or [REJECT]) within 3-5 exchanges. Don't drag it out.
 - You decide when conversation ends — no fixed count, but be decisive.
 - ${isVibeVenue ? 'This is a vibe venue. If the energy feels right, let them in quickly. Don\'t overthink it.' : isEasy ? 'You are lenient. Most people get in. Only reject if they\'re rude, wasted, or disrespectful.' : isHard ? 'You are very strict. They need specific knowledge, connections, or the password. Turn away anyone who can\'t prove they belong.' : 'Be selective. They should show they know what tonight is about.'}
-- Stay in character.`;
+- Stay in character.
+
+INTERJECTIONS: Sometimes other people chime in — friends in the group or someone from the queue vouching.
+- A confident, sober vouch from someone in the queue = strong social proof [APPROVE: +15 to +25]
+- A drunk or sloppy vouch = questionable credibility [APPROVE: +5] or even [DISAPPROVE: -5]
+- A nervous vouch = doesn't help much [APPROVE: +5]
+- Group members chiming in: judge what they say independently. Good energy helps, cringe or aggression hurts.
+- Acknowledge interjections briefly in your response — react to them in-character.`;
   },
 
   async start() {
@@ -6809,11 +7445,16 @@ CRITICAL RULES:
     this.bouncer = BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)];
     this.threshold = VENUE_THRESHOLDS[venue?.policy || 'Easy'];
     this.maxExchanges = venue?.policy === 'Easy' ? 4 : venue?.policy === 'Nightmare' ? 5 : 4;
-    this.timerDuration = { Easy: 12000, Moderate: 10000, Ruthless: 8000, Nightmare: 6000 }[venue?.policy || 'Easy'];
+    this.timerDuration = { Easy: 16000, Moderate: 13500, Ruthless: 10800, Nightmare: 8100 }[venue?.policy || 'Easy'];
 
     const styleBonus = this.calcStyleMatch(venue);
-    this.approval = styleBonus;
+    let traitBonus = 0;
+    if (state.queue.activeTraits.includes('Charmer')) traitBonus += 5;
+    if (state.queue.activeTraits.includes('Scout Intel')) traitBonus += 8;
+    this.approval = styleBonus + traitBonus;
     this.exchangeCount = 0;
+    this.chimeInCount = 0;
+    this.allyFired = false;
     this.messages = [];
     this.generating = false;
     this.finished = false;
@@ -6843,6 +7484,7 @@ CRITICAL RULES:
     EventLog.add(`Face to face with ${this.bouncer.name}. ${this.bouncer.personality}.`, 'info');
     if (styleBonus > 0) EventLog.add(`Style match bonus: +${styleBonus}`, 'positive');
     if (styleBonus < 0) EventLog.add(`Style mismatch penalty: ${styleBonus}`, 'negative');
+    if (traitBonus > 0) EventLog.add(`Queue trait bonus: +${traitBonus}`, 'positive');
 
     // Show backstory briefly
     this._addBubble(this.backstory, 'system-msg');
@@ -7040,12 +7682,21 @@ CRITICAL RULES:
     let response = '';
     let bouncerToolCalls = [];
 
-    if (LLM.loaded && !state.llm.scripted) {
+    // Create a streaming bubble for live text display
+    let streamBubble = null;
+
+    if (LLM.loaded) {
+      streamBubble = this._addBubble('...', 'npc');
       try {
-        const result = await LLM.chat([
+        const result = await LLM.chatStream([
           { role: 'system', content: sysPrompt },
           ...this.messages.slice(-10),
-        ], BOUNCER_TOOLS, 100);
+        ], BOUNCER_TOOLS, 100, (visibleText) => {
+          if (streamBubble && visibleText) {
+            streamBubble.textContent = visibleText;
+            $('bouncer-chat').scrollTop = $('bouncer-chat').scrollHeight;
+          }
+        });
         if (result) {
           response = result.text || '';
           bouncerToolCalls = result.toolCalls || [];
@@ -7054,21 +7705,10 @@ CRITICAL RULES:
     }
 
     if (!response) {
-      // Scripted fallback with new tool format
-      const lines = {
-        0: { florian: '"Names."', marko: '"Who are you?"', kai: '"Yo, who\'s trying to get in?"', silent: '*stares*', mira: '"Name, please."' },
-        1: { florian: '"Why should I let you in?"', marko: '"Give me one reason."', kai: '"What brings you out?"', silent: '*crosses arms*', mira: '"Purpose of visit?"' },
-        2: { florian: '"You know who\'s playing tonight?"', marko: '"What music do we play here?"', kai: '"Name one DJ."', silent: '*glances at flyer*', mira: '"Familiar with the program?"' },
-        3: { florian: '*scans your outfit*', marko: '"You dressed for this?"', kai: '"Outfit check."', silent: '*looks you up and down*', mira: '*checks clipboard*' },
-        4: { florian: '"Last chance."', marko: '"Anything else?"', kai: '"Final vibe check."', silent: '*...waits...*', mira: '"Any final remarks?"' },
-      };
-      const lineSet = lines[Math.min(this.exchangeCount, 4)] || lines[0];
-      response = (lineSet[this.bouncer.id] || lineSet.florian);
-      // Scripted: auto-decide after 5 exchanges
+      // Error fallback — LLM failed to generate
+      response = '*stares at you*';
       if (this.exchangeCount >= 4) {
         response += this.approval >= this.threshold ? '\n[LET_IN]' : '\n[REJECT]';
-      } else {
-        response += '\n[APPROVE: +5 showed up]';
       }
     }
 
@@ -7113,8 +7753,16 @@ CRITICAL RULES:
 
     this.messages.push({ role: 'assistant', content: response });
 
-    // Show bouncer's spoken line
-    if (cleanText) this._addBubble(cleanText, 'npc');
+    // Show bouncer's spoken line (update streaming bubble or create new one)
+    if (streamBubble) {
+      if (cleanText) {
+        streamBubble.textContent = cleanText;
+      } else {
+        streamBubble.remove();
+      }
+    } else if (cleanText) {
+      this._addBubble(cleanText, 'npc');
+    }
 
     this.exchangeCount++;
     this.generating = false;
@@ -7188,7 +7836,7 @@ CRITICAL RULES:
     }, this.timerDuration);
   },
 
-  sendMessage(text) {
+  async sendMessage(text) {
     if (!text.trim() || this.generating || this.finished) return;
     clearTimeout(this.timer);
     $('timer-fill').style.transition = 'none';
@@ -7197,7 +7845,64 @@ CRITICAL RULES:
 
     this._addBubble(text, 'player');
     EventLog.add(`You: "${text}"`, 'info');
-    this._bouncerSpeak(text);
+
+    let fullContext = text;
+
+    // Alliance interjection — ally walks up and vouches
+    if (BouncerInterjections.shouldAllyFire(this.exchangeCount, this.allyFired)) {
+      this.allyFired = true;
+      const venue = VENUES.find(v => v.id === state.selectedVenue);
+      const vouch = await BouncerInterjections.generateAllyVouch(
+        state.queue.allyData, this.bouncer.name, venue?.name || 'the club'
+      );
+      this._addBubble(`🤝 ${state.queue.allyData.name}: "${vouch}"`, 'system-msg');
+      EventLog.add(`🤝 ${state.queue.allyData.name} vouches for you: "${vouch}"`, 'positive');
+      fullContext += `\n*A person named ${state.queue.allyData.name} steps forward from the queue and says to you: "${vouch}"*`;
+      // Direct approval bonus when LLM not handling bouncer reaction
+      if (!LLM.loaded) {
+        const allyBonus = state.queue.allyData.disposition === 'friendly' ? 15 :
+                          state.queue.allyData.disposition === 'drunk' ? 5 :
+                          state.queue.allyData.disposition === 'anxious' ? 5 :
+                          state.queue.allyData.disposition === 'hostile' ? -5 : 10;
+        this.approval = Math.max(0, Math.min(120, this.approval + allyBonus));
+        $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
+        $('approval-score').textContent = this.approval;
+        EventLog.add(`Vouch effect: ${allyBonus > 0 ? '+' : ''}${allyBonus} approval`, allyBonus > 0 ? 'positive' : 'negative');
+      }
+      await sleep(800);
+    }
+
+    // Squad chime-in — a squad member says something
+    if (BouncerInterjections.shouldSquadChimeIn(this.exchangeCount, this.chimeInCount)) {
+      this.chimeInCount++;
+      const member = BouncerInterjections.pickSquadMember(this.chimeInCount);
+      const venue = VENUES.find(v => v.id === state.selectedVenue);
+      const line = await BouncerInterjections.generateSquadChimeIn(
+        member, this.bouncer.name, venue?.name || 'the club', text
+      );
+      const contact = CONTACTS.find(c => c.name === member.name);
+      this._addBubble(`💬 ${member.name}: "${line}"`, 'system-msg');
+      EventLog.add(`💬 ${member.name} chimes in: "${line}"`, 'info');
+      fullContext += `\n*One of the group, ${member.name}, adds: "${line}"*`;
+      member._chimedIn = true;
+      // Direct approval bonus based on trait risk
+      if (!LLM.loaded) {
+        const trait = contact?.trait || '';
+        const chimeBonus = trait === 'Chaos Agent' ? (Math.random() < 0.4 ? 12 : -10) :
+                           trait === 'Hype Engine' ? (Math.random() < 0.5 ? 8 : -5) :
+                           trait === 'The Chill Coder' ? 5 :
+                           trait === 'Connected Promoter' ? 10 :
+                           trait === 'The Insider' ? 10 :
+                           trait === 'The Fashionista' ? 6 : 5;
+        this.approval = Math.max(0, Math.min(120, this.approval + chimeBonus));
+        $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
+        $('approval-score').textContent = this.approval;
+        EventLog.add(`Chime-in effect: ${chimeBonus > 0 ? '+' : ''}${chimeBonus} approval`, chimeBonus > 0 ? 'positive' : 'negative');
+      }
+      await sleep(800);
+    }
+
+    this._bouncerSpeak(fullContext);
   },
 
   async _handleVerdict(success) {
@@ -7260,6 +7965,8 @@ CRITICAL RULES:
 
     // Progression
     SaveSystem.recordRun(success, venue?.id);
+    SaveSystem.applyToState();
+    renderPlayerBadge();
     const prog = SaveSystem.load();
     const newContacts = SaveSystem.getPendingUnlocks();
 
@@ -7705,22 +8412,16 @@ async function enterQueue() {
   state.queue.activeTraits = [];
   state.queue.delayedEffects = [];
   state.queue.memberStats = {};
+  state.queue.allyData = null;
+  SocialActions.reset();
 
   // Show loading overlay
   $('loading-overlay').classList.add('active');
   $('loading-fill').style.width = '0%';
   $('loading-status').textContent = 'Initializing AI...';
 
-  // Skip button
-  const skipHandler = () => {
-    state.llm.scripted = true;
-    state.llm.loaded = false;
-    startQueuePhase(venue, cfg);
-  };
-  $('loading-skip').onclick = skipHandler;
-
-  // Try to load LLM
-  if (!LLM.loaded && !state.llm.scripted) {
+  // Load LLM
+  if (!LLM.loaded) {
     try {
       await LLM.load((pct, file) => {
         $('loading-fill').style.width = pct + '%';
@@ -7728,9 +8429,8 @@ async function enterQueue() {
       });
       state.llm.loaded = true;
     } catch (e) {
-      console.warn('LLM failed, falling back to scripted mode:', e);
-      state.llm.scripted = true;
-      $('loading-status').textContent = 'AI unavailable — using scripted mode';
+      console.warn('LLM failed to load:', e);
+      $('loading-status').textContent = 'AI failed to load — retrying next time';
       await sleep(1500);
     }
   }
@@ -7817,6 +8517,8 @@ function restartPlanning() {
   renderVenues();
   renderContacts();
   renderLoadout();
+  renderLookPanel();
+  renderPlayerBadge();
   updateConfirmBar();
   updateSquadBadge();
 }
@@ -7829,19 +8531,24 @@ function init() {
   // Load progression from localStorage
   SaveSystem.applyToState();
   const p = state.progress;
-  const job = SaveSystem.JOBS.slice().reverse().find(j => p.reputation >= j.minRep) || SaveSystem.JOBS[0];
+  const job = getCurrentJob();
   $('rep-display').textContent = `${job.name} · ★${p.reputation} · $${state.cash}`;
 
   // Set pixel art icons for UI elements
   $('nav-icon-0').innerHTML = PX.i('pin', '#7b75ff', 18);
   $('nav-icon-1').innerHTML = PX.i('people', '#7b75ff', 18);
   $('nav-icon-2').innerHTML = PX.i('pack', '#7b75ff', 18);
+  $('nav-icon-3').innerHTML = PX.i('eye', '#7b75ff', 18);
   $('act-icon-wait').innerHTML = PX.i('clock', '#ebe4ff', 22);
   $('act-icon-front').innerHTML = PX.i('bubble', '#ebe4ff', 22);
   $('act-icon-back').innerHTML = PX.i('bubble2', '#ebe4ff', 22);
   $('act-icon-kiosk').innerHTML = PX.i('beer', '#ffd86b', 22);
   $('act-icon-use').innerHTML = PX.i('pack', '#a4ff80', 22);
   $('act-icon-intel').innerHTML = PX.i('key', '#ffd86b', 22);
+  $('act-icon-eavesdrop').innerHTML = PX.i('ear', '#57f2ff', 22);
+  $('act-icon-scout').innerHTML = PX.i('eye', '#39ff14', 22);
+  $('act-icon-flirt').innerHTML = PX.i('heart', '#ff4d6d', 22);
+  $('act-icon-alliance').innerHTML = PX.i('shield', '#7b75ff', 22);
   $('log-icon').innerHTML = PX.i('scroll', '#ebe4ff', 12);
   $('mute-icon').innerHTML = PX.i('sound', '#ebe4ff', 18);
   $('battery-icon').innerHTML = PX.i('bolt', '#ebe4ff', 10);
@@ -7853,6 +8560,8 @@ function init() {
   renderVenues();
   renderContacts();
   renderLoadout();
+  renderLookPanel();
+  renderPlayerBadge();
   updateConfirmBar();
   updateSquadBadge();
 
@@ -7966,6 +8675,24 @@ function init() {
       `;
       $('event-overlay').classList.add('active');
     }
+  });
+
+  // Phase 1: Social action buttons
+  $('act-eavesdrop').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    SocialActions.eavesdrop();
+  });
+  $('act-scout').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    SocialActions.scoutDoor();
+  });
+  $('act-flirt').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    SocialActions.flirt();
+  });
+  $('act-alliance').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    SocialActions.formAlliance();
   });
 
   // Phase 1: Chat input

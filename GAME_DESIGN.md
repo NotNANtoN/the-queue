@@ -89,6 +89,32 @@ At any time during a stall, you can tap on:
 - **Person Ahead**: They might share intel, or be annoyed, or try to sell you something.
 - **Person Behind**: More likely to be friendly (they want you to move). Might offer items in exchange for favors.
 
+### Social Actions
+
+Beyond basic conversation, you have four additional action buttons:
+
+| Action | Target | Effect | Risk |
+|--------|--------|--------|------|
+| **Eavesdrop** | Nearby conversations | 30% chance to passively gain intel | Failure: waste 3 min, Anxiety +2 |
+| **Scout the Door** | Leave line briefly | Gain intel + Scout Intel trait | 25% chance someone steals your spot (−2 positions) |
+| **Flirt** | Best-affinity neighbor | Affinity +20, Anxiety −8, Charmer trait, may unlock intel | Failure: Anxiety +5, Affinity −10 |
+| **Form Alliance** | Neighbor with affinity ≥55 | Queue Alliance trait (ally may vouch at bouncer) | Requires trust; hostile/low-affinity neighbors refuse |
+
+### Conversational Persuasion (Emergent via Chat)
+
+During conversation with neighbors, the player can naturally convince people to:
+- **Leave the queue** — talk them into giving up ("It's not worth it tonight", "The bouncer is rejecting everyone"). The NPC decides based on their disposition and affinity whether to bail.
+- **Swap spots** — ask them to let you ahead. Requires rapport or a compelling offer.
+
+These are NOT buttons — they emerge from the LLM conversation. The NPC has instructions in their system prompt about when they'd leave or swap, varying by disposition:
+- Anxious: very susceptible to being talked out of waiting
+- Drunk: easily swayed if someone suggests going elsewhere
+- Hostile: already annoyed, might say "screw this" if pushed
+- Friendly: committed, rarely leaves unless extreme persuasion
+- Neutral: patient, takes a LOT to convince
+
+Success scales with **disposition**, **affinity**, and conversation length (minimum 2-3 exchanges before they'd consider it).
+
 Each neighbor is procedurally generated with:
 - **Disposition**: Friendly / Neutral / Hostile / Drunk / Anxious
 - **Knowledge**: May or may not know something about tonight's bouncer.
