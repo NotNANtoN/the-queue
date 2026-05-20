@@ -3112,34 +3112,35 @@ When you share it, put the intel on its own line in this exact format:
   }
 
   if (neighbor.wants.length > 0) {
-    prompt += `\n\nYou really want: ${neighbor.wants.join(', ')}. If the player seems to have one, you might ask for it. If they give you what you want, you should be grateful${neighbor.intel ? ' and share your intel' : ''}.
-When asking for an item, use this format on its own line:
+    prompt += `\n\nYou really want: ${neighbor.wants.join(', ')}. ASK for it early in the conversation — don't wait. If they give you what you want, be grateful${neighbor.intel ? ' and immediately share your intel' : ''}.
+ALWAYS use this format on its own line when asking:
 [WANT: item name]`;
   }
 
   if (neighbor.items.length > 0) {
-    prompt += `\n\nYou have: ${neighbor.items.join(', ')}. You might offer these in trade.
-When offering an item, use this format on its own line:
+    prompt += `\n\nYou have: ${neighbor.items.join(', ')}. Offer one of these within the first 2-3 messages — be generous, especially if you're friendly or drunk.
+ALWAYS use this format on its own line when offering:
 [OFFER: item name]`;
   }
 
   if (neighbor.hasSubstance) {
     const subName = neighbor.hasSubstance === 'glitter' ? 'Glitter (MDMA)' : neighbor.hasSubstance === 'turbo' ? 'Turbo Tabs (speed)' : 'Nose Candy (coke)';
-    prompt += `\n\nYou have some ${subName} on you. You might offer it if the vibe is right or if asked.
-When offering it, put on its own line:
+    prompt += `\n\nYou have some ${subName} on you. Offer it after 2 messages if the vibe is decent. Don't be shy about it.
+ALWAYS use this format on its own line when offering:
 [OFFER: ${neighbor.hasSubstance}]`;
   }
 
   if (neighbor.money > 0) {
-    prompt += `\n\nYou have $${neighbor.money} cash you could give/trade if the player does something nice.
-When giving money, put on its own line:
+    prompt += `\n\nYou have $${neighbor.money} cash. If the player is nice to you or gives you something, share some cash with them.
+ALWAYS use this format on its own line:
 [GIVE_MONEY: ${neighbor.money}]`;
   }
 
-  prompt += `\n\nAfter EVERY response, rate how much you like this person on its own line:
+  prompt += `\n\nIMPORTANT: After EVERY single response you write, you MUST include an affinity tag on its own line:
 [AFFINITY: +X] or [AFFINITY: -X] where X is 1-15
-Positive if they were nice, funny, gave you something, or you're vibing.
-Negative if they were rude, boring, pushy, or annoying.
++5 to +15 if they were nice, funny, helpful, or you're vibing.
+-5 to -15 if they were rude, boring, pushy, or annoying.
+You MUST include this tag every time. Never skip it.
 
 If you want to end the conversation (bored, annoyed, etc.), put on its own line:
 [END: brief reason]
@@ -5536,8 +5537,8 @@ const ScriptedChat = {
     }
 
     // Disposition-aware value delivery
-    const intelThreshold = { friendly: 2, drunk: 1, hostile: 4, neutral: 3, anxious: 2 };
-    const threshold = intelThreshold[neighbor.disposition] || 3;
+    const intelThreshold = { friendly: 2, drunk: 1, hostile: 3, neutral: 2, anxious: 2 };
+    const threshold = intelThreshold[neighbor.disposition] || 2;
 
     // Maybe want an item first (hostile always asks, others sometimes)
     if (neighbor.wants.length > 0 && this.msgCount === 2) {
@@ -5554,23 +5555,28 @@ const ScriptedChat = {
       return pool.general[Math.floor(Math.random() * pool.general.length)] + '\n[INTEL: ' + intelText + ']';
     }
 
-    // Offer substance if they have one
-    if (neighbor.hasSubstance && this.msgCount >= 3 && Math.random() < 0.4) {
-      return `You seem chill. Want some... *lowers voice* ...you know?\n[OFFER: ${neighbor.hasSubstance}]`;
+    // Offer items early
+    if (neighbor.items.length > 0 && this.msgCount >= 2 && Math.random() < 0.7) {
+      const item = neighbor.items.shift();
+      return `Hey, want a ${item}? I got a spare.\n[OFFER: ${item}]\n[AFFINITY: +3]`;
     }
 
-    // Offer money if generous
-    if (neighbor.money > 0 && this.msgCount >= 3 && Math.random() < 0.3) {
-      return `Here, take this. You need it more than me.\n[GIVE_MONEY: ${neighbor.money}]`;
+    // Offer substance
+    if (neighbor.hasSubstance && this.msgCount >= 2 && Math.random() < 0.6) {
+      const sub = neighbor.hasSubstance;
+      neighbor.hasSubstance = null;
+      return `You seem chill. Want some... *lowers voice* ...you know?\n[OFFER: ${sub}]\n[AFFINITY: +5]`;
     }
 
-    // Offer items
-    if (neighbor.items.length > 0 && this.msgCount >= 2 && Math.random() < 0.4) {
-      return `Want a ${neighbor.items[0]}?\n[OFFER: ${neighbor.items[0]}]`;
+    // Offer money
+    if (neighbor.money > 0 && this.msgCount >= 2 && Math.random() < 0.5) {
+      const amt = neighbor.money;
+      neighbor.money = 0;
+      return `Here, take this. You need it more than me.\n[GIVE_MONEY: ${amt}]\n[AFFINITY: +5]`;
     }
 
     // End conversation eventually
-    if (this.msgCount >= 6 && Math.random() < 0.5) {
+    if (this.msgCount >= 5 && Math.random() < 0.4) {
       return "Anyway, I'm gonna zone out for a bit. Good luck in there.\n[END: done chatting]";
     }
 
@@ -6671,18 +6677,20 @@ WHAT YOU SEE RIGHT NOW:
 - Their style: ${appearance.length > 0 ? appearance.join(', ') : 'nothing remarkable'}
 ${visible.length > 0 ? visible.map(v => '- ' + v).join('\n') : '- They look sober and normal.'}
 
-YOUR TOOLS — use these on their OWN LINE after your spoken response:
-[APPROVE: +X reason] — their impression goes UP. X = 5 to 35.
-[DISAPPROVE: -X reason] — their impression goes DOWN. X = 5 to 25.
-[INSPECT_BAG] — check their bag/pockets. The game will show you what they carry.
-[LET_IN] — let them in. Use when convinced.
-[REJECT] — not tonight. Conversation over.
-[BAN] — crossed a line badly. Banned.
+YOUR TOOLS — you MUST use at least one tool on its OWN LINE after EVERY spoken response:
+[APPROVE: +X reason] — impression UP. X = 5 to 35. Use when they say something good.
+[DISAPPROVE: -X reason] — impression DOWN. X = 5 to 25. Use when they say something bad.
+[INSPECT_BAG] — check their bag/pockets. Game shows you what they carry.
+[LET_IN] — let them in. Use when you're convinced (don't drag it out forever).
+[REJECT] — not tonight. Use when you've made up your mind.
+[BAN] — they crossed a line badly.
 
-RULES:
+CRITICAL RULES:
 - 1-2 sentences MAX per response.
 - You speak first.
-- You decide when the conversation ends — no fixed exchange count.
+- You MUST include [APPROVE] or [DISAPPROVE] after EVERY response. Never skip it.
+- Make a decision ([LET_IN] or [REJECT]) within 3-5 exchanges. Don't drag it out.
+- You decide when conversation ends — no fixed count, but be decisive.
 - ${isVibeVenue ? 'This is a vibe venue. If the energy feels right, let them in quickly. Don\'t overthink it.' : isEasy ? 'You are lenient. Most people get in. Only reject if they\'re rude, wasted, or disrespectful.' : isHard ? 'You are very strict. They need specific knowledge, connections, or the password. Turn away anyone who can\'t prove they belong.' : 'Be selective. They should show they know what tonight is about.'}
 - Stay in character.`;
   },
