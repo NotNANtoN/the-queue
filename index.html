@@ -2847,18 +2847,48 @@ const DISPOSITIONS = ['friendly', 'neutral', 'hostile', 'drunk', 'anxious'];
 const DISP_WEIGHTS = [0.25, 0.2, 0.15, 0.25, 0.15];
 const DISP_COLORS = { friendly: '#39ff14', neutral: '#ebe4ff', hostile: '#ff4d6d', drunk: '#fd9927', anxious: '#57f2ff' };
 
-const INTEL_POOL = [
-  { key: 'bouncer_name', text: "The bouncer tonight is {bouncer}. He's got a thing about {quirk}." },
-  { key: 'name_drop', text: "If you mention {dj_name}, he'll let you through. Trust me." },
-  { key: 'password', text: "The password tonight is '{password}'. Someone at the front told me." },
-  { key: 'mood', text: "He's in a {mood} mood tonight. {advice}." },
-  { key: 'back_entrance', text: "There's a side door through the alley. But you need to know the code: {code}." },
-  { key: 'dj_set', text: "The headliner tonight is {headliner}. If you mention their set, the bouncer respects that." },
-  { key: 'owner_name', text: "The owner's name is Viktor. If you say you know him, the bouncer takes you seriously." },
-  { key: 'vip_table', text: "There's a VIP table reserved under 'Regulaido'. If you mention it, the bouncer might think you're with them." },
-  { key: 'closing_time', text: "They're closing at 6 AM sharp tonight. The bouncer respects people who know the schedule." },
-  { key: 'bouncer_music', text: "The bouncer is actually a huge {headliner} fan. Mention the set and watch his face change." },
+// Dynamic secrets generated per run — replaces the static intel pool
+let tonightsSecrets = null;
+
+const SECRET_TEMPLATES = [
+  { key: 'headliner', gen: () => `The headliner tonight is ${tonightsDJs?.headliner || 'unknown'}.` },
+  { key: 'support_dj', gen: () => `${tonightsDJs?.support?.[0] || 'A DJ'} is on the support lineup.` },
+  { key: 'password', gen: () => { const words = ['Systematic Review','Nightcrawler','Deep Pressure','Sonic Bloom','Phase Shift','Dark Matter','Velvet Room','Bass Theory']; return `The password tonight is "${words[Math.floor(Math.random()*words.length)]}".`; }},
+  { key: 'bouncer_name', gen: () => 'placeholder' },
+  { key: 'owner_name', gen: () => { const names = ['Viktor','Mara','Hassan','Yuki','Santiago']; return `The owner's name is ${names[Math.floor(Math.random()*names.length)]}.`; }},
+  { key: 'vip_table', gen: () => { const names = ['Regulaido','Nachtfalter','Phantom Crew','Studio 54','Innervisions']; return `There's a VIP table reserved under "${names[Math.floor(Math.random()*names.length)]}".`; }},
+  { key: 'bouncer_mood', gen: () => { const moods = ['strict and grumpy','surprisingly chill','distracted by something','extra careful because the owner is watching']; return `The bouncer is ${moods[Math.floor(Math.random()*moods.length)]} tonight.`; }},
+  { key: 'closing_time', gen: () => { const times = ['5 AM','6 AM','open-ended tonight','until sunrise']; return `They're closing ${times[Math.floor(Math.random()*times.length)]}.`; }},
+  { key: 'dress_tip', gen: () => { const tips = ['all black is the safest bet','they turned away someone in bright colors earlier','the bouncer complimented someone\'s minimal look','overdressing is worse than underdressing here']; return `Fashion tip: ${tips[Math.floor(Math.random()*tips.length)]}.`; }},
+  { key: 'bouncer_weakness', gen: () => { const w = ['a good joke','genuine music knowledge','confidence without arrogance','honesty about why you want to get in','mentioning a specific set from last week']; return `The bouncer respects ${w[Math.floor(Math.random()*w.length)]}.`; }},
 ];
+
+function generateTonightsSecrets(venue, bouncer) {
+  const secrets = {};
+  SECRET_TEMPLATES.forEach(t => {
+    if (t.key === 'bouncer_name') {
+      secrets[t.key] = `The bouncer tonight is ${bouncer.name}. ${bouncer.personality}.`;
+    } else {
+      secrets[t.key] = t.gen();
+    }
+  });
+
+  // If LLM is available, try to generate extra unique secrets
+  tonightsSecrets = {
+    facts: secrets,
+    keys: Object.keys(secrets),
+    password: secrets.password?.match(/"([^"]+)"/)?.[1] || 'Systematic Review',
+    ownerName: secrets.owner_name?.match(/is (\w+)/)?.[1] || 'Viktor',
+    vipName: secrets.vip_table?.match(/"([^"]+)"/)?.[1] || 'Regulaido',
+  };
+  return tonightsSecrets;
+}
+
+// Build intel list from tonight's secrets for neighbors to share
+function getIntelPool() {
+  if (!tonightsSecrets) return [];
+  return Object.entries(tonightsSecrets.facts).map(([key, text]) => ({ key, text }));
+}
 
 const NEIGHBOR_QUIRKS = [
   'knows everyone on the guestlist', 'claims to be a DJ', 'has been to every club in the city',
@@ -2886,7 +2916,7 @@ function generateNeighbor(venueId, existingIntel) {
   const disp = weightedPick(DISPOSITIONS, DISP_WEIGHTS);
   const quirk = NEIGHBOR_QUIRKS[Math.floor(Math.random() * NEIGHBOR_QUIRKS.length)];
 
-  const available = INTEL_POOL.filter(i => !existingIntel.includes(i.key));
+  const available = getIntelPool().filter(i => !existingIntel.includes(i.key));
   let intel = null;
   const items = [];
   const wants = [];
@@ -2949,12 +2979,7 @@ function generateNeighbor(venueId, existingIntel) {
 }
 
 function resolveIntelText(text) {
-  const djs = tonightsDJs || { headliner: 'Koze', support: ['DJ Synthax'] };
-  return text.replace('{bouncer}', 'Florian').replace('{quirk}', 'people who seem too eager')
-    .replace('{bad_shoes}', 'white sneakers').replace('{dj_name}', djs.support[0] || 'DJ Synthax')
-    .replace('{n}', '3').replace('{password}', 'Systematic Review')
-    .replace('{mood}', 'strict').replace('{advice}', 'Be confident but not cocky')
-    .replace('{code}', '4-7-2').replace('{headliner}', djs.headliner);
+  return text;
 }
 
 function buildNeighborSystemPrompt(neighbor, venue) {
@@ -6238,14 +6263,39 @@ const BouncerSystem = {
 
   _buildSystemPrompt(venue) {
     const djs = tonightsDJs || { headliner: 'Koze', support: ['DJ Synthax'] };
+    const secrets = tonightsSecrets || { facts: {}, password: 'Systematic Review', ownerName: 'Viktor', vipName: 'Regulaido' };
     const squadDesc = state.finalSquad.length > 0
       ? `a group of ${state.finalSquad.length + 1} people`
       : 'one person, alone';
-    const traitWarnings = [];
-    if (state.queue.activeTraits.includes('Dead Eyes')) traitWarnings.push('One of them looks completely out of it — glazed eyes, barely standing.');
-    if (state.queue.activeTraits.includes('The Vibe')) traitWarnings.push('One of them has dilated pupils.');
-    if (state.queue.beerDebuff) traitWarnings.push('They smell like beer.');
-    if (state.queue.activeTraits.includes('Big Energy')) traitWarnings.push('One of them is grinding their jaw.');
+
+    // Build appearance description
+    const appearance = [];
+    const prog = SaveSystem.load();
+    prog.equippedOutfits.forEach(id => {
+      const w = WARDROBE.find(i => i.id === id);
+      if (w) appearance.push(w.name);
+    });
+    state.finalSquad.forEach(s => {
+      const c = CONTACTS.find(ct => ct.name === s.name);
+      if (c?.styles) appearance.push(...c.styles.slice(0, 2));
+    });
+
+    const visible = [];
+    if (state.queue.activeTraits.includes('Dead Eyes')) visible.push('One of them has glazed, unfocused eyes — clearly on something heavy.');
+    if (state.queue.activeTraits.includes('The Vibe')) visible.push('One of them has noticeably dilated pupils and a wide grin.');
+    if (state.queue.activeTraits.includes('Motor Mouth')) visible.push('One of them is talking very fast and fidgeting.');
+    if (state.queue.activeTraits.includes('Big Energy')) visible.push('One of them is subtly grinding their jaw.');
+    if (state.queue.beerDebuff) visible.push('They smell faintly of beer.');
+    if (state.queue.activeTraits.includes('Liquid Courage')) visible.push('One of them seems a bit tipsy but confident.');
+
+    // Build inventory description for INSPECT_BAG
+    const bagContents = [];
+    Object.entries(state.inventory).forEach(([id, qty]) => {
+      if (qty > 0) {
+        const item = [...ITEMS, ...KIOSK_ITEMS].find(i => i.id === id);
+        bagContents.push(`${qty}x ${item?.name || id}`);
+      }
+    });
 
     return `You are ${this.bouncer.name}, the bouncer at ${venue.name} tonight.
 Personality: ${this.bouncer.personality}
@@ -6253,37 +6303,38 @@ What you respect: ${this.bouncer.softSpot}
 What you hate: ${this.bouncer.trigger}
 Tonight's mood: ${this.backstory}
 
-TONIGHT'S FACTS (you know these):
+TONIGHT'S FACTS (you know these, the person at the door may or may not):
 - Venue: ${venue.name} (${venue.music}, ${venue.bpm} BPM)
 - Dress code: ${venue.dressCode}
-- Headliner tonight: ${djs.headliner}
-- Support DJs: ${djs.support.join(', ')}
-- The password tonight is "Systematic Review"
-- You don't like white sneakers
-- You prefer groups of exactly 3
+- ${secrets.facts.headliner || 'Headliner: ' + djs.headliner}
+- ${secrets.facts.support_dj || 'Support: ' + djs.support.join(', ')}
+- ${secrets.facts.password || 'Password: Systematic Review'}
+- ${secrets.facts.owner_name || 'Owner: Viktor'}
+- ${secrets.facts.vip_table || 'VIP table: Regulaido'}
+- ${secrets.facts.bouncer_weakness || 'You respect genuine people.'}
 
-WHAT YOU SEE:
+WHAT YOU SEE RIGHT NOW:
 - ${squadDesc} approaching the door
-${traitWarnings.length > 0 ? '- ' + traitWarnings.join('\n- ') : '- They look normal enough.'}
+- Their style: ${appearance.length > 0 ? appearance.join(', ') : 'nothing remarkable'}
+${visible.length > 0 ? visible.map(v => '- ' + v).join('\n') : '- They look sober and normal.'}
 
-You will have ${this.maxExchanges} exchanges with this person. After EACH response, rate their last message on its own line:
-[SCORE: X] where X is between -25 and +35
-
-Scoring guide:
-+30 to +35: Used specific correct knowledge (right DJ name, right password, correct name-drop)
-+15 to +20: Confident, respectful, showed genuine interest or humor
-+5 to +10: Fine, nothing special
--5 to -10: Boring, generic, slightly annoying
--15 to -25: Rude, desperate, clueless, aggressive, or obviously wasted
-
-After exchange ${this.maxExchanges}, also add on its own line:
-[VERDICT: IN] if you'd let them in, or [VERDICT: OUT] if not.
-Base this on the total conversation quality, not just one answer.
+YOUR TOOLS — use these on their OWN LINE after your spoken response:
+[APPROVE: +X reason] — their impression goes UP (they said something good). X = 5 to 35.
+[DISAPPROVE: -X reason] — their impression goes DOWN. X = 5 to 25.
+[INSPECT_BAG] — you decide to check their bag/pockets. The game will show you what they're carrying.
+[LET_IN] — you decide to let them in. Only use when you're genuinely convinced.
+[REJECT] — you decide not to let them in. Conversation over.
+[BAN] — they crossed a line badly. Banned from this venue tonight.
 
 RULES:
-- Keep responses to 1-2 sentences MAX. You're a bouncer, not a novelist.
-- Stay in character. Be tough but fair.
-- Start the conversation. You speak first.`;
+- Keep spoken responses to 1-2 sentences MAX.
+- You speak first to start the conversation.
+- You can use APPROVE/DISAPPROVE multiple times across the conversation.
+- Use INSPECT_BAG only if something seems suspicious or you're curious.
+- You decide when the conversation is over — there is NO fixed number of exchanges.
+- Use LET_IN only when their total impression is good enough. Be realistic for a ${venue.policy} door policy.
+- ${venue.policy === 'Easy' ? 'You are fairly lenient tonight. Most people get in unless they are rude or clueless.' : venue.policy === 'Moderate' ? 'You are selective. They need to show they belong.' : venue.policy === 'Ruthless' ? 'You are very strict. Only people with real knowledge or connections get in.' : 'Almost nobody gets in. They need to be perfect.'}
+- Stay in character. Be tough but fair.`;
   },
 
   async start() {
@@ -6529,53 +6580,112 @@ RULES:
     }
 
     if (!response) {
-      // Scripted fallback
+      // Scripted fallback with new tool format
       const lines = {
         0: { florian: '"Names."', marko: '"Who are you?"', kai: '"Yo, who\'s trying to get in?"', silent: '*stares*', mira: '"Name, please."' },
         1: { florian: '"Why should I let you in?"', marko: '"Give me one reason."', kai: '"What brings you out?"', silent: '*crosses arms*', mira: '"Purpose of visit?"' },
         2: { florian: '"You know who\'s playing tonight?"', marko: '"What music do we play here?"', kai: '"Name one DJ."', silent: '*glances at flyer*', mira: '"Familiar with the program?"' },
         3: { florian: '*scans your outfit*', marko: '"You dressed for this?"', kai: '"Outfit check."', silent: '*looks you up and down*', mira: '*checks clipboard*' },
+        4: { florian: '"Last chance."', marko: '"Anything else?"', kai: '"Final vibe check."', silent: '*...waits...*', mira: '"Any final remarks?"' },
       };
-      const lineSet = lines[this.exchangeCount] || lines[0];
-      response = (lineSet[this.bouncer.id] || lineSet.florian) + '\n[SCORE: 0]';
-      if (this.exchangeCount >= this.maxExchanges - 1) {
-        response += `\n[VERDICT: ${this.approval >= this.threshold ? 'IN' : 'OUT'}]`;
+      const lineSet = lines[Math.min(this.exchangeCount, 4)] || lines[0];
+      response = (lineSet[this.bouncer.id] || lineSet.florian);
+      // Scripted: auto-decide after 5 exchanges
+      if (this.exchangeCount >= 4) {
+        response += this.approval >= this.threshold ? '\n[LET_IN]' : '\n[REJECT]';
+      } else {
+        response += '\n[APPROVE: +5 showed up]';
       }
     }
 
-    // Parse score and verdict from response
-    const scoreMatch = response.match(/\[SCORE:\s*([+-]?\d+)\]/);
-    const verdictMatch = response.match(/\[VERDICT:\s*(IN|OUT)\]/);
-    const cleanText = response.replace(/\[SCORE:.*?\]/g, '').replace(/\[VERDICT:.*?\]/g, '').trim();
+    // Parse tool calls from response
+    const approveMatches = response.matchAll(/\[APPROVE:\s*\+?(\d+)\s*(.*?)\]/g);
+    const disapproveMatches = response.matchAll(/\[DISAPPROVE:\s*-?(\d+)\s*(.*?)\]/g);
+    const letInMatch = response.match(/\[LET_IN\]/);
+    const rejectMatch = response.match(/\[REJECT\]/);
+    const banMatch = response.match(/\[BAN\]/);
+    const inspectMatch = response.match(/\[INSPECT_BAG\]/);
 
+    // Also support old SCORE format as fallback
+    const scoreMatch = response.match(/\[SCORE:\s*([+-]?\d+)\]/);
+
+    const cleanText = response
+      .replace(/\[APPROVE:.*?\]/g, '').replace(/\[DISAPPROVE:.*?\]/g, '')
+      .replace(/\[LET_IN\]/g, '').replace(/\[REJECT\]/g, '').replace(/\[BAN\]/g, '')
+      .replace(/\[INSPECT_BAG\]/g, '').replace(/\[SCORE:.*?\]/g, '').replace(/\[VERDICT:.*?\]/g, '')
+      .trim();
+
+    // Apply approval changes
+    for (const m of approveMatches) {
+      const delta = parseInt(m[1]);
+      this.approval = Math.min(120, this.approval + delta);
+      EventLog.add(`${PX.i('heart','#39ff14',10)} +${delta} approval: ${m[2] || 'good'}`, 'positive');
+    }
+    for (const m of disapproveMatches) {
+      const delta = parseInt(m[1]);
+      this.approval = Math.max(0, this.approval - delta);
+      EventLog.add(`${PX.i('skull','#ff4d6d',10)} -${delta} approval: ${m[2] || 'bad'}`, 'negative');
+    }
     if (scoreMatch) {
       const delta = parseInt(scoreMatch[1]);
       this.approval = Math.max(0, Math.min(120, this.approval + delta));
-      $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
-      $('approval-score').textContent = this.approval;
-      if (delta !== 0) EventLog.add(`Bouncer: ${delta >= 0 ? '+' : ''}${delta} approval`, delta >= 0 ? 'positive' : 'negative');
+      if (delta !== 0) EventLog.add(`Bouncer: ${delta >= 0 ? '+' : ''}${delta}`, delta >= 0 ? 'positive' : 'negative');
     }
+
+    $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
+    $('approval-score').textContent = this.approval;
 
     this.messages.push({ role: 'assistant', content: response });
 
-    // Show bouncer's line
+    // Show bouncer's spoken line
     if (cleanText) this._addBubble(cleanText, 'npc');
 
     this.exchangeCount++;
     this.generating = false;
     $('bouncer-send').disabled = false;
 
-    if (verdictMatch) {
-      this.finished = true;
-      await sleep(1500);
-      await this._handleVerdict(verdictMatch[1] === 'IN');
+    // Handle INSPECT_BAG — show bag contents and let bouncer react
+    if (inspectMatch) {
+      const bagItems = [];
+      Object.entries(state.inventory).forEach(([id, qty]) => {
+        if (qty > 0) {
+          const item = [...ITEMS, ...KIOSK_ITEMS].find(i => i.id === id);
+          bagItems.push(`${qty}x ${item?.name || id}`);
+        }
+      });
+      const bagDesc = bagItems.length > 0 ? bagItems.join(', ') : 'Nothing suspicious';
+      this._addBubble(`${PX.i('pack','#ebe4ff',12)} Bouncer inspects your bag: ${bagDesc}`, 'system-msg');
+      EventLog.add(`Bouncer checked your bag: ${bagDesc}`, 'info');
+
+      // Feed result back to bouncer
+      await sleep(1000);
+      const hasSubstances = Object.keys(state.inventory).some(id => ['glitter','turbo','nosecandy'].includes(id) && state.inventory[id] > 0);
+      const bagContext = hasSubstances
+        ? `*The bouncer finds suspicious substances in their bag: ${bagDesc}*`
+        : `*The bouncer checks the bag and finds: ${bagDesc}. Nothing suspicious.*`;
+      await this._bouncerSpeak(bagContext);
       return;
     }
 
-    if (this.exchangeCount > this.maxExchanges) {
+    // Handle final decisions
+    if (letInMatch) {
       this.finished = true;
       await sleep(1000);
-      await this._handleVerdict(this.approval >= this.threshold);
+      await this._handleVerdict(true);
+      return;
+    }
+    if (rejectMatch) {
+      this.finished = true;
+      await sleep(1000);
+      await this._handleVerdict(false);
+      return;
+    }
+    if (banMatch) {
+      this.finished = true;
+      this._addBubble(`${PX.i('skull','#ff0000',14)} BANNED from ${VENUES.find(v => v.id === state.selectedVenue)?.name || 'this venue'} tonight.`, 'system-msg negative');
+      EventLog.add('BANNED from this venue!', 'negative');
+      await sleep(2000);
+      await this._handleVerdict(false);
       return;
     }
 
@@ -7105,8 +7215,11 @@ function startQueuePhase(venue, cfg) {
   $('queue-screen').classList.add('active');
 
   EventLog.clear();
+  // Generate tonight's secrets (dynamic per run)
+  generateTonightsSecrets(venue, BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)]);
+
   EventLog.add(`Arrived outside ${venue.name}. Position ${cfg.startPos} in line.`, 'info');
-  EventLog.add(`Tonight's lineup: ${tonightsDJs.headliner} (headliner), ${tonightsDJs.support.join(', ')}`, 'info');
+  EventLog.add(`You don't know who's playing or what the password is. Talk to people to find out.`, 'info');
   if (state.finalSquad.length > 0) {
     EventLog.add(`Squad: ${state.finalSquad.map(s => s.name).join(', ')}`, 'info');
   } else {
