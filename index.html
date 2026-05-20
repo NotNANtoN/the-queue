@@ -4502,45 +4502,64 @@ const QueueCanvas = {
   generatePeople(totalCount, playerPos, squad) {
     const people = [];
     const squadCount = squad.length;
+    const allNeighbors = state.queue.allNeighbors || [];
+    const behindNeighbors = state.queue.behindNeighbors || [];
 
     for (let i = 0; i < totalCount; i++) {
       const isPlayer = i === playerPos;
       const squadIdx = i - playerPos - 1;
       const isSquad = !isPlayer && squadIdx >= 0 && squadIdx < squadCount;
+      const isBehind = i > playerPos + squadCount;
+      const behindIdx = i - playerPos - squadCount - 1;
 
-      const height = 36 + Math.random() * 16;
-      const skin = this._pick(this.SKIN_TONES);
-      const hair = this._pick(this.HAIR_COLORS);
-      let shirt, accent;
+      // Use persistent neighbor data for appearance
+      let skin, hair, shirt, accent, hasHat, hasPhone, hasBag, personName;
+      const neighbor = isPlayer || isSquad ? null : (isBehind ? behindNeighbors[behindIdx] : allNeighbors[i]);
 
       if (isPlayer) {
-        shirt = '#7b75ff';
-        accent = '#fff';
+        skin = '#e8b88a'; hair = '#2d2d2d'; shirt = '#7b75ff'; accent = '#fff';
+        hasHat = false; hasPhone = false; hasBag = false; personName = 'You';
       } else if (isSquad) {
         const sc = squad[squadIdx];
+        const contact = CONTACTS.find(c => c.name === sc?.name);
+        skin = contact?.portraitProps?.skin || this._pick(this.SKIN_TONES);
+        hair = contact?.portraitProps?.hairColor || this._pick(this.HAIR_COLORS);
         shirt = sc?.color || '#39ff14';
         accent = sc?.color || '#39ff14';
+        hasHat = false; hasPhone = false; hasBag = false;
+        personName = sc?.name || '?';
+      } else if (neighbor?.portraitProps) {
+        skin = neighbor.portraitProps.skin;
+        hair = neighbor.portraitProps.hairColor;
+        shirt = neighbor.portraitProps.shirtColor || this._pick(this.SHIRT_COLORS);
+        accent = null;
+        hasHat = neighbor.portraitProps.accessory === 'headband';
+        hasPhone = neighbor.portraitProps.seed > 0.6;
+        hasBag = neighbor.portraitProps.seed < 0.15;
+        personName = '';
       } else {
+        skin = this._pick(this.SKIN_TONES);
+        hair = this._pick(this.HAIR_COLORS);
         shirt = this._pick(this.SHIRT_COLORS);
         accent = null;
+        hasHat = Math.random() < 0.15;
+        hasPhone = Math.random() < 0.2;
+        hasBag = Math.random() < 0.1;
+        personName = '';
       }
 
-      const hasHat = !isPlayer && !isSquad && Math.random() < 0.15;
-      const hasPhone = !isPlayer && Math.random() < 0.2;
-      const hasBag = !isPlayer && !isSquad && Math.random() < 0.1;
-
       people.push({
-        baseX: 0,
-        height,
+        baseX: 0, targetX: 0,
+        height: neighbor?.portraitProps ? 36 + neighbor.portraitProps.faceHeight * 2 : 36 + Math.random() * 16,
         skin, hair, shirt, accent,
         isPlayer, isSquad,
         squadMember: isSquad ? squad[squadIdx] : null,
-        name: isPlayer ? 'You' : isSquad ? (squad[squadIdx]?.name || '?') : '',
-        bobOffset: Math.random() * Math.PI * 2,
-        bobSpeed: 0.3 + Math.random() * 0.25,
-        swayAmp: 0.8 + Math.random() * 1.2,
+        name: personName,
+        bobOffset: neighbor?.portraitProps?.seed * Math.PI * 2 || Math.random() * Math.PI * 2,
+        bobSpeed: 0.3 + (neighbor?.portraitProps?.seed || Math.random()) * 0.25,
+        swayAmp: 0.8 + (neighbor?.portraitProps?.seed || Math.random()) * 1.2,
         hasHat, hasPhone, hasBag,
-        pantColor: Math.random() < 0.5 ? '#1a1a2e' : '#2d2d2d',
+        pantColor: (neighbor?.portraitProps?.seed || Math.random()) < 0.5 ? '#1a1a2e' : '#2d2d2d',
       });
     }
     state.queue.queuePeople = people;
@@ -5396,9 +5415,10 @@ const QueueEngine = {
       state.queue.position = Math.max(0, state.queue.position - amount);
       this.modHope(amount * 4);
 
-      // Regenerate neighbors when queue moves
-      state.queue.neighborFront = generateNeighbor(state.selectedVenue, state.queue.revealedIntel);
-      state.queue.neighborBack = generateNeighbor(state.selectedVenue, state.queue.revealedIntel);
+      // Front neighbor updates as people ahead get in
+      if (state.queue.allNeighbors.length > 0) {
+        state.queue.neighborFront = state.queue.allNeighbors[state.queue.allNeighbors.length - 1];
+      }
 
       // Rebuild canvas people to match new position
       this.rebuildQueueViz();
@@ -5483,22 +5503,17 @@ const QueueEngine = {
         effects: [{ label: 'Hope +2', cls: 'positive' }],
         choices: [{ label: 'Glad we came early', action: () => {
           this.modHope(2);
-          // Add 3-5 people behind you
-          const pp = state.queue.queuePeople;
-          for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
-            const last = pp[pp.length - 1];
-            pp.push({
-              baseX: (last?.baseX || 500) + QueueCanvas.PERSON_SPACING,
-              targetX: 0, height: 36 + Math.random() * 16,
-              skin: QueueCanvas._pick(QueueCanvas.SKIN_TONES), hair: QueueCanvas._pick(QueueCanvas.HAIR_COLORS),
-              shirt: QueueCanvas._pick(QueueCanvas.SHIRT_COLORS), isPlayer: false, isSquad: false, name: '', accent: null,
-              bobOffset: Math.random() * Math.PI * 2, bobSpeed: 0.3 + Math.random() * 0.25, swayAmp: 0.8 + Math.random() * 1.2,
-              hasHat: Math.random() < 0.15, hasPhone: Math.random() < 0.2, hasBag: Math.random() < 0.1,
-              pantColor: Math.random() < 0.5 ? '#1a1a2e' : '#2d2d2d',
-            });
+          // Add 3-5 persistent people behind you
+          const newCount = 3 + Math.floor(Math.random() * 3);
+          for (let i = 0; i < newCount; i++) {
+            const newNeighbor = generateNeighbor(state.selectedVenue, state.queue.revealedIntel);
+            state.queue.behindNeighbors.push(newNeighbor);
           }
-          QueueCanvas.layoutPeople(false);
-          EventLog.add('Queue behind you is getting massive', 'info');
+          // Update back neighbor to the closest person behind
+          state.queue.neighborBack = state.queue.behindNeighbors[0] || null;
+          // Rebuild viz with new people
+          this.rebuildQueueViz();
+          EventLog.add(`${newCount} people joined the queue behind you`, 'info');
         } }],
       },
       {
@@ -5592,40 +5607,19 @@ const QueueEngine = {
     const playerIdx = people.findIndex(p => p.isPlayer);
 
     if (playerIdx > pos && playerIdx >= 0) {
-      // Remove people from the front (they got in) — smooth animation
+      // Remove people from the front (they got in)
       const toRemove = playerIdx - pos;
       state.queue.queuePeople = people.slice(toRemove);
-      // Add some new people behind if needed
-      const behindPlayer = state.queue.queuePeople.length - (1 + state.finalSquad.length + pos);
-      if (behindPlayer < 3) {
-        const needed = 3 + Math.floor(Math.random() * 3) - Math.max(0, behindPlayer);
-        for (let i = 0; i < needed; i++) {
-          const last = state.queue.queuePeople[state.queue.queuePeople.length - 1];
-          state.queue.queuePeople.push({
-            baseX: (last?.baseX || 500) + QueueCanvas.PERSON_SPACING,
-            targetX: 0,
-            height: 36 + Math.random() * 16,
-            skin: QueueCanvas._pick(QueueCanvas.SKIN_TONES),
-            hair: QueueCanvas._pick(QueueCanvas.HAIR_COLORS),
-            shirt: QueueCanvas._pick(QueueCanvas.SHIRT_COLORS),
-            isPlayer: false, isSquad: false,
-            name: '', accent: null,
-            bobOffset: Math.random() * Math.PI * 2,
-            bobSpeed: 0.3 + Math.random() * 0.25,
-            swayAmp: 0.8 + Math.random() * 1.2,
-            hasHat: Math.random() < 0.15,
-            hasPhone: Math.random() < 0.2,
-            hasBag: Math.random() < 0.1,
-            pantColor: Math.random() < 0.5 ? '#1a1a2e' : '#2d2d2d',
-          });
-        }
-      }
-      // Smooth layout (animated walk forward)
+      // Also remove those neighbors from the persistent list
+      state.queue.allNeighbors = state.queue.allNeighbors.slice(toRemove);
+      // Update front neighbor
+      state.queue.neighborFront = state.queue.allNeighbors[state.queue.allNeighbors.length - 1] || null;
+      // Smooth layout
       QueueCanvas.layoutPeople(false);
     } else {
-      // Full rebuild as fallback
+      // Full rebuild using persistent data
       const squadLen = state.finalSquad.length;
-      const behindCount = 3 + Math.floor(Math.random() * 3);
+      const behindCount = state.queue.behindNeighbors.length;
       const totalPeople = pos + 1 + squadLen + behindCount;
       QueueCanvas.generatePeople(totalPeople, pos, state.finalSquad);
     }
@@ -5695,6 +5689,20 @@ const QueueEngine = {
     this.advanceTime(5);
     this.processDelayedEffects();
     this.updateMeters();
+
+    // People arriving behind you (first few turns)
+    if (state.queue.turnCount <= 3 && state.queue.behindNeighbors.length < 6) {
+      const arrivals = 1 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < arrivals; i++) {
+        const n = generateNeighbor(state.selectedVenue, state.queue.revealedIntel);
+        state.queue.behindNeighbors.push(n);
+      }
+      state.queue.neighborBack = state.queue.behindNeighbors[0];
+      this.rebuildQueueViz();
+      if (state.queue.turnCount === 1) {
+        showToast('People are lining up behind you...', 1500);
+      }
+    }
 
     // Group chat banter from squad
     if (state.finalSquad.length > 0) {
@@ -7146,8 +7154,15 @@ async function enterQueue() {
   // Generate tonight's DJ lineup
   tonightsDJs = getTonightsDJs(venue);
 
-  state.queue.neighborFront = generateNeighbor(state.selectedVenue, []);
-  state.queue.neighborBack = generateNeighbor(state.selectedVenue, []);
+  // Generate persistent queue neighbors — these stay until they leave
+  const queueNeighbors = [];
+  for (let i = 0; i < cfg.startPos; i++) {
+    queueNeighbors.push(generateNeighbor(state.selectedVenue, []));
+  }
+  state.queue.allNeighbors = queueNeighbors;
+  state.queue.neighborFront = queueNeighbors[cfg.startPos - 1] || null;
+  state.queue.neighborBack = null; // No one behind you at start
+  state.queue.behindNeighbors = [];
   state.queue.activeTraits = [];
   state.queue.delayedEffects = [];
   state.queue.memberStats = {};
@@ -7191,12 +7206,11 @@ function startQueuePhase(venue, cfg) {
   // Set venue label
   $('q-venue-label').textContent = venue.name;
 
-  // Initialize canvas with venue theme
+  // Initialize canvas with venue theme — no one behind you at start
   QueueCanvas.init();
   QueueCanvas.theme = QueueCanvas.THEMES[venue.id] || QueueCanvas.THEMES.mainframe;
   const squadLen = state.finalSquad.length;
-  const behindCount = 3 + Math.floor(Math.random() * 4);
-  const totalPeople = cfg.startPos + 1 + squadLen + behindCount;
+  const totalPeople = cfg.startPos + 1 + squadLen; // No one behind at start
   QueueCanvas.generatePeople(totalPeople, cfg.startPos, state.finalSquad);
   // Start camera at the back of the line (you just arrived)
   const playerIdx = state.queue.queuePeople.findIndex(p => p.isPlayer);
