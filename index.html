@@ -2895,6 +2895,21 @@ const NEIGHBOR_QUIRKS = [
   'is here for the first time', 'used to work at this club', 'is celebrating a birthday',
   'is waiting for someone inside', 'got rejected last week and came back', 'knows the owner',
   'drove 2 hours to get here', 'is a food blogger who also reviews clubs',
+  'is a photographer for a nightlife magazine', 'just got out of a long relationship',
+  'is pre-gaming way too hard', 'is actually the promoter\'s cousin',
+  'lost a bet and has to get into 3 clubs tonight', 'is a music producer scouting talent',
+  'is wearing something incredibly expensive', 'used to date one of the DJs',
+  'is silently judging everyone\'s outfits', 'just flew in from another city',
+  'is an off-duty bouncer from a rival club', 'is livestreaming the whole queue experience',
+  'is on a mission to find a specific person inside', 'collects stamps from every club they visit',
+  'is a philosophy student who overthinks everything', 'always carries exactly the right amount of cash',
+];
+
+const NEIGHBOR_ADJECTIVES = [
+  'tall', 'short', 'lanky', 'stocky', 'stylish', 'scruffy', 'well-groomed', 'tired-looking',
+  'energetic', 'quiet', 'loud', 'mysterious', 'intense', 'laid-back', 'fidgety', 'confident',
+  'overdressed', 'underdressed', 'tattooed', 'pierced', 'sunglasses-at-night', 'chain-smoking',
+  'phone-obsessed', 'people-watching', 'dancing-in-place', 'shivering', 'sweating', 'grinning',
 ];
 
 const TRADEABLE_ITEMS = ['lighter', 'gum', 'cigarette', 'water', 'earplugs', 'vip'];
@@ -2915,6 +2930,9 @@ function generateNeighbor(venueId, existingIntel) {
   const name = NEIGHBOR_NAMES[Math.floor(Math.random() * NEIGHBOR_NAMES.length)];
   const disp = weightedPick(DISPOSITIONS, DISP_WEIGHTS);
   const quirk = NEIGHBOR_QUIRKS[Math.floor(Math.random() * NEIGHBOR_QUIRKS.length)];
+  const adj1 = NEIGHBOR_ADJECTIVES[Math.floor(Math.random() * NEIGHBOR_ADJECTIVES.length)];
+  let adj2 = NEIGHBOR_ADJECTIVES[Math.floor(Math.random() * NEIGHBOR_ADJECTIVES.length)];
+  while (adj2 === adj1) adj2 = NEIGHBOR_ADJECTIVES[Math.floor(Math.random() * NEIGHBOR_ADJECTIVES.length)];
 
   const available = getIntelPool().filter(i => !existingIntel.includes(i.key));
   let intel = null;
@@ -2975,6 +2993,8 @@ function generateNeighbor(venueId, existingIntel) {
     portraitProps, portrait,
     affinity: startAffinity,
     canUnlock: Math.random() < 0.25,
+    adjectives: [adj1, adj2],
+    desc: `A ${adj1}, ${adj2} person`,
   };
 }
 
@@ -2983,9 +3003,9 @@ function resolveIntelText(text) {
 }
 
 function buildNeighborSystemPrompt(neighbor, venue) {
-  let prompt = `You are ${neighbor.name}, a ${neighbor.disposition} person standing in line outside ${venue.name}, a ${venue.music} club.
+  let prompt = `You are ${neighbor.name}, a ${neighbor.adjectives?.[0] || 'average'}, ${neighbor.adjectives?.[1] || 'normal'} person standing in line outside ${venue.name}, a ${venue.music} club.
 You are having a casual conversation with a stranger (the player) who is standing next to you in the queue.
-Your hidden quirk: you ${neighbor.quirk}.
+Your secret backstory (reveal naturally through conversation, don't dump it): you ${neighbor.quirk}.
 
 YOUR PERSONALITY: ${neighbor.disposition === 'friendly' ? 'You are warm and chatty. You enjoy making conversation with strangers. You like helping people.' :
 neighbor.disposition === 'drunk' ? 'You are tipsy and loose-lipped. You talk too much and share things easily. Your speech is slightly slurred and enthusiastic. You love everyone right now.' :
@@ -3071,10 +3091,19 @@ const WARDROBE = [
 const SaveSystem = {
   KEY: 'thequeue_save_v1',
 
+  JOBS: [
+    { id: 'barista', name: 'Barista', pay: 30, minRep: 0 },
+    { id: 'bartender', name: 'Bartender', pay: 45, minRep: 5 },
+    { id: 'promoter', name: 'Club Promoter', pay: 60, minRep: 12 },
+    { id: 'dj', name: 'Resident DJ', pay: 80, minRep: 20 },
+    { id: 'owner', name: 'Venue Owner', pay: 120, minRep: 35 },
+  ],
+
   defaultProgress() {
     return {
       reputation: 0,
-      totalCash: 50,
+      savings: 0,
+      job: 'barista',
       venuesCleared: [],
       unlockedContacts: ['kai', 'rissal', 'mona'],
       totalRuns: 0,
@@ -3108,7 +3137,14 @@ const SaveSystem = {
   applyToState() {
     const p = this.load();
     state.progress = p;
-    state.cash = 50 + p.reputation * 5;
+
+    // Auto-upgrade job based on reputation
+    const bestJob = this.JOBS.slice().reverse().find(j => p.reputation >= j.minRep) || this.JOBS[0];
+    p.job = bestJob.id;
+
+    // Weekly budget = job pay + savings
+    const pay = bestJob.pay;
+    state.cash = pay + (p.savings || 0);
     state.startingCash = state.cash;
 
     // Unlock venues based on clears
@@ -3205,7 +3241,8 @@ const SaveSystem = {
       }
     }
 
-    p.totalCash = 50 + p.reputation * 5;
+    // Save remaining cash as savings for next week
+    p.savings = Math.max(0, state.cash);
     this.save(p);
     state.progress = p;
   },
@@ -5496,8 +5533,13 @@ const QueueEngine = {
 
   advanceTime(minutes) {
     state.queue.gameTime += minutes;
-    this.modAnxiety(minutes * 0.4);
-    this.modHope(-minutes * 0.3);
+
+    // Sober penalty: morale/hope drops faster if you haven't had a drink
+    const hadDrink = state.queue.beerDebuff || state.queue.hadDrink || state.queue.activeTraits.includes('Liquid Courage');
+    const soberPenalty = hadDrink ? 1.0 : 1.6;
+
+    this.modAnxiety(minutes * 0.4 * soberPenalty);
+    this.modHope(-minutes * 0.3 * soberPenalty);
     MemberStats.tick(minutes);
   },
 
@@ -5849,7 +5891,7 @@ const ChatSystem = {
     ScriptedChat.reset();
 
     $('chat-name').textContent = neighbor.name;
-    $('chat-disp').textContent = neighbor.disposition + (neighbor.quirk ? ` · ${neighbor.quirk}` : '');
+    $('chat-disp').textContent = neighbor.disposition + ` · ${neighbor.affinity || 50}/100`;
 
     // Generate portrait with current substance effects
     const fx = [];
@@ -6193,7 +6235,8 @@ const KioskSystem = {
         state.cash -= item.price;
         if (item.effectVal.anxiety) QueueEngine.modAnxiety(item.effectVal.anxiety);
         if (item.effectVal.hope) QueueEngine.modHope(item.effectVal.hope);
-        if (item.id === 'beer') state.queue.beerDebuff = true;
+        if (item.id === 'beer') { state.queue.beerDebuff = true; state.queue.hadDrink = true; }
+        if (item.id === 'redbull' || item.id === 'snack') state.queue.hadDrink = true;
         if (item.trait) QueueEngine.addTrait(item.trait);
         if (item.delayedEffect) {
           state.queue.delayedEffects.push({
@@ -6912,12 +6955,14 @@ RULES:
       $('result-stats').innerHTML += contactLines;
     }
 
+    const nextJob = SaveSystem.JOBS.slice().reverse().find(j => prog.reputation >= j.minRep) || SaveSystem.JOBS[0];
     $('result-stats').innerHTML += `
       <div class="result-row" style="border-top:1px solid rgba(255,255,255,0.06);margin-top:4px;padding-top:8px;">
         <span class="rl">Reputation</span><span class="rv" style="color:var(--neon-gold);">★ ${prog.reputation}</span>
       </div>
+      <div class="result-row"><span class="rl">Job</span><span class="rv">${nextJob.name} ($${nextJob.pay}/week)</span></div>
+      <div class="result-row"><span class="rl">Savings</span><span class="rv">$${state.cash}</span></div>
       <div class="result-row"><span class="rl">Venues cleared</span><span class="rv">${prog.venuesCleared.length} / ${VENUES.length}</span></div>
-      <div class="result-row"><span class="rl">Next budget</span><span class="rv">$${prog.totalCash}</span></div>
     `;
 
     // Particles!
@@ -7260,6 +7305,7 @@ async function enterQueue() {
   state.queue.revealedIntel = [];
   state.queue.turnCount = 0;
   state.queue.beerDebuff = false;
+  state.queue.hadDrink = false;
   state.queue.actionLocked = false;
   // Generate tonight's DJ lineup
   tonightsDJs = getTonightsDJs(venue);
@@ -7372,10 +7418,10 @@ function restartPlanning() {
   $('loading-overlay').classList.remove('active');
   $('phone-container').classList.add('active');
 
-  // Update reputation display
   const repEl = $('rep-display');
   if (repEl && state.progress) {
-    repEl.textContent = `★ ${state.progress.reputation} rep · $${state.cash}`;
+    const job = SaveSystem.JOBS.slice().reverse().find(j => state.progress.reputation >= j.minRep) || SaveSystem.JOBS[0];
+    repEl.textContent = `${job.name} · ★${state.progress.reputation} · $${state.cash}`;
   }
 
   switchTab(0);
@@ -7394,7 +7440,8 @@ function init() {
   // Load progression from localStorage
   SaveSystem.applyToState();
   const p = state.progress;
-  $('rep-display').textContent = `★ ${p.reputation} rep · $${state.cash}`;
+  const job = SaveSystem.JOBS.slice().reverse().find(j => p.reputation >= j.minRep) || SaveSystem.JOBS[0];
+  $('rep-display').textContent = `${job.name} · ★${p.reputation} · $${state.cash}`;
 
   // Set pixel art icons for UI elements
   $('nav-icon-0').innerHTML = PX.i('pin', '#7b75ff', 18);
