@@ -2919,7 +2919,7 @@ let tonightsDJs = null;
 
 const NEIGHBOR_NAMES = ['Marco', 'Lena', 'Tariq', 'Yuki', 'Priya', 'Jonas', 'Nadia', 'Emre', 'Sofia', 'Dex', 'Aisha', 'Viktor', 'Luna', 'Chen', 'Zara', 'Ravi', 'Ingrid', 'Kwame', 'Mika', 'Freya'];
 const DISPOSITIONS = ['friendly', 'neutral', 'hostile', 'drunk', 'anxious'];
-const DISP_WEIGHTS = [0.25, 0.2, 0.15, 0.25, 0.15];
+const DISP_WEIGHTS = [0.35, 0.2, 0.1, 0.28, 0.07];
 const DISP_COLORS = { friendly: '#39ff14', neutral: '#ebe4ff', hostile: '#ff4d6d', drunk: '#fd9927', anxious: '#57f2ff' };
 
 // Dynamic secrets generated per run — replaces the static intel pool
@@ -3197,6 +3197,7 @@ const SaveSystem = {
       ownedOutfits: [],
       equippedOutfits: [],
       djHistory: {},
+      venueVisits: {},
     };
   },
 
@@ -4041,9 +4042,15 @@ function switchTab(idx) {
 
 function renderVenues() {
   const container = $('venue-list');
-  container.innerHTML = VENUES.map(v => {
+  const diffOrder = { Easy: 0, Moderate: 1, Ruthless: 2, Nightmare: 3 };
+  const sortedVenues = [...VENUES].sort((a, b) => (diffOrder[a.policy] || 0) - (diffOrder[b.policy] || 0));
+  const prog = SaveSystem.load();
+
+  container.innerHTML = sortedVenues.map(v => {
     const selected = state.selectedVenue === v.id;
     const locked = v.locked;
+    const visits = prog.venueVisits?.[v.id] || 0;
+    const cleared = prog.venuesCleared?.includes(v.id);
     const cls = ['venue-card'];
     if (selected) cls.push('selected');
     if (locked) cls.push('locked');
@@ -4084,6 +4091,10 @@ function renderVenues() {
         </div>
         <div class="venue-dress">Dress code: ${v.dressCode}</div>
         ${v.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${v.desc}</div>` : ''}
+        <div style="display:flex;gap:8px;margin-top:6px;font-size:10px;">
+          ${visits > 0 ? `<span style="color:var(--text-muted);">Visited ${visits}x</span>` : ''}
+          ${cleared ? `<span style="color:var(--neon-green);font-weight:700;">${PX.i('star','#39ff14',10)} Cleared</span>` : ''}
+        </div>
       </div>
     `;
   }).join('');
@@ -4168,6 +4179,17 @@ function renderContacts() {
           <div class="crew-stat"><span class="crew-stat-val" style="color:var(--neon-gold)">${bond}</span><span class="crew-stat-label">Bond</span></div>
           <div class="crew-stat"><span class="crew-stat-val" style="color:${loyaltyColor}">${stats.loyalty}</span><span class="crew-stat-label">Loyalty</span></div>
         </div>
+        ${(() => {
+          const otherContacts = availableContacts.filter(o => o.id !== c.id);
+          const connections = otherContacts.map(o => {
+            const b = SaveSystem.getBond(c.id, o.id);
+            if (b <= 0) return '';
+            const lbl = b >= 60 ? 'bestie' : b >= 30 ? 'friend' : 'met';
+            const col = b >= 60 ? '#ff69b4' : b >= 30 ? '#57f2ff' : '#666';
+            return `<span style="font-size:9px;color:${col};padding:1px 5px;border:1px solid ${col}33;border-radius:4px;background:rgba(${parseInt(col.slice(1,3),16)},${parseInt(col.slice(3,5),16)},${parseInt(col.slice(5,7),16)},0.06);">${o.name} (${lbl})</span>`;
+          }).filter(Boolean);
+          return connections.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">${connections.join('')}</div>` : '';
+        })()}
         ${warning}
       </div>
     `;
@@ -7244,18 +7266,18 @@ const WalkOfShame = {
 
 const CLUB_EVENTS = [
   { px: 'people', pxColor: '#39ff14', text: 'The dance floor is packed. Your crew finds a spot near the speakers.', effect: '+Bond', type: 'positive', bondBoost: 5 },
-  { px: 'note', pxColor: '#7b75ff', text: 'The DJ drops a massive tune. Everyone loses their minds.', effect: 'Hope +10', type: 'positive', hope: 10 },
-  { px: 'beer', pxColor: '#ffd86b', text: 'You grab drinks at the bar. The bartender is fast tonight.', effect: '-$8, Anxiety −10', type: 'positive', cost: 8, anxiety: -10 },
+  { px: 'note', pxColor: '#7b75ff', text: 'The DJ drops a massive tune. Everyone loses their minds.', effect: '+Bond', type: 'positive', bondBoost: 3, rep: 1 },
+  { px: 'beer', pxColor: '#ffd86b', text: 'You grab drinks at the bar. Round for everyone.', effect: '-$8, +Bond', type: 'positive', cost: 8, bondBoost: 4 },
   { px: 'hand', pxColor: '#ffd86b', text: (sq) => `${sq.length > 0 ? sq[0].name : 'You'} bumps into someone they know. Numbers exchanged.`, effect: 'New connection', type: 'special', contactChance: true },
   { px: 'fire', pxColor: '#fd9927', text: 'Someone drops a lighter on the dance floor. Finders keepers.', effect: '+Lighter', type: 'positive', item: 'lighter' },
-  { px: 'eye', pxColor: '#ff69b4', text: 'Your crew takes a group photo in the neon light. Memories made.', effect: '+Bond, +Rep', type: 'positive', bondBoost: 8, rep: 1 },
-  { px: 'shield', pxColor: '#ff4d6d', text: 'The bass is relentless. One of you needs fresh air.', effect: 'Morale test', type: 'negative' },
-  { px: 'star', pxColor: '#ffd86b', text: (sq) => `A stranger compliments ${sq.length > 0 ? sq[Math.floor(Math.random() * sq.length)].name + "'s" : 'your'} outfit.`, effect: '+Vibe', type: 'positive', hope: 5 },
-  { px: 'drop', pxColor: '#57f2ff', text: 'You all drink water. Staying hydrated like responsible adults.', effect: 'Anxiety −5', type: 'positive', anxiety: -5 },
-  { px: 'note', pxColor: '#ff69b4', text: 'The headliner starts their set. The whole room shifts energy.', effect: 'Hope +15', type: 'positive', hope: 15 },
+  { px: 'eye', pxColor: '#ff69b4', text: 'Your crew takes a group photo in the neon light. Memories made.', effect: '+Bond, +Rep', type: 'positive', bondBoost: 10, rep: 1 },
+  { px: 'shield', pxColor: '#ff4d6d', text: 'The bass is relentless. One of you needs fresh air but you stick together.', effect: '+Bond (shared struggle)', type: 'positive', bondBoost: 3 },
+  { px: 'star', pxColor: '#ffd86b', text: (sq) => `A stranger compliments ${sq.length > 0 ? sq[Math.floor(Math.random() * sq.length)].name + "'s" : 'your'} outfit. Squad proud.`, effect: '+Bond', type: 'positive', bondBoost: 2, rep: 1 },
+  { px: 'drop', pxColor: '#57f2ff', text: 'You all drink water. Staying hydrated like responsible adults.', effect: '+Bond', type: 'positive', bondBoost: 2 },
+  { px: 'note', pxColor: '#ff69b4', text: 'The headliner starts their set. The whole room shifts energy.', effect: '+Rep, +Bond', type: 'positive', bondBoost: 5, rep: 1 },
   { px: 'star', pxColor: '#ffd86b', text: 'The lights slowly come up. It\'s 6 AM. What a night.', effect: 'Sunrise', type: 'special', final: true },
   { px: 'coin', pxColor: '#ffd86b', text: 'You find $10 on the bathroom floor. Don\'t ask questions.', effect: '+$10', type: 'positive', cash: 10 },
-  { px: 'skull', pxColor: '#ff4d6d', text: 'The substances are catching up. The room spins for a moment.', effect: 'Comedown', type: 'negative', conditionalOnSubstance: true },
+  { px: 'skull', pxColor: '#ff4d6d', text: 'The substances are catching up. But your crew keeps you steady.', effect: '+Bond', type: 'positive', bondBoost: 5, conditionalOnSubstance: true },
   { px: 'heart', pxColor: '#ff69b4', text: (sq) => `${sq.length > 1 ? sq[0].name + ' and ' + sq[1].name : 'You and a stranger'} have an amazing conversation about life.`, effect: '+Deep bond', type: 'special', bondBoost: 15 },
 ];
 
@@ -7620,6 +7642,12 @@ function startQueuePhase(venue, cfg) {
   $('queue-screen').classList.add('active');
 
   EventLog.clear();
+  // Track venue visit
+  const prog = SaveSystem.load();
+  prog.venueVisits = prog.venueVisits || {};
+  prog.venueVisits[venue.id] = (prog.venueVisits[venue.id] || 0) + 1;
+  SaveSystem.save(prog);
+
   // Generate tonight's secrets (dynamic per run)
   generateTonightsSecrets(venue, BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)]);
 
