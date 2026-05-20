@@ -6967,8 +6967,8 @@ CRITICAL RULES:
     // Parse tool calls from response
     const approveMatches = response.matchAll(/\[APPROVE:\s*\+?(\d+)\s*(.*?)\]/g);
     const disapproveMatches = response.matchAll(/\[DISAPPROVE:\s*-?(\d+)\s*(.*?)\]/g);
-    const letInMatch = response.match(/\[LET_IN\]/);
-    const rejectMatch = response.match(/\[REJECT\]/);
+    const letInMatch = response.match(/\[LET_IN\]/) || response.match(/\[VERDICT:\s*IN\]/i);
+    const rejectMatch = response.match(/\[REJECT\]/) || response.match(/\[VERDICT:\s*OUT\]/i);
     const banMatch = response.match(/\[BAN\]/);
     const inspectMatch = response.match(/\[INSPECT_BAG\]/);
 
@@ -6979,6 +6979,7 @@ CRITICAL RULES:
       .replace(/\[APPROVE:.*?\]/g, '').replace(/\[DISAPPROVE:.*?\]/g, '')
       .replace(/\[LET_IN\]/g, '').replace(/\[REJECT\]/g, '').replace(/\[BAN\]/g, '')
       .replace(/\[INSPECT_BAG\]/g, '').replace(/\[SCORE:.*?\]/g, '').replace(/\[VERDICT:.*?\]/g, '')
+      .replace(/\[[A-Z_]+(?::.*?)?\]/g, '')
       .trim();
 
     // Apply approval changes
