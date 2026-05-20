@@ -1003,16 +1003,17 @@ body::before {
   letter-spacing: 1px; text-transform: uppercase;
 }
 .chat-close {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--border-subtle);
-  background: none;
-  color: var(--text-muted);
-  font-size: 14px;
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 77, 109, 0.25);
+  background: rgba(255, 77, 109, 0.06);
+  color: var(--neon-pink);
+  font-size: 16px; font-weight: 700;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
 }
-.chat-close:hover { border-color: var(--neon-pink); color: var(--neon-pink); }
+.chat-close:hover { background: rgba(255, 77, 109, 0.15); border-color: var(--neon-pink); }
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -1098,6 +1099,20 @@ body::before {
 }
 .chat-send:hover { transform: scale(1.05); }
 .chat-send:disabled { opacity: 0.3; cursor: not-allowed; }
+.chat-leave {
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 77, 109, 0.3);
+  border-radius: 20px;
+  background: rgba(255, 77, 109, 0.08);
+  color: var(--neon-pink);
+  font-family: var(--font-sans);
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.chat-leave:hover { background: rgba(255, 77, 109, 0.15); }
 
 /* === EVENT OVERLAY === */
 .event-overlay {
@@ -1988,6 +2003,7 @@ body::before {
   <div class="chat-input-area">
     <input class="chat-input" id="chat-input" type="text" placeholder="Say something..." autocomplete="off" />
     <button class="chat-send" id="chat-send">→</button>
+    <button class="chat-leave" id="chat-leave">Leave</button>
   </div>
 </div>
 
@@ -7026,6 +7042,7 @@ function init() {
     if (e.key === 'Enter') ChatSystem.sendMessage($('chat-input').value);
   });
   $('chat-close').addEventListener('click', () => ChatSystem.close());
+  $('chat-leave').addEventListener('click', () => ChatSystem.close());
 
   // Club scene: leave at sunrise
   $('club-done').addEventListener('click', () => {
