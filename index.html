@@ -2550,7 +2550,7 @@ const SaveSystem = {
       reputation: 0,
       totalCash: 50,
       venuesCleared: [],
-      unlockedContacts: ['kai', 'pia', 'rissal', 'mona', 'sasha', 'felix'],
+      unlockedContacts: ['kai', 'rissal', 'mona'],
       totalRuns: 0,
       totalSuccesses: 0,
       bonds: {},
@@ -2621,9 +2621,44 @@ const SaveSystem = {
         p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + 3);
       });
     }
+    // Unlock new contacts based on milestones
+    const allContactIds = CONTACTS.map(c => c.id);
+    const locked = allContactIds.filter(id => !p.unlockedContacts.includes(id));
+
+    if (success && locked.length > 0) {
+      // Success: meet someone inside the club — unlock a random locked contact
+      const newContact = locked[Math.floor(Math.random() * locked.length)];
+      p.unlockedContacts.push(newContact);
+      const c = CONTACTS.find(ct => ct.id === newContact);
+      this._pendingUnlocks = this._pendingUnlocks || [];
+      this._pendingUnlocks.push({ name: c?.name || newContact, where: 'inside the club', bond: 20 });
+      // Strong bond from meeting inside
+      const key = ['player', newContact].sort().join(':');
+      p.bonds[key] = Math.max(p.bonds[key] || 0, 20);
+    }
+
+    // Queue neighbors can become contacts (if you gathered intel from them)
+    if (state.queue.revealedIntel.length >= 2 && locked.length > 0) {
+      const queueUnlock = locked.filter(id => !p.unlockedContacts.includes(id))[0];
+      if (queueUnlock && Math.random() < 0.4) {
+        p.unlockedContacts.push(queueUnlock);
+        const c = CONTACTS.find(ct => ct.id === queueUnlock);
+        this._pendingUnlocks = this._pendingUnlocks || [];
+        this._pendingUnlocks.push({ name: c?.name || queueUnlock, where: 'the queue', bond: 10 });
+        const key = ['player', queueUnlock].sort().join(':');
+        p.bonds[key] = Math.max(p.bonds[key] || 0, 10);
+      }
+    }
+
     p.totalCash = 50 + p.reputation * 5;
     this.save(p);
     state.progress = p;
+  },
+
+  getPendingUnlocks() {
+    const unlocks = this._pendingUnlocks || [];
+    this._pendingUnlocks = [];
+    return unlocks;
   },
 
   getBond(id1, id2) {
@@ -3321,8 +3356,11 @@ function renderVenues() {
 function renderContacts() {
   const container = $('contact-list');
   const selectedVenue = VENUES.find(v => v.id === state.selectedVenue);
+  const unlocked = state.progress?.unlockedContacts || ['kai', 'rissal', 'mona'];
+  const availableContacts = CONTACTS.filter(c => unlocked.includes(c.id));
+  const lockedContacts = CONTACTS.filter(c => !unlocked.includes(c.id));
 
-  container.innerHTML = CONTACTS.map(c => {
+  container.innerHTML = availableContacts.map(c => {
     const selected = state.selectedSquad.includes(c.id);
     const atMax = !selected && state.selectedSquad.length >= 3;
     const venueBlock = c.refusesEasy && selectedVenue?.policy === 'Easy';
@@ -3382,7 +3420,24 @@ function renderContacts() {
     `;
   }).join('');
 
-  container.querySelectorAll('.contact-card').forEach(card => {
+  // Show locked contacts as silhouettes
+  if (lockedContacts.length > 0) {
+    container.innerHTML += `<div class="section-header" style="padding-top:12px;">Unknown — meet them out there</div>`;
+    container.innerHTML += lockedContacts.map(c => `
+      <div class="contact-card disabled" style="opacity:0.25;">
+        <div class="contact-avatar" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);">
+          <span style="color:var(--text-muted)">?</span>
+        </div>
+        <div class="contact-info">
+          <div class="contact-name" style="color:var(--text-muted)">???</div>
+          <span class="contact-trait" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);color:var(--text-muted);">Unknown</span>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Meet new people by going out</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  container.querySelectorAll('.contact-card[data-contact]').forEach(card => {
     card.addEventListener('click', () => {
       if (card.classList.contains('disabled') && !card.classList.contains('selected')) {
         const contact = CONTACTS.find(c => c.id === card.dataset.contact);
@@ -5667,6 +5722,14 @@ const BouncerSystem = {
     // Progression
     SaveSystem.recordRun(success, venue?.id);
     const prog = SaveSystem.load();
+    const newContacts = SaveSystem.getPendingUnlocks();
+
+    if (newContacts.length > 0) {
+      const contactLines = newContacts.map(u => `
+        <div class="result-row"><span class="rl" style="color:var(--neon-green)">🆕 New contact</span><span class="rv" style="color:var(--neon-green)">${u.name} (met in ${u.where})</span></div>
+      `).join('');
+      $('result-stats').innerHTML += contactLines;
+    }
 
     $('result-stats').innerHTML += `
       <div class="result-row" style="border-top:1px solid rgba(255,255,255,0.06);margin-top:4px;padding-top:8px;">
