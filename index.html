@@ -6365,15 +6365,13 @@ const ChatSystem = {
     }
 
     this.messages.push({ role: 'assistant', content: dialogText });
-    // Store in neighbor's chat history for memory
     if (this.currentNeighbor) {
       this.currentNeighbor.chatHistory = [...this.messages];
     }
 
     // Replace typing with actual response
-    const dialogText = cleanLines.join(' ') || '...';
     typingEl.innerHTML = '';
-    typingEl.textContent = dialogText;
+    typingEl.textContent = dialogText || '...';
 
     this.generating = false;
     $('chat-send').disabled = false;
