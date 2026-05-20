@@ -4469,7 +4469,7 @@ const QueueCanvas = {
     boardroom:   { sky: ['#02020a','#0a0a1a','#0d0d20'], wall: '#101020', wallTex: 'rgba(255,255,255,0.02)', ground: '#151525', curb: '#202035', neon1: '#ffd86b', neon2: '#fff', spill: 'rgba(255,216,107,0.08)', lamp: 'rgba(255,216,107,0.06)', outdoor: false },
     florians:    { sky: ['#03020e','#06051a','#080720'], wall: '#08061a', wallTex: 'rgba(123,117,255,0.01)', ground: '#0e0c22', curb: '#161435', neon1: '#7b75ff', neon2: '#3a3580', spill: 'rgba(123,117,255,0.05)', lamp: 'rgba(123,117,255,0.04)', outdoor: false },
     audit:       { sky: ['#020102','#080408','#0a0610'], wall: '#0a0808', wallTex: 'rgba(255,0,0,0.01)', ground: '#121010', curb: '#1a1418', neon1: '#ff0000', neon2: '#880000', spill: 'rgba(255,0,0,0.06)', lamp: 'rgba(255,50,50,0.04)', outdoor: false },
-    sisyphos:    { sky: ['#06082a','#1a1040','#0d1830'], wall: null, wallTex: null, ground: '#1a2018', curb: '#2a3528', neon1: '#39ff14', neon2: '#ff69b4', spill: 'rgba(57,255,20,0.12)', lamp: 'rgba(255,200,100,0.1)', outdoor: true, trees: true, fairyLights: true },
+    sisyphos:    { sky: ['#081a30','#122848','#0a2040'], wall: null, wallTex: null, ground: '#1a2a14', curb: '#2a4020', neon1: '#39ff14', neon2: '#ff69b4', spill: 'rgba(57,255,20,0.2)', lamp: 'rgba(255,200,100,0.15)', outdoor: true, trees: true, fairyLights: true },
     sudpol:      { sky: ['#04061a','#0c1028','#0a0e22'], wall: '#101828', wallTex: 'rgba(255,255,255,0.01)', ground: '#121a28', curb: '#1a2238', neon1: '#57f2ff', neon2: '#7b75ff', spill: 'rgba(87,242,255,0.08)', lamp: 'rgba(87,242,255,0.05)', outdoor: false },
   },
 
@@ -4784,42 +4784,96 @@ const QueueCanvas = {
     const wallTop = H * 0.15;
 
     if (T.outdoor) {
-      // Outdoor venue: grass, trees, fairy lights
-      ctx.fillStyle = '#0a1208';
+      // Outdoor venue: lush background with grass, trees, art, fairy lights
+      // Sky is slightly brighter (not pitch black)
+      ctx.fillStyle = '#0c1a0a';
       ctx.fillRect(-500, wallTop, 5000, groundY - wallTop);
-      // Trees
+
+      // Grass texture
+      ctx.fillStyle = '#142a10';
+      for (let gx = -500; gx < 3000; gx += 3) {
+        const gh = 4 + Math.sin(gx * 0.3) * 3;
+        ctx.fillRect(gx, groundY - gh, 2, gh);
+      }
+
+      // Trees (bigger, more detailed)
       if (T.trees) {
-        for (let tx = 50; tx < 3000; tx += 180 + Math.sin(tx) * 40) {
-          ctx.fillStyle = '#1a2818';
-          ctx.fillRect(tx - 3, wallTop + 10, 6, groundY - wallTop - 10);
-          ctx.fillStyle = '#223a20';
-          for (let j = 0; j < 3; j++) {
-            const ly = wallTop - 5 + j * 12;
-            const lw = 20 - j * 5;
+        for (let tx = -20; tx < 3000; tx += 140 + Math.sin(tx * 0.1) * 50) {
+          // Trunk
+          ctx.fillStyle = '#2a1a0a';
+          ctx.fillRect(tx - 4, wallTop - 10, 8, groundY - wallTop + 10);
+
+          // Canopy layers (lush)
+          const treeSway = Math.sin(this.time * 0.3 + tx * 0.01) * 3;
+          for (let j = 0; j < 4; j++) {
+            const ly = wallTop - 25 + j * 14;
+            const lw = 28 - j * 5;
+            ctx.fillStyle = j % 2 === 0 ? '#1a4a16' : '#225a1e';
             ctx.beginPath();
-            ctx.arc(tx, ly, lw, 0, Math.PI * 2);
+            ctx.arc(tx + treeSway, ly, lw, 0, Math.PI * 2);
             ctx.fill();
           }
         }
       }
-      // Fairy lights
+
+      // Fairy lights (string lights between trees, brighter)
       if (T.fairyLights) {
-        for (let fx = 30; fx < 3000; fx += 25) {
-          const fy = wallTop + 15 + Math.sin(fx * 0.05) * 8;
-          const colors = ['#ff69b4','#39ff14','#ffd86b','#57f2ff','#ff6b35'];
-          ctx.fillStyle = colors[Math.floor(fx / 25) % colors.length];
-          ctx.globalAlpha = 0.4 + Math.sin(this.time * 3 + fx * 0.1) * 0.3;
-          ctx.fillRect(fx, fy, 2, 2);
+        // String wire
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        for (let fx = -500; fx < 3000; fx += 5) {
+          const fy = wallTop + 20 + Math.sin(fx * 0.02) * 12;
+          if (fx === -500) ctx.moveTo(fx, fy);
+          else ctx.lineTo(fx, fy);
+        }
+        ctx.stroke();
+
+        // Bulbs
+        const bulbColors = ['#ff69b4','#39ff14','#ffd86b','#57f2ff','#ff6b35','#7b75ff','#fff'];
+        for (let fx = 0; fx < 3000; fx += 18) {
+          const fy = wallTop + 20 + Math.sin(fx * 0.02) * 12;
+          const col = bulbColors[Math.floor(fx / 18) % bulbColors.length];
+          const bright = 0.5 + Math.sin(this.time * 2.5 + fx * 0.15) * 0.4;
+          // Glow
+          ctx.fillStyle = col;
+          ctx.globalAlpha = bright * 0.15;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 8, 0, Math.PI * 2);
+          ctx.fill();
+          // Bulb
+          ctx.globalAlpha = bright;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 2.5, 0, Math.PI * 2);
+          ctx.fill();
         }
         ctx.globalAlpha = 1;
       }
-      // Dirt path
-      ctx.fillStyle = '#1a1810';
+
+      // Firefly particles
+      for (let i = 0; i < 8; i++) {
+        const fx = ((this.time * 20 + i * 400) % 3000);
+        const fy = wallTop + 30 + Math.sin(this.time * 0.8 + i * 3) * 30;
+        ctx.fillStyle = '#39ff14';
+        ctx.globalAlpha = 0.3 + Math.sin(this.time * 4 + i * 2) * 0.3;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Ground: dirt/gravel path
+      ctx.fillStyle = '#1a1a0e';
       ctx.fillRect(-500, groundY, 5000, H - groundY + 100);
+      // Path texture
+      ctx.fillStyle = '#242014';
+      for (let gx = -500; gx < 3000; gx += 8) {
+        if (Math.sin(gx * 0.7) > 0.3) ctx.fillRect(gx, groundY + 2, 4, 2);
+      }
       ctx.fillStyle = '#2a2518';
-      ctx.fillRect(-500, groundY, 5000, 3);
+      ctx.fillRect(-500, groundY, 5000, 2);
     } else {
-      // Indoor venue: wall + sidewalk
+      // Indoor venue: wall + sidewalk + venue-specific details
       ctx.fillStyle = T.wall;
       ctx.fillRect(-500, wallTop, 5000, groundY - wallTop);
       if (T.wallTex) {
@@ -4832,6 +4886,51 @@ const QueueCanvas = {
           }
         }
       }
+
+      // Venue-specific wall decorations
+      const venueId = state.selectedVenue;
+      if (venueId === 'neon') {
+        // Neon Pharmacy: graffiti-style colored patches on walls
+        const grafColors = ['rgba(255,105,180,0.06)','rgba(57,255,20,0.05)','rgba(87,242,255,0.04)','rgba(253,153,39,0.05)'];
+        for (let gx = 200; gx < 3000; gx += 150 + Math.sin(gx) * 50) {
+          const gy = wallTop + 20 + Math.sin(gx * 0.3) * 20;
+          ctx.fillStyle = grafColors[Math.floor(gx / 150) % grafColors.length];
+          ctx.fillRect(gx, gy, 30 + Math.sin(gx) * 15, 20 + Math.cos(gx) * 10);
+        }
+      } else if (venueId === 'compliance') {
+        // Compliance Vault: industrial pipes on wall
+        ctx.strokeStyle = 'rgba(255,50,50,0.04)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-500, wallTop + 30);
+        ctx.lineTo(3000, wallTop + 30);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-500, wallTop + 60);
+        ctx.lineTo(3000, wallTop + 60);
+        ctx.stroke();
+      } else if (venueId === 'boardroom') {
+        // Boardroom: faint gold trim lines
+        ctx.strokeStyle = 'rgba(255,216,107,0.03)';
+        ctx.lineWidth = 1;
+        for (let gy = wallTop + 20; gy < groundY; gy += 40) {
+          ctx.beginPath();
+          ctx.moveTo(-500, gy);
+          ctx.lineTo(3000, gy);
+          ctx.stroke();
+        }
+      } else if (venueId === 'audit') {
+        // Audit Chamber: warning stripes
+        ctx.fillStyle = 'rgba(255,0,0,0.03)';
+        for (let sx = -500; sx < 3000; sx += 60) {
+          ctx.save();
+          ctx.translate(sx, groundY - 5);
+          ctx.rotate(-0.3);
+          ctx.fillRect(0, 0, 20, 8);
+          ctx.restore();
+        }
+      }
+
       ctx.fillStyle = T.ground;
       ctx.fillRect(-500, groundY, 5000, H - groundY + 100);
       ctx.fillStyle = T.curb;
@@ -4839,6 +4938,17 @@ const QueueCanvas = {
       ctx.fillRect(-500, groundY + 28, 5000, 2);
       ctx.fillStyle = '#0a0918';
       ctx.fillRect(-500, groundY + 30, 5000, 200);
+
+      // Puddles for some venues (adds atmosphere)
+      if (venueId === 'compliance' || venueId === 'florians') {
+        for (let px = 200; px < 3000; px += 300 + Math.sin(px) * 100) {
+          const n1r = parseInt(T.neon1.slice(1,3),16), n1g = parseInt(T.neon1.slice(3,5),16), n1b = parseInt(T.neon1.slice(5,7),16);
+          ctx.fillStyle = `rgba(${n1r},${n1g},${n1b},0.03)`;
+          ctx.beginPath();
+          ctx.ellipse(px, groundY + 15, 25, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
 
     // Club entrance
