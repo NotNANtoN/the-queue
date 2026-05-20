@@ -1611,6 +1611,28 @@ body::before {
   box-shadow: 0 8px 24px rgba(123, 117, 255, 0.3);
 }
 
+/* === WALK OF SHAME === */
+.shame-overlay {
+  position: fixed; inset: 0; z-index: 47;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #030210;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 1s ease, visibility 1s ease;
+}
+.shame-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.shame-overlay canvas { width: 100%; max-width: 400px; height: 200px; image-rendering: pixelated; }
+.shame-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 16px;
+  font-style: italic;
+  max-width: 300px;
+  line-height: 1.6;
+  opacity: 0;
+  animation: fadeIn 2s 1s ease forwards;
+}
+
 /* === PARTICLES === */
 .particle-container {
   position: fixed; inset: 0;
@@ -2015,6 +2037,12 @@ body::before {
   <button class="club-done-btn" id="club-done" style="display:none">Leave at Sunrise →</button>
 </div>
 
+<!-- Walk of Shame -->
+<div class="shame-overlay" id="shame-overlay">
+  <canvas id="shame-canvas" width="200" height="100"></canvas>
+  <div class="shame-text" id="shame-text"></div>
+</div>
+
 <!-- Result Overlay -->
 <div class="result-overlay" id="result-overlay">
   <div class="result-title" id="result-title"></div>
@@ -2172,6 +2200,34 @@ const VENUES = [
     dressBias: ['All Black', 'Chains'],
     locked: true,
     entryPrice: 40,
+  },
+  {
+    id: 'sisyphos',
+    name: 'Sisyphos',
+    policy: 'Easy',
+    policyClass: 'policy-easy',
+    music: 'Deep House',
+    bpm: 120,
+    dressCode: 'Anything Goes',
+    dressBias: [],
+    locked: false,
+    entryPrice: 8,
+    vibeCheck: true,
+    desc: 'Open-air chaos, 48-hour parties, come as you are',
+  },
+  {
+    id: 'sudpol',
+    name: 'Südpol',
+    policy: 'Moderate',
+    policyClass: 'policy-moderate',
+    music: 'Techno',
+    bpm: 130,
+    dressCode: 'Vibe Over Fashion',
+    dressBias: [],
+    locked: false,
+    entryPrice: 10,
+    vibeCheck: true,
+    desc: 'The bouncer reads your energy, not your outfit',
   },
 ];
 
@@ -2750,6 +2806,27 @@ const TRAIT_DEFS = {
   'Street Cred':     { px: 'hand', desc: 'Made friends in line — bouncer sees social proof', color: '#ffd86b' },
 };
 
+// ============================================================
+// DJ LINEUP SYSTEM
+// ============================================================
+
+const DJ_POOL = {
+  'Deep House': ['Koze', 'Solomun', 'Dixon', 'Âme', 'Mano Le Tough', 'DJ Kicks', 'Satori'],
+  'Techno': ['DJ Synthax', 'Blawan', 'Rebekah', 'Kobosil', 'FJAAK', 'Ellen Allien', 'Shed'],
+  'Drum & Bass': ['Noisia', 'Camo & Krooked', 'Calibre', 'High Contrast', 'Alix Perez', 'Roni Size'],
+  'Tech-House': ['Fisher', 'Patrick Topping', 'Hot Since 82', 'Jamie Jones', 'Solardo'],
+  'Minimal Techno': ['Ricardo Villalobos', 'Zip', 'Luciano', 'Akiko Kiyama', 'Petre Inspirescu'],
+  'Industrial': ['Ancient Methods', 'Phase Fatale', 'Headless Horseman', 'Karenn', 'Perc'],
+};
+
+function getTonightsDJs(venue) {
+  const pool = DJ_POOL[venue.music] || DJ_POOL['Techno'];
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return { headliner: shuffled[0], support: shuffled.slice(1, 3) };
+}
+
+let tonightsDJs = null;
+
 const NEIGHBOR_NAMES = ['Marco', 'Lena', 'Tariq', 'Yuki', 'Priya', 'Jonas', 'Nadia', 'Emre', 'Sofia', 'Dex', 'Aisha', 'Viktor', 'Luna', 'Chen', 'Zara', 'Ravi', 'Ingrid', 'Kwame', 'Mika', 'Freya'];
 const DISPOSITIONS = ['friendly', 'neutral', 'hostile', 'drunk', 'anxious'];
 const DISP_WEIGHTS = [0.25, 0.2, 0.15, 0.25, 0.15];
@@ -2844,11 +2921,12 @@ function generateNeighbor(venueId, existingIntel) {
 }
 
 function resolveIntelText(text) {
+  const djs = tonightsDJs || { headliner: 'Koze', support: ['DJ Synthax'] };
   return text.replace('{bouncer}', 'Florian').replace('{quirk}', 'people who seem too eager')
-    .replace('{bad_shoes}', 'white sneakers').replace('{dj_name}', 'DJ Synthax')
+    .replace('{bad_shoes}', 'white sneakers').replace('{dj_name}', djs.support[0] || 'DJ Synthax')
     .replace('{n}', '3').replace('{password}', 'Systematic Review')
     .replace('{mood}', 'strict').replace('{advice}', 'Be confident but not cocky')
-    .replace('{code}', '4-7-2').replace('{headliner}', 'Koze');
+    .replace('{code}', '4-7-2').replace('{headliner}', djs.headliner);
 }
 
 function buildNeighborSystemPrompt(neighbor, venue) {
@@ -2909,6 +2987,23 @@ Remember: 1-2 sentences max per reply. Stay in character. Your quirk (${neighbor
 }
 
 // ============================================================
+// OUTFIT / WARDROBE SYSTEM
+// ============================================================
+
+const WARDROBE = [
+  { id: 'leather_jacket', name: 'Black Leather Jacket', styles: ['Dark Minimal', 'Chains'], price: 20, icon: 'shield', iconColor: '#666', groupBonus: 0, desc: 'Classic. Never wrong at a dark venue.' },
+  { id: 'vintage_sneakers', name: 'Vintage Sneakers', styles: ['Streetwear', 'Eccentric'], price: 15, icon: 'star', iconColor: '#fd9927', groupBonus: 0, desc: 'Loud but fun. Not for All Black venues.' },
+  { id: 'designer_watch', name: 'Designer Watch', styles: ['Smart Casual', 'Designer'], price: 30, icon: 'clock', iconColor: '#ffd86b', groupBonus: 0, desc: 'Subtle flex. Boardroom approved.' },
+  { id: 'band_tee', name: 'Obscure Band Tee', styles: ['No Logo', 'Eccentric'], price: 10, icon: 'note', iconColor: '#7b75ff', groupBonus: 0, desc: 'Shows you have taste. Or pretend to.' },
+  { id: 'gold_chain', name: 'Gold Chain', styles: ['Chains', 'Bold'], price: 25, icon: 'diamond', iconColor: '#ffd86b', groupBonus: 0, desc: 'Drip. Pure drip.' },
+  { id: 'flask', name: 'Hip Flask', styles: [], price: 12, icon: 'beer', iconColor: '#fd9927', groupBonus: 3, desc: 'Share drinks, boost morale. +3 group hope.' },
+  { id: 'bluetooth_speaker', name: 'Portable Speaker', styles: [], price: 18, icon: 'sound', iconColor: '#57f2ff', groupBonus: 5, desc: 'Pre-game in the queue. +5 group hope.' },
+  { id: 'hand_warmers', name: 'Hand Warmers', styles: [], price: 8, icon: 'fire', iconColor: '#ff6b35', groupBonus: 0, warmthBonus: 20, desc: 'Keep warm. Squad warmth +20.' },
+  { id: 'polaroid', name: 'Instant Camera', styles: ['Eccentric', 'Vintage'], price: 15, icon: 'eye', iconColor: '#ff69b4', groupBonus: 2, desc: 'Take pics in line. +bond gains, +2 hope.' },
+  { id: 'lucky_charm', name: 'Lucky Charm', styles: [], price: 20, icon: 'star', iconColor: '#39ff14', groupBonus: 0, luckBonus: 5, desc: 'A little extra luck. +5% flake reduction.' },
+];
+
+// ============================================================
 // SAVE / PROGRESSION SYSTEM
 // ============================================================
 
@@ -2925,6 +3020,9 @@ const SaveSystem = {
       totalSuccesses: 0,
       bonds: {},
       contactStats: {},
+      ownedOutfits: [],
+      equippedOutfits: [],
+      djHistory: {},
     };
   },
 
@@ -3923,6 +4021,33 @@ function renderLoadout() {
 
   $('budget-display').innerHTML = `<span class="currency">$</span>${state.cash}`;
 
+  // Wardrobe section
+  const prog = SaveSystem.load();
+  container.innerHTML += `<div class="section-header" style="padding-top:12px;">Wardrobe</div>`;
+  container.innerHTML += WARDROBE.map(w => {
+    const owned = prog.ownedOutfits.includes(w.id);
+    const equipped = prog.equippedOutfits.includes(w.id);
+    const canBuy = !owned && state.cash >= w.price;
+    return `
+      <div class="item-card" style="${equipped ? 'border-color:var(--neon-green);background:rgba(57,255,20,0.04);' : ''}">
+        <div class="item-left">
+          <div class="item-icon">${PX.i(w.icon, w.iconColor, 20)}</div>
+          <div class="item-info">
+            <div class="item-name">${w.name} ${equipped ? '<span style="color:var(--neon-green);font-size:10px;">EQUIPPED</span>' : ''}</div>
+            <div class="item-desc">${w.desc}</div>
+            ${w.styles.length > 0 ? `<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap;">${w.styles.map(s => `<span class="style-pill">${s}</span>`).join('')}</div>` : ''}
+          </div>
+        </div>
+        <div class="item-right">
+          ${owned
+            ? `<button class="item-btn" style="width:auto;padding:0 8px;font-size:10px;${equipped ? 'color:var(--neon-green);border-color:var(--neon-green);' : ''}" data-wardrobe="${w.id}">${equipped ? 'ON' : 'OFF'}</button>`
+            : `<button class="item-btn" style="width:auto;padding:0 8px;font-size:10px;color:var(--neon-gold);" data-buy-wardrobe="${w.id}" ${!canBuy ? 'disabled' : ''}>$${w.price}</button>`
+          }
+        </div>
+      </div>
+    `;
+  }).join('');
+
   const note = $('loadout-note');
   if (hasRissal) {
     note.textContent = "Rissal brings a free gum & lighter — the chill coder always comes prepared";
@@ -3952,6 +4077,38 @@ function renderLoadout() {
       }
       renderLoadout();
       updateConfirmBar();
+    });
+  });
+
+  // Wardrobe: buy
+  container.querySelectorAll('[data-buy-wardrobe]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wId = btn.dataset.buyWardrobe;
+      const w = WARDROBE.find(i => i.id === wId);
+      if (!w || state.cash < w.price) return;
+      state.cash -= w.price;
+      const p = SaveSystem.load();
+      p.ownedOutfits.push(wId);
+      p.equippedOutfits.push(wId);
+      SaveSystem.save(p);
+      showToast(`Bought ${w.name}`, 1500);
+      renderLoadout();
+      updateConfirmBar();
+    });
+  });
+
+  // Wardrobe: toggle equip
+  container.querySelectorAll('[data-wardrobe]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wId = btn.dataset.wardrobe;
+      const p = SaveSystem.load();
+      const idx = p.equippedOutfits.indexOf(wId);
+      if (idx >= 0) p.equippedOutfits.splice(idx, 1);
+      else p.equippedOutfits.push(wId);
+      SaveSystem.save(p);
+      renderLoadout();
     });
   });
 }
@@ -4961,6 +5118,93 @@ const ScriptedChat = {
 };
 
 // ============================================================
+// GROUP CHAT BANTER
+// ============================================================
+
+const GroupChat = {
+  lastSpeaker: null,
+
+  SCRIPTED: {
+    cold: [
+      "{name}: bro it's freezing out here",
+      "{name}: my hands are literally numb",
+      "{name}: should've worn more layers",
+      "{name}: anyone got hand warmers?",
+    ],
+    bored: [
+      "{name}: how long have we been here",
+      "{name}: this line is not moving",
+      "{name}: I swear we haven't moved in 20 min",
+      "{name}: are they even letting people in??",
+    ],
+    hopeful: [
+      "{name}: ok it's moving!! let's go",
+      "{name}: we're getting closer, I can feel it",
+      "{name}: the music sounds so good from here",
+      "{name}: I can see the door now",
+    ],
+    anxious: [
+      "{name}: what if they don't let us in",
+      "{name}: do I look ok? be honest",
+      "{name}: I heard the bouncer's been tough tonight",
+      "{name}: maybe we should have gone somewhere else",
+    ],
+    vibing: [
+      "{name}: this pre-game energy is fire",
+      "{name}: best crew, best night",
+      "{name}: no matter what happens, glad we came",
+      "{name}: ok honestly this wait is kind of fun with you guys",
+    ],
+    substance: [
+      "{name}: yo that glitter is hitting",
+      "{name}: everything looks so... nice",
+      "{name}: I love you guys. seriously.",
+      "{name}: the bass is vibrating through the pavement",
+    ],
+  },
+
+  async maybeSay() {
+    if (Math.random() > 0.6) return;
+    if (state.finalSquad.length === 0) return;
+
+    // Pick a squad member (not the same one twice in a row)
+    const candidates = state.finalSquad.filter(m => m.name !== this.lastSpeaker);
+    const speaker = candidates[Math.floor(Math.random() * candidates.length)] || state.finalSquad[0];
+    this.lastSpeaker = speaker.name;
+
+    let msg = '';
+
+    if (LLM.loaded && !state.llm.scripted && Math.random() < 0.5) {
+      const contact = CONTACTS.find(c => c.name === speaker.name);
+      const venue = VENUES.find(v => v.id === state.selectedVenue);
+      try {
+        msg = await LLM.chat([
+          { role: 'system', content: `You are ${speaker.name}, texting in a group chat while waiting in line at ${venue?.name || 'a club'}. Your personality: ${contact?.trait || 'chill'}. You like ${contact?.musicPref || 'music'}. Current mood: hope is ${Math.round(state.queue.hope)}%, anxiety is ${Math.round(state.queue.anxiety)}%. Position in queue: ${state.queue.position}. Write ONE short text message (max 10 words). Be casual, funny, in-character. No emojis. No quotes.` },
+        ], 30);
+        if (msg) msg = `${speaker.name}: ${msg.replace(/^["']|["']$/g, '').trim()}`;
+      } catch (e) { msg = ''; }
+    }
+
+    if (!msg) {
+      // Scripted fallback based on state
+      let pool;
+      const hasSubstance = state.queue.activeTraits.some(t => ['The Vibe', 'Motor Mouth', 'Big Energy'].includes(t));
+      if (hasSubstance && Math.random() < 0.3) pool = this.SCRIPTED.substance;
+      else if (state.queue.hope > 60) pool = Math.random() < 0.5 ? this.SCRIPTED.hopeful : this.SCRIPTED.vibing;
+      else if (state.queue.anxiety > 50) pool = this.SCRIPTED.anxious;
+      else if (state.queue.turnCount > 4) pool = this.SCRIPTED.bored;
+      else pool = this.SCRIPTED.cold;
+      msg = pool[Math.floor(Math.random() * pool.length)].replace('{name}', speaker.name);
+    }
+
+    if (msg) {
+      showToast(msg, 3000);
+      EventLog.add(msg, 'info');
+    }
+  },
+};
+
+// ============================================================
 // PHASE 1: QUEUE ENGINE
 // ============================================================
 
@@ -5257,6 +5501,11 @@ const QueueEngine = {
     this.advanceTime(5);
     this.processDelayedEffects();
     this.updateMeters();
+
+    // Group chat banter from squad
+    if (state.finalSquad.length > 0) {
+      await GroupChat.maybeSay();
+    }
 
     await sleep(600);
 
@@ -5729,7 +5978,7 @@ const EXCHANGE_POOL = [
     id: 'music_test', category: 'knowledge', weight: 9,
     lines: { florian: '"You know who\'s spinning tonight?"', marko: '"What kind of music we play here?"', kai: '"Quick — name one DJ on the lineup."', silent: '*glances at a flyer on the wall, then back at you*', mira: '"Are you familiar with tonight\'s program?"' },
     options: [
-      { text: '"Koze is headlining. Can\'t miss that set."', score: 30, intel: 'dj_set' },
+      { text: () => `"${tonightsDJs?.headliner || 'Koze'} is headlining. Can't miss that set."`, score: 30, intel: 'dj_set' },
       { text: '"I heard it\'s going to be good tonight."', score: 5 },
       { text: '"I dunno, whatever\'s on."', score: -15 },
     ],
@@ -5843,12 +6092,35 @@ const BouncerSystem = {
   },
 
   calcStyleMatch(venue) {
-    if (!venue?.dressBias) return 0;
+    // Vibe-check venues don't care about outfits — they care about group energy
+    if (venue?.vibeCheck) {
+      let vibeScore = 0;
+      vibeScore += state.finalSquad.length * 5;
+      const avgBond = SaveSystem.getSquadBondAvg(state.finalSquad.map(m => CONTACTS.find(c => c.name === m.name)?.id).filter(Boolean));
+      vibeScore += Math.floor(avgBond / 10);
+      // Equipped group-vibe items help
+      const prog = SaveSystem.load();
+      prog.equippedOutfits.forEach(id => {
+        const w = WARDROBE.find(i => i.id === id);
+        if (w?.groupBonus) vibeScore += w.groupBonus;
+      });
+      return Math.min(20, vibeScore);
+    }
+
+    if (!venue?.dressBias || venue.dressBias.length === 0) return 0;
+
     const squadStyles = [];
     state.finalSquad.forEach(s => {
       const contact = CONTACTS.find(c => c.id === s.id || c.name === s.name);
       if (contact?.styles) squadStyles.push(...contact.styles);
     });
+    // Add styles from equipped wardrobe items
+    const prog = SaveSystem.load();
+    prog.equippedOutfits.forEach(id => {
+      const w = WARDROBE.find(i => i.id === id);
+      if (w?.styles) squadStyles.push(...w.styles);
+    });
+
     const matches = squadStyles.filter(s => venue.dressBias.includes(s)).length;
     const total = squadStyles.length || 1;
     const ratio = matches / total;
@@ -6005,8 +6277,9 @@ const BouncerSystem = {
       let bonusText = '';
       if (opt.trait && hasTrait(opt.trait)) bonusText = ' (+bonus)';
 
-      if (!available) return `<button class="bouncer-opt" disabled title="Requires intel: ${opt.intel}">🔒 [Need intel]</button>`;
-      return `<button class="bouncer-opt ${isIntel ? 'intel-opt' : ''}" data-idx="${i}">${opt.text}${bonusText}</button>`;
+      const optText = typeof opt.text === 'function' ? opt.text() : opt.text;
+      if (!available) return `<button class="bouncer-opt" disabled title="Requires intel: ${opt.intel}">${PX.i('key','#666',12)} [Need intel]</button>`;
+      return `<button class="bouncer-opt ${isIntel ? 'intel-opt' : ''}" data-idx="${i}">${optText}${bonusText}</button>`;
     }).join('');
 
     $('bouncer-options').innerHTML = optionsHtml;
@@ -6067,8 +6340,9 @@ const BouncerSystem = {
         clickedBtn.classList.add(scoreDelta >= 20 ? 'picked-good' : scoreDelta >= 0 ? 'picked-neutral' : 'picked-bad');
       }
 
+      const optText = typeof opt.text === 'function' ? opt.text() : opt.text;
       const verb = scoreDelta >= 20 ? 'Great answer' : scoreDelta >= 0 ? 'Okay answer' : 'Bad answer';
-      EventLog.add(`${verb}: "${opt.text}" (${scoreDelta >= 0 ? '+' : ''}${scoreDelta})`, scoreDelta >= 0 ? 'positive' : 'negative');
+      EventLog.add(`${verb}: "${optText}" (${scoreDelta >= 0 ? '+' : ''}${scoreDelta})`, scoreDelta >= 0 ? 'positive' : 'negative');
     }
 
     this.approval += scoreDelta;
@@ -6118,9 +6392,11 @@ const BouncerSystem = {
         ClubAudio.lpFilter.frequency.exponentialRampToValueAtTime(80, now + 1.0);
       }
 
-      await sleep(2500);
-
+      await sleep(2000);
       $('bouncer-screen').classList.remove('active');
+
+      // Walk of shame before result
+      await WalkOfShame.play();
       this.showResult(false, venue);
     }
   },
@@ -6184,6 +6460,95 @@ const BouncerSystem = {
       }
       restartPlanning();
     };
+  },
+};
+
+// ============================================================
+// WALK OF SHAME
+// ============================================================
+
+const WalkOfShame = {
+  QUOTES: [
+    '"Maybe next Friday."',
+    '"The walk home is always longer than the walk there."',
+    '"At least the döner place is still open."',
+    '"It\'s not about getting in. It\'s about the friends we didn\'t lose along the way."',
+    '"The night is young. You are not."',
+    '"There\'s always Sisyphos."',
+    '"You replay the bouncer\'s face in your mind. Cold."',
+    '"The bass fades behind you. Someone else\'s night now."',
+  ],
+
+  async play() {
+    const overlay = $('shame-overlay');
+    const canvas = $('shame-canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    $('shame-text').textContent = this.QUOTES[Math.floor(Math.random() * this.QUOTES.length)];
+    overlay.classList.add('active');
+
+    const W = 200, H = 100;
+    const squadCount = 1 + state.finalSquad.length;
+    let frame = 0;
+
+    const draw = () => {
+      if (frame > 180) {
+        overlay.classList.remove('active');
+        return;
+      }
+      frame++;
+
+      // Night sky
+      ctx.fillStyle = '#030210';
+      ctx.fillRect(0, 0, W, H);
+
+      // Stars
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      for (let i = 0; i < 15; i++) {
+        ctx.fillRect((i * 17) % W, (i * 11) % 40, 1, 1);
+      }
+
+      // Ground
+      ctx.fillStyle = '#0a0918';
+      ctx.fillRect(0, 75, W, 25);
+      ctx.fillStyle = '#14122a';
+      ctx.fillRect(0, 75, W, 2);
+
+      // Street lamp (fading behind)
+      const lampX = W - 30 - frame * 0.3;
+      if (lampX > -20) {
+        ctx.fillStyle = '#1c1940';
+        ctx.fillRect(lampX, 35, 2, 40);
+        ctx.fillStyle = 'rgba(255,216,107,0.06)';
+        ctx.beginPath();
+        ctx.arc(lampX + 1, 36, 12, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Walking figures (silhouettes, heads down)
+      for (let i = 0; i < squadCount; i++) {
+        const x = 60 + i * 16 + Math.sin(frame * 0.08 + i) * 2;
+        const y = 58;
+        const bob = Math.abs(Math.sin(frame * 0.1 + i * 2)) * 2;
+
+        ctx.fillStyle = '#1a1730';
+        // Head (tilted down)
+        ctx.fillRect(x, y - 8 + bob, 4, 4);
+        // Body
+        ctx.fillRect(x - 1, y - 4 + bob, 6, 8);
+        // Legs (walking)
+        const legPhase = Math.sin(frame * 0.15 + i);
+        ctx.fillRect(x + (legPhase > 0 ? 0 : 2), y + 4 + bob, 2, 6);
+        ctx.fillRect(x + (legPhase > 0 ? 2 : 0), y + 4 + bob, 2, 6);
+      }
+
+      requestAnimationFrame(draw);
+    };
+    draw();
+
+    await sleep(6000);
+    overlay.classList.remove('active');
   },
 };
 
@@ -6404,14 +6769,27 @@ async function enterQueue() {
   const entryCost = venue.entryPrice * (1 + state.finalSquad.length);
   state.cash = Math.max(0, state.cash - entryCost);
 
+  // Apply wardrobe bonuses
+  const prog = SaveSystem.load();
+  let wardrobeHope = 0;
+  let wardrobeWarmth = 0;
+  prog.equippedOutfits.forEach(id => {
+    const w = WARDROBE.find(i => i.id === id);
+    if (w?.groupBonus) wardrobeHope += w.groupBonus;
+    if (w?.warmthBonus) wardrobeWarmth += w.warmthBonus;
+  });
+
   const groupBonus = state.finalSquad.length * 3;
-  state.queue.hope = Math.min(100, 70 + groupBonus);
+  state.queue.hope = Math.min(100, 70 + groupBonus + wardrobeHope);
   state.queue.anxiety = Math.max(5, 10 - state.finalSquad.length);
   state.queue.gameTime = 23 * 60 + 35;
   state.queue.revealedIntel = [];
   state.queue.turnCount = 0;
   state.queue.beerDebuff = false;
   state.queue.actionLocked = false;
+  // Generate tonight's DJ lineup
+  tonightsDJs = getTonightsDJs(venue);
+
   state.queue.neighborFront = generateNeighbor(state.selectedVenue, []);
   state.queue.neighborBack = generateNeighbor(state.selectedVenue, []);
   state.queue.activeTraits = [];
@@ -6476,6 +6854,7 @@ function startQueuePhase(venue, cfg) {
 
   EventLog.clear();
   EventLog.add(`Arrived outside ${venue.name}. Position ${cfg.startPos} in line.`, 'info');
+  EventLog.add(`Tonight's lineup: ${tonightsDJs.headliner} (headliner), ${tonightsDJs.support.join(', ')}`, 'info');
   if (state.finalSquad.length > 0) {
     EventLog.add(`Squad: ${state.finalSquad.map(s => s.name).join(', ')}`, 'info');
   } else {
