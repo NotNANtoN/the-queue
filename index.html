@@ -1858,6 +1858,7 @@ const VENUES = [
     dressCode: 'Dark Minimal',
     dressBias: ['Dark Minimal', 'No Logo'],
     locked: false,
+    entryPrice: 10,
     desc: 'Underground vibes, low ceilings, warm crowd',
   },
   {
@@ -1870,6 +1871,7 @@ const VENUES = [
     dressCode: 'All Black, No Logos',
     dressBias: ['All Black', 'No Logo', 'Dark Minimal'],
     locked: false,
+    entryPrice: 15,
     desc: 'Relentless techno, pitch-black interior, attitude required',
   },
   {
@@ -1882,6 +1884,7 @@ const VENUES = [
     dressCode: 'Streetwear / Eccentric',
     dressBias: ['Streetwear', 'Eccentric', 'Bright Colors'],
     locked: false,
+    entryPrice: 12,
     desc: 'Colorful chaos, fast beats, anything-goes energy',
   },
   {
@@ -1894,6 +1897,7 @@ const VENUES = [
     dressCode: 'Smart Casual, Watches',
     dressBias: ['Smart Casual', 'Designer'],
     locked: true,
+    entryPrice: 25,
   },
   {
     id: 'florians',
@@ -1905,6 +1909,7 @@ const VENUES = [
     dressCode: 'Invite-Only Aura',
     dressBias: ['Understated', 'Dark Minimal'],
     locked: true,
+    entryPrice: 30,
   },
   {
     id: 'audit',
@@ -1916,6 +1921,7 @@ const VENUES = [
     dressCode: 'Full Uniform or Nothing',
     dressBias: ['All Black', 'Chains'],
     locked: true,
+    entryPrice: 40,
   },
 ];
 
@@ -3280,6 +3286,7 @@ function renderVenues() {
         <div class="venue-meta">
           <span class="venue-tag">🎵 ${v.music}</span>
           <span class="venue-tag">⏱ ${v.bpm} BPM</span>
+          <span class="venue-tag" style="color:var(--neon-gold)">💰 $${v.entryPrice}/person</span>
         </div>
         <div class="venue-dress">Dress code: ${v.dressCode}</div>
         ${v.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${v.desc}</div>` : ''}
@@ -3488,6 +3495,12 @@ function renderLoadout() {
 // CONFIRM BAR
 // ============================================================
 
+function getEntryCost() {
+  const venue = VENUES.find(v => v.id === state.selectedVenue);
+  if (!venue) return 0;
+  return venue.entryPrice * (1 + state.selectedSquad.length);
+}
+
 function updateConfirmBar() {
   const btn = $('confirm-btn');
   const summary = $('confirm-summary');
@@ -3501,14 +3514,30 @@ function updateConfirmBar() {
   }
 
   const squadCount = state.selectedSquad.length;
-  const itemCount = Object.values(state.inventory).reduce((a, b) => a + b, 0);
+  const headCount = 1 + squadCount;
+  const entryCost = venue.entryPrice * headCount;
+  const itemCost = Object.entries(state.inventory).reduce((sum, [id, qty]) => {
+    const item = [...ITEMS, ...KIOSK_ITEMS].find(i => i.id === id);
+    return sum + (item ? item.price * qty : 0);
+  }, 0);
+  const totalSpent = itemCost;
+  const canAfford = state.cash >= entryCost;
+
   const parts = [venue.name];
+  parts.push(`$${entryCost} entry (${headCount}×$${venue.entryPrice})`);
   if (squadCount > 0) parts.push(`${squadCount} friend${squadCount > 1 ? 's' : ''}`);
-  if (itemCount > 0) parts.push(`${itemCount} item${itemCount > 1 ? 's' : ''}`);
   summary.textContent = parts.join(' · ');
 
-  btn.disabled = false;
-  btn.classList.add('ready');
+  if (!canAfford) {
+    summary.textContent += ' — NOT ENOUGH CASH';
+    summary.style.color = 'var(--neon-pink)';
+    btn.disabled = true;
+    btn.classList.remove('ready');
+  } else {
+    summary.style.color = '';
+    btn.disabled = false;
+    btn.classList.add('ready');
+  }
 }
 
 // ============================================================
@@ -3566,6 +3595,10 @@ async function startFlakeRoll() {
       if (contact.musicPref === venue.music) effectiveFlake -= 15;
       else effectiveFlake += 10;
     }
+
+    // Expensive venues → higher flake (not everyone wants to pay $30+)
+    if (venue?.entryPrice >= 25) effectiveFlake += 10;
+    else if (venue?.entryPrice >= 15) effectiveFlake += 3;
 
     // Bond with player: every 20 bond points → -5% flake
     const playerBond = SaveSystem.getBond('player', contact.id);
@@ -5673,6 +5706,10 @@ async function enterQueue() {
 
   // Initialize queue state
   state.queue.position = cfg.startPos;
+  // Deduct entry cost only for people who actually showed up
+  const entryCost = venue.entryPrice * (1 + state.finalSquad.length);
+  state.cash = Math.max(0, state.cash - entryCost);
+
   const groupBonus = state.finalSquad.length * 3;
   state.queue.hope = Math.min(100, 70 + groupBonus);
   state.queue.anxiety = Math.max(5, 10 - state.finalSquad.length);
