@@ -1,0 +1,54 @@
+# The Queue: Access Granted
+
+Single-file browser game (`index.html`). No build step, no dependencies beyond CDN links.
+
+## Project Context
+
+A tactical social-engineering roguelite about standing in line for clubs, gathering intel, managing squad anxiety, and facing off against bouncers in timed dialogue duels.
+
+**Game Design Doc**: `GAME_DESIGN.md` in project root — READ THIS FIRST for full mechanics.
+**MVP Plan**: `README.md` in project root — high-level phase overview.
+
+## Tech Stack
+
+- Single `index.html` file (HTML + CSS + JS, same approach as the `turbokart` sibling project)
+- No framework, no bundler, no npm
+- Web Audio API for procedural music (lowpass-filtered club bass that opens on success)
+- Canvas 2D for the queue visualization (top-down line of people)
+- HTML/CSS overlays for phone UI, dialogue trees, and menus
+- `localStorage` for save state (unlocked venues, contacts, reputation, cash)
+- State machine: `PLANNING → FLAKE_ROLL → QUEUE → BOUNCER → RESULT`
+
+## Design Principles
+
+- The queue MUST feel psychologically real: long stalls punctuated by sudden hope bursts
+- Audio is critical — the muffled bass through walls is the emotional core
+- Dialogue choices are timed (4–8s) to create pressure
+- Intel gathered in line directly determines bouncer success probability
+- Procedural generation: neighbors, events, bouncer selection are randomized per run
+- The "Flake Roll" after squad selection adds unpredictability before you even arrive
+- Visual style: Regulaido neon aesthetic (deep lavender `#060514`, cyber green `#39ff14`, hot pink `#ff4d6d`, glassmorphic panels)
+
+## Game Loop Summary
+
+1. **Phase 0 (Planning)**: Pick venue, assemble squad (0–3 contacts with traits/flake ratings), buy items
+2. **Flake Roll**: Contacts may bail based on their flake percentage
+3. **Phase 1 (The Queue)**: Manage Hope & Anxiety meters. Talk to neighbors, barter items for Intel. Survive random events. Queue advances in bursts.
+4. **Phase 2 (The Bouncer)**: Timed dialogue duel. Use Intel for correct answers. Style Match gives starting bonus. Approval must reach venue threshold.
+5. **Result**: Success = doors open (audio filter sweep payoff). Failure = "Not tonight." Progression either way (reputation, contact unlocks).
+
+## Key Systems
+
+- **Hope & Despair Engine**: Two meters (Hope 0–100, Anxiety 0–100) that fluctuate based on queue movement and events
+- **Intel System**: Each bouncer has 2–4 hidden conditions. Bartering with neighbors reveals them.
+- **Bouncer Dialogue**: 3–5 timed exchanges, scored (+30 correct/intel, +5 neutral, -20 bad, -15 timeout)
+- **Style Match**: Squad's combined style tags vs venue dress code = starting approval bonus
+- **Contact Traits**: Hype Engine, Connected Promoter, Chill Coder, Fashionista, Chaos Agent, Insider
+
+## Sibling Project Reference
+
+The `turbokart` folder in the parent repo is a 11k-line single-file arcade kart racer with Web Audio procedural music, particle systems, and P2P multiplayer. Use it as reference for:
+- Web Audio API patterns (oscillators, filters, gain nodes)
+- CSS glassmorphic overlay styling
+- Single-file game architecture patterns
+- The Regulaido visual theme colors and fonts

@@ -1,0 +1,5495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>The Queue: Access Granted</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep: #060514;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --bg-card-hover: rgba(255, 255, 255, 0.07);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-glow: rgba(123, 117, 255, 0.25);
+  --text-primary: #fff;
+  --text-secondary: #ebe4ff;
+  --text-muted: #8a8da8;
+  --neon-green: #39ff14;
+  --neon-pink: #ff4d6d;
+  --neon-purple: #7b75ff;
+  --neon-cyan: #57f2ff;
+  --neon-orange: #fd9927;
+  --neon-gold: #ffd86b;
+  --success: #a4ff80;
+  --font-sans: 'PP Object Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* === AMBIENT BACKGROUND === */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 80%, rgba(123, 117, 255, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(255, 77, 109, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(57, 255, 20, 0.03) 0%, transparent 60%);
+  animation: ambientDrift 12s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes ambientDrift {
+  0% { opacity: 0.6; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.1); }
+}
+
+/* === BOOT OVERLAY === */
+.boot-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(14, 12, 38, 0.9) 0%, var(--bg-deep) 80%);
+  cursor: pointer;
+  transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+.boot-overlay.hidden {
+  opacity: 0; visibility: hidden; pointer-events: none;
+}
+.boot-title {
+  font-size: clamp(32px, 8vw, 72px);
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  line-height: 1.1;
+  text-align: center;
+  background: linear-gradient(135deg, var(--neon-purple) 0%, var(--neon-pink) 50%, var(--neon-orange) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 30px rgba(123, 117, 255, 0.4));
+  margin-bottom: 8px;
+}
+.boot-subtitle {
+  font-size: clamp(14px, 2vw, 20px);
+  color: var(--neon-gold);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 48px;
+}
+.boot-prompt {
+  font-size: 14px;
+  color: var(--text-muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* === PHONE CONTAINER === */
+.phone-container {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.5s ease 0.3s;
+  pointer-events: none;
+}
+.phone-container.active {
+  opacity: 1; pointer-events: auto;
+}
+
+.phone {
+  position: relative;
+  width: 100%; max-width: 420px;
+  height: 92vh; max-height: 820px;
+  border-radius: 36px;
+  background: rgba(8, 6, 26, 0.85);
+  border: 1px solid rgba(123, 117, 255, 0.12);
+  box-shadow:
+    0 0 60px rgba(123, 117, 255, 0.08),
+    0 0 120px rgba(255, 77, 109, 0.04),
+    0 30px 80px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+/* Notch */
+.phone::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 140px; height: 28px;
+  background: var(--bg-deep);
+  border-radius: 0 0 18px 18px;
+  z-index: 5;
+}
+
+/* === STATUS BAR === */
+.status-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 24px 6px;
+  font-size: 12px; font-weight: 600;
+  color: var(--text-secondary);
+  z-index: 4;
+}
+.status-bar .time { font-family: var(--font-mono); }
+.status-bar .indicators {
+  display: flex; gap: 6px; align-items: center;
+  font-family: var(--font-mono); font-size: 11px;
+}
+
+/* === APP HEADER === */
+.app-header {
+  padding: 12px 20px 14px;
+  text-align: center;
+}
+.app-header h1 {
+  font-size: 20px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  background: linear-gradient(90deg, var(--neon-purple), var(--neon-pink));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.app-header .night-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* === TAB CONTENT AREA === */
+.tab-viewport {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+.tab-slider {
+  display: flex;
+  width: 300%;
+  height: 100%;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tab-panel {
+  width: calc(100% / 3);
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 16px 120px;
+  scrollbar-width: none;
+}
+.tab-panel::-webkit-scrollbar { display: none; }
+
+/* === BOTTOM NAV === */
+.bottom-nav {
+  display: flex;
+  background: rgba(8, 6, 26, 0.95);
+  border-top: 1px solid var(--border-subtle);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 5;
+}
+.nav-tab {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 0 12px;
+  background: none; border: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  position: relative;
+}
+.nav-tab .icon { font-size: 20px; }
+.nav-tab.active { color: var(--neon-purple); }
+.nav-tab.active::after {
+  content: "";
+  position: absolute; top: 0; left: 20%; right: 20%;
+  height: 2px;
+  background: var(--neon-purple);
+  border-radius: 0 0 2px 2px;
+  box-shadow: 0 0 8px rgba(123, 117, 255, 0.5);
+}
+.nav-tab .badge-count {
+  position: absolute; top: 4px; right: 50%; transform: translateX(16px);
+  background: var(--neon-pink);
+  color: #fff;
+  font-size: 9px; font-weight: 800;
+  min-width: 16px; height: 16px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px;
+  box-shadow: 0 0 8px rgba(255, 77, 109, 0.5);
+}
+
+/* === CONFIRM BAR === */
+.confirm-bar {
+  padding: 12px 16px 16px;
+  background: rgba(8, 6, 26, 0.95);
+  border-top: 1px solid var(--border-subtle);
+  z-index: 5;
+}
+.confirm-summary {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+  min-height: 16px;
+}
+.confirm-btn {
+  width: 100%;
+  padding: 14px 24px;
+  border: none; border-radius: 16px;
+  font-family: var(--font-sans);
+  font-size: 15px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+.confirm-btn.ready {
+  background: linear-gradient(135deg, var(--neon-purple), var(--neon-pink));
+  color: #fff;
+  box-shadow: 0 8px 32px rgba(123, 117, 255, 0.3);
+}
+.confirm-btn.ready:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 40px rgba(123, 117, 255, 0.45);
+}
+.confirm-btn.ready:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* === SECTION HEADERS === */
+.section-header {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  padding: 16px 4px 10px;
+  font-weight: 600;
+}
+
+/* === VENUE CARDS === */
+.venue-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  overflow: hidden;
+}
+.venue-card::before {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: 16px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.venue-card:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.venue-card.selected {
+  border-color: var(--neon-purple);
+  background: rgba(123, 117, 255, 0.06);
+  box-shadow: 0 0 24px rgba(123, 117, 255, 0.12), inset 0 0 24px rgba(123, 117, 255, 0.03);
+}
+.venue-card.locked {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+.venue-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 10px;
+}
+.venue-name {
+  font-size: 17px; font-weight: 800;
+  letter-spacing: 0.5px;
+}
+.venue-policy {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.policy-easy {
+  background: rgba(57, 255, 20, 0.12);
+  color: var(--neon-green);
+  border: 1px solid rgba(57, 255, 20, 0.2);
+}
+.policy-moderate {
+  background: rgba(253, 153, 39, 0.12);
+  color: var(--neon-orange);
+  border: 1px solid rgba(253, 153, 39, 0.2);
+}
+.policy-ruthless {
+  background: rgba(255, 77, 109, 0.12);
+  color: var(--neon-pink);
+  border: 1px solid rgba(255, 77, 109, 0.2);
+}
+.policy-nightmare {
+  background: rgba(255, 40, 40, 0.15);
+  color: #ff4444;
+  border: 1px solid rgba(255, 40, 40, 0.25);
+}
+.venue-meta {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 8px;
+}
+.venue-tag {
+  font-size: 11px; font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: flex; align-items: center; gap: 4px;
+}
+.venue-dress {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.venue-locked-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* === CONTACT CARDS === */
+.squad-counter {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 4px;
+}
+.squad-counter .count {
+  font-size: 14px; font-weight: 800;
+  color: var(--neon-purple);
+  font-family: var(--font-mono);
+}
+.squad-counter .label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.contact-card {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.contact-card:hover {
+  background: var(--bg-card-hover);
+}
+.contact-card.selected {
+  border-color: var(--neon-green);
+  background: rgba(57, 255, 20, 0.04);
+  box-shadow: 0 0 16px rgba(57, 255, 20, 0.08);
+}
+.contact-card.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.contact-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 800;
+  flex-shrink: 0;
+  position: relative;
+}
+.contact-avatar .check {
+  position: absolute; bottom: -2px; right: -2px;
+  width: 18px; height: 18px;
+  background: var(--neon-green);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  color: #000;
+  opacity: 0; transform: scale(0);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.contact-card.selected .check {
+  opacity: 1; transform: scale(1);
+}
+.contact-info { flex: 1; min-width: 0; }
+.contact-name {
+  font-size: 14px; font-weight: 700;
+  margin-bottom: 3px;
+}
+.contact-trait {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+.contact-details {
+  display: flex; flex-wrap: wrap; gap: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.contact-details .detail {
+  display: flex; align-items: center; gap: 3px;
+}
+.anxiety-bar {
+  width: 48px; height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+}
+.anxiety-bar .fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.contact-styles {
+  display: flex; flex-wrap: wrap; gap: 3px;
+  margin-top: 5px;
+}
+.style-pill {
+  font-size: 9px; font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+.contact-warning {
+  font-size: 10px;
+  color: var(--neon-orange);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* === LOADOUT / ITEMS === */
+.budget-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.budget-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.budget-amount {
+  font-size: 20px; font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--neon-gold);
+}
+.budget-amount .currency { font-size: 14px; }
+
+.item-card {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+.item-left {
+  display: flex; gap: 12px; align-items: center;
+}
+.item-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.item-info {}
+.item-name {
+  font-size: 13px; font-weight: 700;
+  margin-bottom: 2px;
+}
+.item-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.item-right {
+  display: flex; align-items: center; gap: 8px;
+}
+.item-price {
+  font-size: 12px; font-weight: 700;
+  color: var(--neon-gold);
+  font-family: var(--font-mono);
+  min-width: 28px;
+  text-align: right;
+}
+.item-controls {
+  display: flex; align-items: center; gap: 4px;
+}
+.item-btn {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 16px; font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+  font-family: var(--font-sans);
+}
+.item-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--neon-purple);
+}
+.item-btn:disabled {
+  opacity: 0.2; cursor: not-allowed;
+}
+.item-qty {
+  font-size: 14px; font-weight: 800;
+  font-family: var(--font-mono);
+  min-width: 20px;
+  text-align: center;
+  color: var(--text-primary);
+}
+.item-free-tag {
+  font-size: 9px; font-weight: 700;
+  color: var(--neon-green);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.loadout-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px;
+  font-style: italic;
+}
+
+/* === FLAKE ROLL SCREEN === */
+.flake-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  background: var(--bg-deep);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+  overflow-y: auto;
+  padding: 0 20px;
+}
+.flake-overlay.active {
+  opacity: 1; visibility: visible; pointer-events: auto;
+}
+.flake-header {
+  text-align: center;
+  padding-top: max(60px, 12vh);
+  margin-bottom: 32px;
+}
+.flake-time {
+  font-size: clamp(28px, 6vw, 48px);
+  font-weight: 900;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  letter-spacing: 2px;
+}
+.flake-location {
+  font-size: 13px;
+  color: var(--text-muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+.flake-messages {
+  width: 100%; max-width: 380px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.flake-msg {
+  display: flex; gap: 10px; align-items: flex-start;
+  opacity: 0; transform: translateY(16px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.flake-msg.visible {
+  opacity: 1; transform: translateY(0);
+}
+.flake-msg .msg-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800;
+  flex-shrink: 0;
+}
+.flake-msg .msg-bubble {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px 14px 14px 4px;
+  padding: 10px 14px;
+  max-width: 280px;
+}
+.flake-msg .msg-name {
+  font-size: 11px; font-weight: 700;
+  margin-bottom: 3px;
+}
+.flake-msg .msg-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.flake-msg .msg-status {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  margin-top: 4px;
+  display: flex; align-items: center; gap: 4px;
+}
+.msg-status.confirmed { color: var(--neon-green); }
+.msg-status.flaked { color: var(--neon-pink); }
+
+.typing-indicator {
+  display: flex; gap: 4px; padding: 4px 0;
+}
+.typing-indicator span {
+  width: 6px; height: 6px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: typingBounce 1.2s ease-in-out infinite;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+.flake-result {
+  text-align: center;
+  margin-top: 32px;
+  opacity: 0; transform: translateY(16px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  padding-bottom: 40px;
+}
+.flake-result.visible {
+  opacity: 1; transform: translateY(0);
+}
+.flake-result-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+.flake-squad {
+  display: flex; gap: 12px; justify-content: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.flake-squad-member {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.flake-squad-member .member-dot {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 800;
+  box-shadow: 0 0 16px rgba(123, 117, 255, 0.2);
+}
+.flake-squad-member .member-name {
+  font-size: 11px; font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.enter-queue-btn {
+  padding: 16px 48px;
+  border: none; border-radius: 16px;
+  background: linear-gradient(135deg, var(--neon-green), var(--neon-cyan));
+  color: #060514;
+  font-family: var(--font-sans);
+  font-size: 15px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 8px 32px rgba(57, 255, 20, 0.25);
+  transition: all 0.2s ease;
+}
+.enter-queue-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(57, 255, 20, 0.35);
+}
+
+/* === TOAST === */
+.toast {
+  position: fixed;
+  bottom: 100px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: rgba(30, 25, 60, 0.95);
+  border: 1px solid var(--border-glow);
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 12px; font-weight: 600;
+  color: var(--text-secondary);
+  z-index: 60;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.toast.show {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 480px) {
+  .phone {
+    max-width: 100%;
+    height: 100vh; max-height: none;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+  .phone::before { display: none; }
+}
+
+/* === MUTE BUTTON === */
+.mute-btn {
+  position: fixed;
+  top: 12px; right: 12px;
+  z-index: 90;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: rgba(8, 6, 26, 0.8);
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+  opacity: 0; pointer-events: none;
+}
+.mute-btn.visible {
+  opacity: 1; pointer-events: auto;
+}
+.mute-btn:hover {
+  border-color: var(--neon-purple);
+  color: var(--text-primary);
+}
+
+/* === MODEL LOADING SCREEN === */
+.loading-overlay {
+  position: fixed; inset: 0; z-index: 55;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg-deep);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+.loading-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.loading-content { text-align: center; max-width: 360px; padding: 0 24px; }
+.loading-title {
+  font-size: 18px; font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 1px;
+  margin-bottom: 24px;
+}
+.loading-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+.loading-bar-track {
+  width: 100%; height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.loading-bar-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--neon-purple), var(--neon-pink));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.loading-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.loading-skip {
+  margin-top: 32px;
+  padding: 10px 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.loading-skip:hover { border-color: var(--neon-purple); color: var(--text-secondary); }
+
+/* === QUEUE SCREEN === */
+.queue-screen {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; flex-direction: column;
+  background: var(--bg-deep);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+.queue-screen.active { opacity: 1; visibility: visible; pointer-events: auto; }
+
+.queue-canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+#queue-canvas {
+  width: 100%; height: 100%;
+  display: block;
+}
+
+/* === QUEUE HUD === */
+.queue-hud {
+  padding: 12px 16px 8px;
+  background: rgba(8, 6, 26, 0.95);
+  border-top: 1px solid var(--border-subtle);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.queue-info {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+}
+.queue-info .pos-label {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.meters-row {
+  display: flex; gap: 12px;
+  margin-bottom: 8px;
+}
+.meter {
+  flex: 1;
+  display: flex; align-items: center; gap: 8px;
+}
+.meter-label {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  min-width: 52px;
+}
+.meter-bar {
+  flex: 1; height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.hope-meter .meter-label { color: var(--neon-green); }
+.hope-meter .meter-fill { background: linear-gradient(90deg, #2d8a1e, var(--neon-green)); }
+.anxiety-meter .meter-label { color: var(--neon-orange); }
+.anxiety-meter .meter-fill { background: linear-gradient(90deg, var(--neon-orange), var(--neon-pink)); }
+.meter-value {
+  font-size: 12px; font-weight: 800;
+  font-family: var(--font-mono);
+  min-width: 28px;
+  text-align: right;
+}
+
+/* === ACTION PANEL === */
+.action-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px 16px 16px;
+  background: rgba(8, 6, 26, 0.95);
+}
+.action-btn {
+  padding: 14px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px; font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.action-btn .action-icon { font-size: 20px; }
+.action-btn .action-label { font-size: 11px; letter-spacing: 0.5px; }
+.action-btn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 16px rgba(123, 117, 255, 0.1);
+}
+.action-btn:active:not(:disabled) { transform: scale(0.97); }
+.action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.action-btn.warn { border-color: rgba(253, 153, 39, 0.3); }
+
+/* === CHAT OVERLAY === */
+.chat-overlay {
+  position: fixed; inset: 0; z-index: 45;
+  display: flex; flex-direction: column;
+  background: rgba(6, 5, 20, 0.97);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+.chat-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.chat-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.chat-header-left {
+  display: flex; align-items: center; gap: 10px;
+}
+.chat-avatar-sm {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800;
+  overflow: hidden;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+}
+.chat-avatar-sm img {
+  width: 48px; height: 48px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.chat-name { font-size: 15px; font-weight: 700; }
+.chat-disposition {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.chat-close {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.chat-close:hover { border-color: var(--neon-pink); color: var(--neon-pink); }
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  scrollbar-width: none;
+}
+.chat-messages::-webkit-scrollbar { display: none; }
+.chat-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  animation: bubbleIn 0.25s ease;
+}
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.chat-bubble.player {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--neon-purple), rgba(123, 117, 255, 0.6));
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.chat-bubble.npc {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  border-bottom-left-radius: 4px;
+}
+.chat-bubble.system-msg {
+  align-self: center;
+  background: rgba(57, 255, 20, 0.08);
+  border: 1px solid rgba(57, 255, 20, 0.15);
+  color: var(--neon-green);
+  font-size: 12px; font-weight: 600;
+  text-align: center;
+  max-width: 90%;
+  letter-spacing: 0.5px;
+}
+.chat-bubble.system-msg.negative {
+  background: rgba(255, 77, 109, 0.08);
+  border-color: rgba(255, 77, 109, 0.15);
+  color: var(--neon-pink);
+}
+.chat-typing {
+  align-self: flex-start;
+  padding: 10px 14px;
+}
+.chat-input-area {
+  display: flex; gap: 8px;
+  padding: 12px 16px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(8, 6, 26, 0.95);
+}
+.chat-input {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.chat-input:focus { border-color: var(--neon-purple); }
+.chat-input::placeholder { color: var(--text-muted); }
+.chat-send {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--neon-purple), var(--neon-pink));
+  color: #fff;
+  font-size: 16px; font-weight: 800;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.chat-send:hover { transform: scale(1.05); }
+.chat-send:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* === EVENT OVERLAY === */
+.event-overlay {
+  position: fixed; inset: 0; z-index: 46;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 5, 20, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  padding: 20px;
+}
+.event-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.event-card {
+  background: rgba(20, 18, 45, 0.95);
+  border: 1px solid var(--border-glow);
+  border-radius: 20px;
+  padding: 28px 24px;
+  max-width: 360px; width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(123, 117, 255, 0.08);
+  animation: eventSlide 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes eventSlide {
+  from { opacity: 0; transform: scale(0.9) translateY(20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.event-icon { font-size: 40px; margin-bottom: 12px; }
+.event-title {
+  font-size: 18px; font-weight: 800;
+  letter-spacing: 1px; text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.event-desc {
+  font-size: 13px; color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.event-effects {
+  font-size: 11px; font-weight: 700;
+  font-family: var(--font-mono);
+  margin-bottom: 16px;
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+}
+.effect-tag {
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+}
+.effect-tag.positive { background: rgba(57, 255, 20, 0.1); color: var(--neon-green); }
+.effect-tag.negative { background: rgba(255, 77, 109, 0.1); color: var(--neon-pink); }
+.event-choices {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.event-choice-btn {
+  padding: 12px 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+.event-choice-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--neon-purple);
+}
+
+/* === KIOSK OVERLAY === */
+.kiosk-overlay {
+  position: fixed; inset: 0; z-index: 46;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(6, 5, 20, 0.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+.kiosk-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.kiosk-panel {
+  background: rgba(20, 18, 45, 0.98);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px 20px 0 0;
+  padding: 24px 20px 32px;
+  max-width: 420px; width: 100%;
+  animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.kiosk-title {
+  font-size: 16px; font-weight: 800;
+  letter-spacing: 1px; text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.kiosk-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 16px;
+}
+.kiosk-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.kiosk-item-left {
+  display: flex; gap: 10px; align-items: center;
+}
+.kiosk-item-icon { font-size: 22px; }
+.kiosk-item-name { font-size: 13px; font-weight: 700; }
+.kiosk-item-desc { font-size: 10px; color: var(--text-muted); }
+.kiosk-item-effect {
+  font-size: 10px; font-weight: 600;
+  color: var(--neon-green);
+  margin-top: 2px;
+}
+.kiosk-item-effect.risky { color: var(--neon-orange); }
+.kiosk-buy-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--neon-gold);
+  font-family: var(--font-mono);
+  font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.kiosk-buy-btn:hover:not(:disabled) {
+  border-color: var(--neon-gold);
+  background: rgba(255, 216, 107, 0.08);
+}
+.kiosk-buy-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.kiosk-close {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: all 0.2s ease;
+}
+.kiosk-close:hover { border-color: var(--neon-purple); color: var(--text-secondary); }
+
+/* === CHAT ACTION BUTTONS === */
+.chat-actions {
+  display: flex; gap: 6px;
+  padding: 8px 16px 0;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(8, 6, 26, 0.95);
+}
+.chat-give-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex; align-items: center; gap: 4px;
+}
+.chat-give-btn:hover { border-color: var(--neon-gold); color: var(--neon-gold); }
+.chat-give-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* === EVENT LOG === */
+.event-log-toggle {
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 10px; font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+.event-log-toggle:hover { border-color: var(--neon-purple); }
+.event-log-panel {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  max-height: 50vh;
+  background: rgba(6, 5, 20, 0.97);
+  border-top: 1px solid var(--border-subtle);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 5;
+  display: none;
+  flex-direction: column;
+}
+.event-log-panel.open { display: flex; }
+.event-log-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.event-log-header span {
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.event-log-close {
+  background: none; border: none;
+  color: var(--text-muted); font-size: 14px;
+  cursor: pointer;
+}
+.event-log-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px 16px;
+  scrollbar-width: none;
+}
+.event-log-list::-webkit-scrollbar { display: none; }
+.log-entry {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  display: flex; gap: 8px; align-items: flex-start;
+  font-size: 11px;
+  animation: bubbleIn 0.2s ease;
+}
+.log-time {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  min-width: 48px;
+  flex-shrink: 0;
+}
+.log-text { color: var(--text-secondary); line-height: 1.4; }
+.log-text.positive { color: var(--neon-green); }
+.log-text.negative { color: var(--neon-pink); }
+.log-text.intel { color: var(--neon-gold); }
+.log-text.trait { color: var(--neon-cyan); }
+
+/* === BOUNCER PHASE === */
+.bouncer-screen {
+  position: fixed; inset: 0; z-index: 42;
+  display: flex; flex-direction: column;
+  background: var(--bg-deep);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+}
+.bouncer-screen.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.bouncer-visual {
+  flex: 0 0 45%;
+  position: relative;
+  display: flex; align-items: flex-end; justify-content: center;
+  overflow: hidden;
+}
+#bouncer-canvas { width: 100%; height: 100%; display: block; }
+.bouncer-dialogue {
+  flex: 1;
+  display: flex; flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.bouncer-hud {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(8, 6, 26, 0.95);
+}
+.approval-meter {
+  flex: 1;
+  display: flex; align-items: center; gap: 8px;
+}
+.approval-label {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--text-muted);
+  min-width: 60px;
+}
+.approval-track {
+  flex: 1; height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+.approval-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--neon-pink), var(--neon-orange), var(--neon-green));
+  transition: width 0.5s ease;
+}
+.approval-threshold {
+  position: absolute; top: -2px; bottom: -2px;
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 6px #fff;
+}
+.approval-score {
+  font-size: 14px; font-weight: 800;
+  font-family: var(--font-mono);
+  min-width: 36px;
+  text-align: right;
+}
+.bouncer-speech {
+  flex: 1;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 20px;
+  text-align: center;
+}
+.bouncer-speaker {
+  font-size: 11px; font-weight: 700;
+  color: var(--neon-pink);
+  letter-spacing: 2px; text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.bouncer-line {
+  font-size: 18px; font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+  min-height: 54px;
+  display: flex; align-items: center; justify-content: center;
+}
+.timer-bar-track {
+  width: 100%; height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  margin-top: 16px;
+}
+.timer-bar-fill {
+  height: 100%;
+  background: var(--neon-cyan);
+  transition: width linear;
+  border-radius: 2px;
+}
+.timer-bar-fill.urgent { background: var(--neon-pink); }
+.bouncer-options {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 16px 20px;
+  background: rgba(8, 6, 26, 0.95);
+  border-top: 1px solid var(--border-subtle);
+}
+.bouncer-opt {
+  padding: 12px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  position: relative;
+}
+.bouncer-opt:hover { background: var(--bg-card-hover); border-color: var(--neon-purple); }
+.bouncer-opt.intel-opt {
+  border-color: rgba(57, 255, 20, 0.2);
+}
+.bouncer-opt.intel-opt::before {
+  content: '🔑';
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 14px;
+}
+.bouncer-opt.picked-good { background: rgba(57, 255, 20, 0.1); border-color: var(--neon-green); color: var(--neon-green); }
+.bouncer-opt.picked-bad { background: rgba(255, 77, 109, 0.1); border-color: var(--neon-pink); color: var(--neon-pink); }
+.bouncer-opt.picked-neutral { background: rgba(255, 216, 107, 0.1); border-color: var(--neon-gold); color: var(--neon-gold); }
+.bouncer-opt:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Success / Failure overlays */
+.result-overlay {
+  position: fixed; inset: 0; z-index: 48;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+  text-align: center;
+  padding: 24px;
+}
+.result-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.result-overlay.success {
+  background: radial-gradient(ellipse at center, rgba(57, 255, 20, 0.08) 0%, var(--bg-deep) 70%);
+}
+.result-overlay.failure {
+  background: var(--bg-deep);
+}
+.result-title {
+  font-size: clamp(28px, 7vw, 56px);
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.result-title.win {
+  background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 30px rgba(57, 255, 20, 0.4));
+}
+.result-title.lose { color: var(--neon-pink); }
+.result-subtitle {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+}
+.result-stats {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 20px 28px;
+  max-width: 340px; width: 100%;
+  margin-bottom: 24px;
+}
+.result-row {
+  display: flex; justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  font-size: 13px;
+}
+.result-row:last-child { border-bottom: none; }
+.result-row .rl { color: var(--text-muted); }
+.result-row .rv { font-weight: 800; font-family: var(--font-mono); color: var(--neon-gold); }
+.result-btn {
+  padding: 14px 40px;
+  border: none; border-radius: 16px;
+  font-family: var(--font-sans);
+  font-size: 15px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.result-btn.again {
+  background: linear-gradient(135deg, var(--neon-purple), var(--neon-pink));
+  color: #fff;
+  box-shadow: 0 8px 32px rgba(123, 117, 255, 0.3);
+}
+
+/* === QUEUE TIME LABEL === */
+.queue-time-display {
+  text-align: center;
+  padding: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 2px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(8, 6, 26, 0.95);
+}
+</style>
+</head>
+<body>
+
+<!-- Boot Overlay -->
+<div class="boot-overlay" id="boot-overlay">
+  <div class="boot-title">The Queue</div>
+  <div class="boot-subtitle">Access Granted</div>
+  <div class="boot-prompt">Tap to start your Friday night</div>
+</div>
+
+<!-- Mute Button -->
+<button class="mute-btn" id="mute-btn" title="Toggle audio">🔊</button>
+
+<!-- Phone Container -->
+<div class="phone-container" id="phone-container">
+  <div class="phone">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span class="time" id="status-time">23:47</span>
+      <span class="indicators">
+        <span>●●●○○</span>
+        <span id="status-battery">17%</span>
+        <span>🔋</span>
+      </span>
+    </div>
+
+    <!-- App Header -->
+    <div class="app-header">
+      <h1>Friday Night</h1>
+      <div class="night-label">Plan your move</div>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-viewport">
+      <div class="tab-slider" id="tab-slider">
+
+        <!-- Tab 1: Venues -->
+        <div class="tab-panel" id="panel-venues">
+          <div class="section-header">Choose your destination</div>
+          <div id="venue-list"></div>
+        </div>
+
+        <!-- Tab 2: Squad -->
+        <div class="tab-panel" id="panel-squad">
+          <div class="squad-counter">
+            <span class="label">Your crew tonight</span>
+            <span class="count" id="squad-count">0 / 3</span>
+          </div>
+          <div id="contact-list"></div>
+        </div>
+
+        <!-- Tab 3: Loadout -->
+        <div class="tab-panel" id="panel-loadout">
+          <div class="section-header">Pocket essentials</div>
+          <div class="budget-bar">
+            <span class="budget-label">Friday Cash</span>
+            <span class="budget-amount" id="budget-display"><span class="currency">$</span>50</span>
+          </div>
+          <div id="item-list"></div>
+          <div class="loadout-note" id="loadout-note"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+      <button class="nav-tab active" data-tab="0">
+        <span class="icon">📍</span>
+        <span>Venue</span>
+      </button>
+      <button class="nav-tab" data-tab="1">
+        <span class="icon">👥</span>
+        <span>Squad</span>
+        <span class="badge-count" id="squad-badge" style="display:none">0</span>
+      </button>
+      <button class="nav-tab" data-tab="2">
+        <span class="icon">🎒</span>
+        <span>Loadout</span>
+      </button>
+    </div>
+
+    <!-- Confirm Bar -->
+    <div class="confirm-bar">
+      <div class="confirm-summary" id="confirm-summary">Select a venue to get started</div>
+      <button class="confirm-btn" id="confirm-btn" disabled>Head Out</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Flake Roll Overlay -->
+<div class="flake-overlay" id="flake-overlay">
+  <div class="flake-header">
+    <div class="flake-time">Friday 11:30 PM</div>
+    <div class="flake-location" id="flake-location">Meeting Point</div>
+  </div>
+  <div class="flake-messages" id="flake-messages"></div>
+  <div class="flake-result" id="flake-result"></div>
+</div>
+
+<!-- Model Loading Screen -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-content">
+    <div class="loading-title">Downloading tonight's guest list...</div>
+    <div class="loading-subtitle">Loading on-device AI for your queue neighbors.<br>First time takes a minute — cached after that.</div>
+    <div class="loading-bar-track"><div class="loading-bar-fill" id="loading-fill"></div></div>
+    <div class="loading-status" id="loading-status">Initializing...</div>
+    <button class="loading-skip" id="loading-skip">Skip — use scripted mode</button>
+  </div>
+</div>
+
+<!-- Queue Screen -->
+<div class="queue-screen" id="queue-screen">
+  <div class="queue-time-display" id="queue-time-display">FRIDAY 11:35 PM</div>
+  <div class="queue-canvas-wrap">
+    <canvas id="queue-canvas"></canvas>
+  </div>
+  <div class="queue-hud">
+    <div class="queue-info">
+      <span>POSITION <span class="pos-label" id="q-position">15</span></span>
+      <span id="q-venue-label">Mainframe Basement</span>
+      <button class="event-log-toggle" id="log-toggle">📋 Log</button>
+    </div>
+    <div class="meters-row">
+      <div class="meter hope-meter">
+        <span class="meter-label">Hope</span>
+        <div class="meter-bar"><div class="meter-fill" id="hope-fill" style="width:70%"></div></div>
+        <span class="meter-value" id="hope-value">70</span>
+      </div>
+      <div class="meter anxiety-meter">
+        <span class="meter-label">Anxiety</span>
+        <div class="meter-bar"><div class="meter-fill" id="anxiety-fill" style="width:10%"></div></div>
+        <span class="meter-value" id="anxiety-value">10</span>
+      </div>
+    </div>
+  </div>
+  <div class="event-log-panel" id="event-log-panel">
+    <div class="event-log-header">
+      <span>Event Log</span>
+      <button class="event-log-close" id="log-close">✕</button>
+    </div>
+    <div class="event-log-list" id="event-log-list"></div>
+  </div>
+  <div class="action-panel" id="action-panel">
+    <button class="action-btn" id="act-wait">
+      <span class="action-icon">⏳</span>
+      <span class="action-label">Wait 5 min</span>
+    </button>
+    <button class="action-btn" id="act-talk-front">
+      <span class="action-icon">💬</span>
+      <span class="action-label">Talk Front</span>
+    </button>
+    <button class="action-btn" id="act-talk-back">
+      <span class="action-icon">🗣️</span>
+      <span class="action-label">Talk Back</span>
+    </button>
+    <button class="action-btn" id="act-kiosk">
+      <span class="action-icon">🍺</span>
+      <span class="action-label">Kiosk</span>
+    </button>
+  </div>
+</div>
+
+<!-- Chat Overlay -->
+<div class="chat-overlay" id="chat-overlay">
+  <div class="chat-header">
+    <div class="chat-header-left">
+      <div class="chat-avatar-sm" id="chat-avatar"></div>
+      <div>
+        <div class="chat-name" id="chat-name">Stranger</div>
+        <div class="chat-disposition" id="chat-disp">Friendly</div>
+      </div>
+    </div>
+    <button class="chat-close" id="chat-close">✕</button>
+  </div>
+  <div class="chat-messages" id="chat-messages"></div>
+  <div class="chat-actions" id="chat-actions"></div>
+  <div class="chat-input-area">
+    <input class="chat-input" id="chat-input" type="text" placeholder="Say something..." autocomplete="off" />
+    <button class="chat-send" id="chat-send">→</button>
+  </div>
+</div>
+
+<!-- Event Overlay -->
+<div class="event-overlay" id="event-overlay">
+  <div class="event-card" id="event-card"></div>
+</div>
+
+<!-- Kiosk Overlay -->
+<div class="kiosk-overlay" id="kiosk-overlay">
+  <div class="kiosk-panel" id="kiosk-panel"></div>
+</div>
+
+<!-- Bouncer Screen -->
+<div class="bouncer-screen" id="bouncer-screen">
+  <div class="bouncer-visual">
+    <canvas id="bouncer-canvas"></canvas>
+  </div>
+  <div class="bouncer-dialogue">
+    <div class="bouncer-hud">
+      <div class="approval-meter">
+        <span class="approval-label">Approval</span>
+        <div class="approval-track">
+          <div class="approval-fill" id="approval-fill" style="width:0%"></div>
+          <div class="approval-threshold" id="approval-threshold" style="left:40%"></div>
+        </div>
+        <span class="approval-score" id="approval-score">0</span>
+      </div>
+    </div>
+    <div class="bouncer-speech">
+      <div class="bouncer-speaker" id="bouncer-speaker">BOUNCER</div>
+      <div class="bouncer-line" id="bouncer-line">...</div>
+      <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:100%"></div></div>
+    </div>
+    <div class="bouncer-options" id="bouncer-options"></div>
+  </div>
+</div>
+
+<!-- Result Overlay -->
+<div class="result-overlay" id="result-overlay">
+  <div class="result-title" id="result-title"></div>
+  <div class="result-subtitle" id="result-subtitle"></div>
+  <div class="result-stats" id="result-stats"></div>
+  <button class="result-btn again" id="result-btn">Try Again</button>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// GAME DATA
+// ============================================================
+
+const VENUES = [
+  {
+    id: 'mainframe',
+    name: 'Mainframe Basement',
+    policy: 'Easy',
+    policyClass: 'policy-easy',
+    music: 'Deep House',
+    bpm: 122,
+    dressCode: 'Dark Minimal',
+    dressBias: ['Dark Minimal', 'No Logo'],
+    locked: false,
+    desc: 'Underground vibes, low ceilings, warm crowd',
+  },
+  {
+    id: 'compliance',
+    name: 'The Compliance Vault',
+    policy: 'Moderate',
+    policyClass: 'policy-moderate',
+    music: 'Techno',
+    bpm: 136,
+    dressCode: 'All Black, No Logos',
+    dressBias: ['All Black', 'No Logo', 'Dark Minimal'],
+    locked: false,
+    desc: 'Relentless techno, pitch-black interior, attitude required',
+  },
+  {
+    id: 'neon',
+    name: 'Neon Pharmacy',
+    policy: 'Moderate',
+    policyClass: 'policy-moderate',
+    music: 'Drum & Bass',
+    bpm: 174,
+    dressCode: 'Streetwear / Eccentric',
+    dressBias: ['Streetwear', 'Eccentric', 'Bright Colors'],
+    locked: false,
+    desc: 'Colorful chaos, fast beats, anything-goes energy',
+  },
+  {
+    id: 'boardroom',
+    name: 'The Boardroom Penthouse',
+    policy: 'Ruthless',
+    policyClass: 'policy-ruthless',
+    music: 'Tech-House',
+    bpm: 128,
+    dressCode: 'Smart Casual, Watches',
+    dressBias: ['Smart Casual', 'Designer'],
+    locked: true,
+  },
+  {
+    id: 'florians',
+    name: "Florian's Private Members",
+    policy: 'Ruthless',
+    policyClass: 'policy-ruthless',
+    music: 'Minimal Techno',
+    bpm: 132,
+    dressCode: 'Invite-Only Aura',
+    dressBias: ['Understated', 'Dark Minimal'],
+    locked: true,
+  },
+  {
+    id: 'audit',
+    name: 'The Audit Chamber',
+    policy: 'Nightmare',
+    policyClass: 'policy-nightmare',
+    music: 'Industrial',
+    bpm: 145,
+    dressCode: 'Full Uniform or Nothing',
+    dressBias: ['All Black', 'Chains'],
+    locked: true,
+  },
+];
+
+const CONTACTS = [
+  {
+    id: 'kai',
+    name: 'Kai',
+    initials: 'K',
+    color: '#57f2ff',
+    trait: 'Hype Engine',
+    traitDesc: 'Queue +15% faster, anxiety +20% faster',
+    traitColor: 'rgba(87, 242, 255, 0.15)',
+    traitBorder: 'rgba(87, 242, 255, 0.3)',
+    traitTextColor: '#57f2ff',
+    styles: ['Dark Minimal', 'Chains', 'No Logo'],
+    musicPref: 'Deep House',
+    anxiety: 6,
+    flakeRate: 15,
+    flakeMsg: "YOOO I just got to the afters already 😂 skip the queue lol",
+    confirmMsg: "let's goooo 🔥 omw",
+  },
+  {
+    id: 'pia',
+    name: 'Pia',
+    initials: 'P',
+    color: '#ff4d6d',
+    trait: 'Connected Promoter',
+    traitDesc: 'Bouncer difficulty -1 tier, 40% flake',
+    traitColor: 'rgba(255, 77, 109, 0.15)',
+    traitBorder: 'rgba(255, 77, 109, 0.3)',
+    traitTextColor: '#ff4d6d',
+    styles: ['Smart Casual', 'Designer'],
+    musicPref: 'Tech-House',
+    anxiety: 5,
+    flakeRate: 40,
+    flakeMsg: "babe the promoter just called, I'm going to another thing sorryyy 💋",
+    confirmMsg: "Yesss I'll be there in 20 💋",
+  },
+  {
+    id: 'rissal',
+    name: 'Rissal',
+    initials: 'R',
+    color: '#39ff14',
+    trait: 'The Chill Coder',
+    traitDesc: 'Starts with gum + lighter, anxiety 9/10',
+    traitColor: 'rgba(57, 255, 20, 0.15)',
+    traitBorder: 'rgba(57, 255, 20, 0.3)',
+    traitTextColor: '#39ff14',
+    styles: ['Minimal', 'No Logo', 'Dark'],
+    musicPref: 'Techno',
+    anxiety: 9,
+    flakeRate: 5,
+    startsWithItems: ['gum', 'lighter'],
+    flakeMsg: "deploy broke prod, can't come 😭",
+    confirmMsg: "k. omw.",
+  },
+  {
+    id: 'mona',
+    name: 'Mona',
+    initials: 'M',
+    color: '#7b75ff',
+    trait: 'The Fashionista',
+    traitDesc: '2x Style Match, refuses Easy venues',
+    traitColor: 'rgba(123, 117, 255, 0.15)',
+    traitBorder: 'rgba(123, 117, 255, 0.3)',
+    traitTextColor: '#7b75ff',
+    styles: ['Eccentric', 'Vintage', 'Bold'],
+    musicPref: 'Drum & Bass',
+    anxiety: 4,
+    flakeRate: 20,
+    refusesEasy: true,
+    flakeMsg: "I just saw what everyone's wearing on insta. hard pass.",
+    confirmMsg: "Outfit ready. I'll be iconic tonight ✨",
+  },
+  {
+    id: 'sasha',
+    name: 'Sasha',
+    initials: 'S',
+    color: '#fd9927',
+    trait: 'Chaos Agent',
+    traitDesc: 'Bonus random events in queue (good or bad)',
+    traitColor: 'rgba(253, 153, 39, 0.15)',
+    traitBorder: 'rgba(253, 153, 39, 0.3)',
+    traitTextColor: '#fd9927',
+    styles: ['Streetwear', 'Bright Colors'],
+    musicPref: 'Drum & Bass',
+    anxiety: 7,
+    flakeRate: 25,
+    flakeMsg: "LMAOOO I'm already in the wrong part of town, my uber went rogue 🤷",
+    confirmMsg: "BRO I JUST DID SOMETHING CRAZY but I'm coming 😂",
+  },
+  {
+    id: 'felix',
+    name: 'Felix',
+    initials: 'F',
+    color: '#ffd86b',
+    trait: 'The Insider',
+    traitDesc: 'Starts with 1 free Intel revealed',
+    traitColor: 'rgba(255, 216, 107, 0.15)',
+    traitBorder: 'rgba(255, 216, 107, 0.3)',
+    traitTextColor: '#ffd86b',
+    styles: ['Smart Casual', 'Understated'],
+    musicPref: 'Minimal Techno',
+    anxiety: 6,
+    flakeRate: 30,
+    flakeMsg: "yo my connect just hit me up, I'm going to a different spot. next time 🤙",
+    confirmMsg: "Already got some info on tonight's door. See you there 🤙",
+  },
+];
+
+const ITEMS = [
+  { id: 'gum', name: 'Gum', icon: '🫧', price: 5, desc: 'Low-value barter item, everybody wants one' },
+  { id: 'lighter', name: 'Lighter', icon: '🔥', price: 10, desc: 'Medium barter value, classic ice-breaker' },
+  { id: 'earplugs', name: 'Earplugs', icon: '👂', price: 12, desc: 'Reduces anxiety gain from loud events' },
+  { id: 'water', name: 'Water Bottle', icon: '💧', price: 15, desc: "High barter value — it's 2 AM and everyone is dehydrated" },
+  { id: 'vip', name: 'Fake VIP Wristband', icon: '📿', price: 25, desc: 'Expensive & risky — can boost or backfire at bouncer' },
+];
+
+// ============================================================
+// PORTRAIT GENERATOR (procedural pixel art)
+// ============================================================
+
+const Portrait = {
+  SKINS: ['#f5d0a9','#e8b88a','#c68642','#8d5524','#6b3e26','#f0c5a0','#dba270','#fce0c5'],
+  HAIRS: ['#1a1a2e','#3d2b1f','#8b6914','#c4931a','#e84a5f','#4a90d9','#2d2d2d','#f5f5dc','#d14070','#6b3fa0'],
+  SHIRTS: ['#1a1a2e','#2d2d2d','#0d1b2a','#3c1053','#1b4332','#7b2d26','#f0f0f0','#4361ee','#e84a5f','#ff6b35'],
+  HAIR_STYLES: ['short','long','curly','bun','mohawk','bald','bob','afro','buzz','ponytail'],
+  ACCESSORIES: [null,null,null,'glasses','sunglasses','earring','piercing','headband'],
+
+  _pick(a) { return a[Math.floor(Math.random() * a.length)]; },
+
+  randomProps() {
+    return {
+      skin: this._pick(this.SKINS),
+      hairColor: this._pick(this.HAIRS),
+      hairStyle: this._pick(this.HAIR_STYLES),
+      shirtColor: this._pick(this.SHIRTS),
+      accessory: this._pick(this.ACCESSORIES),
+      faceWidth: 6 + Math.floor(Math.random() * 3),
+      faceHeight: 7 + Math.floor(Math.random() * 3),
+      eyeSpacing: 3 + Math.floor(Math.random() * 2),
+      noseSize: Math.random() < 0.5 ? 1 : 2,
+      earSize: 1 + Math.floor(Math.random() * 2),
+      seed: Math.random(),
+    };
+  },
+
+  generate(props, disposition, substanceEffects) {
+    const c = document.createElement('canvas');
+    c.width = 32; c.height = 32;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const cx = 15, cy = 14;
+    const fw = props.faceWidth, fh = props.faceHeight;
+
+    // Shirt / shoulders
+    this._ellipse(ctx, cx, 28, 10, 5, props.shirtColor);
+    // Neck
+    ctx.fillStyle = props.skin;
+    ctx.fillRect(cx - 2, cy + fh - 1, 5, 4);
+    // Ears
+    ctx.fillStyle = props.skin;
+    ctx.fillRect(cx - fw - 1, cy - 1, props.earSize, 3);
+    ctx.fillRect(cx + fw + 1 - props.earSize + 1, cy - 1, props.earSize, 3);
+    // Face
+    this._ellipse(ctx, cx, cy, fw, fh, props.skin);
+    // Hair
+    this._drawHair(ctx, props, cx, cy, fw, fh);
+    // Eyes
+    this._drawEyes(ctx, props, cx, cy, fw, disposition, substanceEffects);
+    // Eyebrows
+    this._drawEyebrows(ctx, props, cx, cy, disposition, substanceEffects);
+    // Nose
+    this._drawNose(ctx, props, cx, cy);
+    // Mouth
+    this._drawMouth(ctx, props, cx, cy, disposition, substanceEffects);
+    // Accessory
+    if (props.accessory) this._drawAccessory(ctx, props, cx, cy, fw);
+
+    return c.toDataURL();
+  },
+
+  _ellipse(ctx, cx, cy, rx, ry, color) {
+    ctx.fillStyle = color;
+    for (let y = -ry; y <= ry; y++) {
+      for (let x = -rx; x <= rx; x++) {
+        if ((x * x) / (rx * rx) + (y * y) / (ry * ry) <= 1) {
+          ctx.fillRect(cx + x, cy + y, 1, 1);
+        }
+      }
+    }
+  },
+
+  _darken(hex, amt) {
+    const r = Math.max(0, parseInt(hex.slice(1, 3), 16) - amt);
+    const g = Math.max(0, parseInt(hex.slice(3, 5), 16) - amt);
+    const b = Math.max(0, parseInt(hex.slice(5, 7), 16) - amt);
+    return `rgb(${r},${g},${b})`;
+  },
+
+  _drawHair(ctx, props, cx, cy, fw, fh) {
+    const hc = props.hairColor;
+    const top = cy - fh;
+    switch (props.hairStyle) {
+      case 'short':
+        this._ellipse(ctx, cx, top + 1, fw + 1, 3, hc);
+        ctx.fillStyle = hc;
+        ctx.fillRect(cx - fw, top, fw * 2 + 1, 3);
+        break;
+      case 'long':
+        this._ellipse(ctx, cx, top + 1, fw + 1, 3, hc);
+        ctx.fillStyle = hc;
+        ctx.fillRect(cx - fw - 1, top - 1, 3, fh * 2 + 2);
+        ctx.fillRect(cx + fw - 1, top - 1, 3, fh * 2 + 2);
+        break;
+      case 'curly':
+        for (let i = -fw - 1; i <= fw + 1; i += 2) {
+          const yy = top + (Math.abs(i) % 2);
+          ctx.fillStyle = hc;
+          ctx.fillRect(cx + i, yy - 1, 2, 3);
+        }
+        ctx.fillStyle = hc;
+        ctx.fillRect(cx - fw - 1, top - 1, fw * 2 + 3, 2);
+        break;
+      case 'bun':
+        this._ellipse(ctx, cx, top + 1, fw, 3, hc);
+        this._ellipse(ctx, cx, top - 3, 3, 3, hc);
+        break;
+      case 'mohawk':
+        ctx.fillStyle = hc;
+        ctx.fillRect(cx - 1, top - 4, 3, 6);
+        ctx.fillRect(cx - 2, top - 3, 5, 4);
+        break;
+      case 'bald':
+        ctx.fillStyle = this._darken(props.skin, 15);
+        this._ellipse(ctx, cx, top + 2, fw, 2, this._darken(props.skin, 15));
+        break;
+      case 'bob':
+        this._ellipse(ctx, cx, top + 1, fw + 1, 3, hc);
+        ctx.fillStyle = hc;
+        ctx.fillRect(cx - fw - 1, top, 2, fh + 3);
+        ctx.fillRect(cx + fw, top, 2, fh + 3);
+        break;
+      case 'afro':
+        this._ellipse(ctx, cx, top - 1, fw + 3, fh - 1, hc);
+        break;
+      case 'buzz':
+        ctx.fillStyle = this._darken(hc, 30);
+        this._ellipse(ctx, cx, top + 2, fw + 1, 2, this._darken(hc, 30));
+        break;
+      case 'ponytail':
+        this._ellipse(ctx, cx, top + 1, fw + 1, 3, hc);
+        ctx.fillStyle = hc;
+        ctx.fillRect(cx + fw, top + 2, 4, 2);
+        ctx.fillRect(cx + fw + 3, top + 2, 2, 6);
+        break;
+    }
+  },
+
+  _drawEyes(ctx, props, cx, cy, fw, disp, fx) {
+    const sp = props.eyeSpacing;
+    const lx = cx - sp, rx = cx + sp;
+    const ey = cy - 1;
+    const isDilated = fx?.includes?.('glitter');
+    const isWired = fx?.includes?.('turbo');
+    const isIntense = fx?.includes?.('nosecandy');
+    const isWasted = fx?.includes?.('dead');
+
+    // White of eyes
+    let ew = 3, eh = 2;
+    if (disp === 'hostile') eh = 1;
+    if (disp === 'anxious' || isWired) { ew = 3; eh = 3; }
+    if (disp === 'drunk' || isWasted) eh = 1;
+
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(lx - 1, ey, ew, eh);
+    ctx.fillRect(rx - 1, ey, ew, eh);
+
+    // Drunk: offset one eye
+    const lOff = (disp === 'drunk' || isWasted) ? 1 : 0;
+
+    // Pupil
+    let pw = 1, ph = 1;
+    if (isDilated) { pw = 2; ph = 2; }
+    if (isWired) { pw = 1; ph = 1; }
+    ctx.fillStyle = isIntense ? '#222' : '#111';
+    ctx.fillRect(lx, ey + lOff, pw, ph);
+    ctx.fillRect(rx, ey, pw, ph);
+
+    // Iris color hint
+    if (!isDilated && !isWasted) {
+      const irisColors = ['#4a6741','#5a3e2b','#3a5f8a','#6b5b3a','#2d4a3a'];
+      ctx.fillStyle = irisColors[Math.floor(props.seed * irisColors.length)];
+      if (eh >= 2) {
+        ctx.fillRect(lx - 1, ey + lOff, 1, 1);
+        ctx.fillRect(rx + pw, ey, 1, 1);
+      }
+    }
+
+    // Glitter sparkle effect
+    if (isDilated) {
+      ctx.fillStyle = '#ff69b4';
+      ctx.fillRect(lx + 1, ey - 1, 1, 1);
+      ctx.fillRect(rx - 1, ey - 1, 1, 1);
+    }
+  },
+
+  _drawEyebrows(ctx, props, cx, cy, disp, fx) {
+    const sp = props.eyeSpacing;
+    const lx = cx - sp, rx = cx + sp;
+    const by = cy - 3;
+    const isWasted = fx?.includes?.('dead');
+
+    ctx.fillStyle = this._darken(props.hairColor, 20);
+
+    if (disp === 'hostile') {
+      // Furrowed (angled inward)
+      ctx.fillRect(lx - 1, by + 1, 1, 1);
+      ctx.fillRect(lx, by, 2, 1);
+      ctx.fillRect(rx, by, 2, 1);
+      ctx.fillRect(rx + 1, by + 1, 1, 1);
+    } else if (disp === 'anxious') {
+      // Raised
+      ctx.fillRect(lx - 1, by - 1, 3, 1);
+      ctx.fillRect(rx - 1, by - 1, 3, 1);
+    } else if (disp === 'drunk' || isWasted) {
+      // Relaxed / uneven
+      ctx.fillRect(lx - 1, by, 2, 1);
+      ctx.fillRect(rx, by + 1, 2, 1);
+    } else {
+      // Normal
+      ctx.fillRect(lx - 1, by, 3, 1);
+      ctx.fillRect(rx - 1, by, 3, 1);
+    }
+  },
+
+  _drawNose(ctx, props, cx, cy) {
+    const ny = cy + 2;
+    ctx.fillStyle = this._darken(props.skin, 25);
+    ctx.fillRect(cx, ny, props.noseSize, 2);
+    if (props.noseSize > 1) ctx.fillRect(cx - 1, ny + 1, 3, 1);
+  },
+
+  _drawMouth(ctx, props, cx, cy, disp, fx) {
+    const my = cy + 5;
+    const isDrunk = disp === 'drunk' || fx?.includes?.('dead');
+    const isHigh = fx?.includes?.('glitter');
+
+    ctx.fillStyle = '#c44';
+
+    if (disp === 'friendly' || isHigh) {
+      // Smile
+      ctx.fillRect(cx - 2, my, 5, 1);
+      ctx.fillRect(cx - 3, my - 1, 1, 1);
+      ctx.fillRect(cx + 3, my - 1, 1, 1);
+    } else if (disp === 'hostile') {
+      // Frown
+      ctx.fillRect(cx - 2, my, 5, 1);
+      ctx.fillRect(cx - 3, my + 1, 1, 1);
+      ctx.fillRect(cx + 3, my + 1, 1, 1);
+    } else if (isDrunk) {
+      // Lopsided grin
+      ctx.fillRect(cx - 3, my, 6, 1);
+      ctx.fillRect(cx - 3, my - 1, 1, 1);
+      ctx.fillRect(cx + 3, my, 1, 1);
+    } else if (disp === 'anxious') {
+      // Slightly open / worried
+      ctx.fillStyle = '#511';
+      ctx.fillRect(cx - 1, my, 3, 2);
+      ctx.fillStyle = '#c44';
+      ctx.fillRect(cx - 2, my, 1, 1);
+      ctx.fillRect(cx + 2, my, 1, 1);
+    } else {
+      // Neutral
+      ctx.fillRect(cx - 2, my, 4, 1);
+    }
+
+    // Jaw tension from nose candy
+    if (fx?.includes?.('nosecandy')) {
+      ctx.fillStyle = this._darken(props.skin, 20);
+      ctx.fillRect(cx - 3, my + 1, 1, 2);
+      ctx.fillRect(cx + 3, my + 1, 1, 2);
+    }
+  },
+
+  _drawAccessory(ctx, props, cx, cy, fw) {
+    const sp = props.eyeSpacing;
+    const lx = cx - sp, rx = cx + sp;
+    const ey = cy - 1;
+
+    switch (props.accessory) {
+      case 'glasses':
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(lx - 2, ey - 1, 5, 4);
+        ctx.strokeRect(rx - 2, ey - 1, 5, 4);
+        ctx.fillStyle = '#555';
+        ctx.fillRect(lx + 2, ey, rx - lx - 4, 1);
+        break;
+      case 'sunglasses':
+        ctx.fillStyle = '#111';
+        ctx.fillRect(lx - 2, ey - 1, 5, 3);
+        ctx.fillRect(rx - 2, ey - 1, 5, 3);
+        ctx.fillRect(lx + 2, ey, rx - lx - 4, 1);
+        // Reflection
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(lx - 1, ey - 1, 1, 1);
+        ctx.fillRect(rx - 1, ey - 1, 1, 1);
+        break;
+      case 'earring':
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(cx - fw - 1, cy + 2, 1, 2);
+        break;
+      case 'piercing':
+        ctx.fillStyle = '#ccc';
+        ctx.fillRect(cx, cy + 4, 1, 1);
+        break;
+      case 'headband':
+        ctx.fillStyle = props.seed > 0.5 ? '#e84a5f' : '#4a90d9';
+        ctx.fillRect(cx - fw, cy - props.faceHeight + 2, fw * 2 + 1, 2);
+        break;
+    }
+  },
+};
+
+// ============================================================
+// PHASE 1 DATA
+// ============================================================
+
+const QUEUE_CONFIG = {
+  Easy:      { startPos: 15, moveChance: 0.40, moveMin: 2, moveMax: 5, eventChance: 0.25 },
+  Moderate:  { startPos: 22, moveChance: 0.30, moveMin: 1, moveMax: 4, eventChance: 0.30 },
+  Ruthless:  { startPos: 30, moveChance: 0.22, moveMin: 1, moveMax: 3, eventChance: 0.35 },
+  Nightmare: { startPos: 40, moveChance: 0.18, moveMin: 1, moveMax: 2, eventChance: 0.40 },
+};
+
+const KIOSK_ITEMS = [
+  { id: 'beer', name: 'Beer', icon: '🍺', price: 8, desc: 'Take the edge off', effect: 'Anxiety −12', effectVal: { anxiety: -12 }, risky: true, riskDesc: 'Bouncer might smell it', trait: 'Liquid Courage' },
+  { id: 'snack', name: 'Döner Roll', icon: '🌯', price: 5, desc: 'Classic late-night fuel', effect: 'Anxiety −4', effectVal: { anxiety: -4 }, risky: false },
+  { id: 'redbull', name: 'Red Bull', icon: '⚡', price: 6, desc: 'Wings for the wait', effect: 'Hope +8', effectVal: { hope: 8 }, risky: false },
+  { id: 'cig', name: 'Cigarette', icon: '🚬', price: 3, desc: 'Social lubricant', effect: 'Anxiety −6', effectVal: { anxiety: -6 }, risky: false },
+  { id: 'glitter', name: 'Glitter ✨', icon: '💎', price: 20, desc: 'Sparkly little friend-maker', effect: 'Hope +15, Anxiety −20', effectVal: { hope: 15, anxiety: -20 }, risky: true, riskDesc: 'Dilated pupils — bouncer might notice', trait: 'The Vibe' },
+  { id: 'turbo', name: 'Turbo Tabs', icon: '⚡', price: 15, desc: 'Industrial-grade alertness', effect: 'Hope +20', effectVal: { hope: 20 }, risky: true, riskDesc: 'Jittery — anxiety spike in ~3 turns', trait: 'Motor Mouth', delayedEffect: { turns: 3, anxiety: 25 } },
+  { id: 'nosecandy', name: 'Nose Candy', icon: '❄️', price: 25, desc: 'Confidence in powder form', effect: 'Hope +10, Anxiety −10', effectVal: { hope: 10, anxiety: -10 }, risky: true, riskDesc: 'Jaw grinding — bouncer will see it', trait: 'Big Energy' },
+];
+
+const TRAIT_DEFS = {
+  'Liquid Courage':  { icon: '🍺', desc: '+Confidence at bouncer, slight slur risk', color: '#fd9927' },
+  'The Vibe':        { icon: '✨', desc: 'Natural charisma, dilated pupils', color: '#ff4d6d' },
+  'Motor Mouth':     { icon: '⚡', desc: 'Extra dialogue options, might say too much', color: '#57f2ff' },
+  'Big Energy':      { icon: '❄️', desc: 'Supreme confidence, jaw tension visible', color: '#fff' },
+  'Paranoid':        { icon: '😰', desc: 'Substance comedown — everything feels wrong', color: '#ff4444' },
+  'Dead Eyes':       { icon: '💀', desc: 'Too much of everything — bouncer will notice', color: '#666' },
+  'Insider Info':    { icon: '🔑', desc: 'You know something useful about tonight', color: '#39ff14' },
+  'Street Cred':     { icon: '🤝', desc: 'Made friends in line — bouncer sees social proof', color: '#ffd86b' },
+};
+
+const NEIGHBOR_NAMES = ['Marco', 'Lena', 'Tariq', 'Yuki', 'Priya', 'Jonas', 'Nadia', 'Emre', 'Sofia', 'Dex', 'Aisha', 'Viktor', 'Luna', 'Chen', 'Zara', 'Ravi', 'Ingrid', 'Kwame', 'Mika', 'Freya'];
+const DISPOSITIONS = ['friendly', 'neutral', 'hostile', 'drunk', 'anxious'];
+const DISP_WEIGHTS = [0.25, 0.2, 0.15, 0.25, 0.15];
+const DISP_COLORS = { friendly: '#39ff14', neutral: '#ebe4ff', hostile: '#ff4d6d', drunk: '#fd9927', anxious: '#57f2ff' };
+
+const INTEL_POOL = [
+  { key: 'bouncer_name', text: "The bouncer tonight is {bouncer}. He's got a thing about {quirk}." },
+  { key: 'shoe_rule', text: "Whatever you do, don't wear {bad_shoes}. He turned away like 10 people for that." },
+  { key: 'name_drop', text: "If you mention {dj_name}, he'll let you through. Trust me." },
+  { key: 'group_size', text: "He likes groups of exactly {n}. Not more, not less." },
+  { key: 'password', text: "The password tonight is '{password}'. Someone at the front told me." },
+  { key: 'mood', text: "He's in a {mood} mood tonight. {advice}." },
+  { key: 'back_entrance', text: "There's a side door through the alley. But you need to know the code: {code}." },
+  { key: 'dj_set', text: "The headliner tonight is {headliner}. If you mention their set, the bouncer respects that." },
+];
+
+const NEIGHBOR_QUIRKS = [
+  'knows everyone on the guestlist', 'claims to be a DJ', 'has been to every club in the city',
+  'is here for the first time', 'used to work at this club', 'is celebrating a birthday',
+  'is waiting for someone inside', 'got rejected last week and came back', 'knows the owner',
+  'drove 2 hours to get here', 'is a food blogger who also reviews clubs',
+];
+
+const TRADEABLE_ITEMS = ['lighter', 'gum', 'cigarette', 'water', 'earplugs', 'vip'];
+
+function weightedPick(items, weights) {
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return items[i];
+  }
+  return items[items.length - 1];
+}
+
+function generateNeighbor(venueId, existingIntel) {
+  const name = NEIGHBOR_NAMES[Math.floor(Math.random() * NEIGHBOR_NAMES.length)];
+  const disp = weightedPick(DISPOSITIONS, DISP_WEIGHTS);
+  const quirk = NEIGHBOR_QUIRKS[Math.floor(Math.random() * NEIGHBOR_QUIRKS.length)];
+
+  // EVERYONE has something — what they have depends on disposition
+  const available = INTEL_POOL.filter(i => !existingIntel.includes(i.key));
+  let intel = null;
+  const items = [];
+  const wants = [];
+  let money = 0;
+  let hasSubstance = null;
+
+  switch (disp) {
+    case 'friendly':
+      // Easy intel, sometimes has items
+      intel = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+      if (Math.random() < 0.4) items.push(TRADEABLE_ITEMS[Math.floor(Math.random() * TRADEABLE_ITEMS.length)]);
+      break;
+    case 'drunk':
+      // Loose-lipped: almost always shares intel, sometimes has party favors
+      intel = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+      if (Math.random() < 0.35) hasSubstance = Math.random() < 0.5 ? 'glitter' : 'nosecandy';
+      items.push('lighter');
+      money = Math.random() < 0.3 ? 5 + Math.floor(Math.random() * 10) : 0;
+      break;
+    case 'hostile':
+      // BEST intel, but you need to earn it with items/bribes
+      intel = available.length > 0 ? available[0] : null;
+      wants.push(TRADEABLE_ITEMS[Math.floor(Math.random() * 3)]); // wants something common
+      if (Math.random() < 0.3) wants.push('water');
+      break;
+    case 'anxious':
+      // Shares tips if you bond with them, might have useful items
+      intel = Math.random() < 0.6 && available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+      if (Math.random() < 0.5) items.push('gum');
+      if (Math.random() < 0.2) hasSubstance = 'turbo';
+      break;
+    case 'neutral':
+      // Trades fairly — has items or money, will share intel for a fair deal
+      intel = Math.random() < 0.4 && available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+      money = 5 + Math.floor(Math.random() * 15);
+      if (Math.random() < 0.5) items.push(TRADEABLE_ITEMS[Math.floor(Math.random() * TRADEABLE_ITEMS.length)]);
+      wants.push(TRADEABLE_ITEMS[Math.floor(Math.random() * TRADEABLE_ITEMS.length)]);
+      break;
+  }
+
+  const portraitProps = Portrait.randomProps();
+  const portrait = Portrait.generate(portraitProps, disp, []);
+
+  return {
+    name, disposition: disp, color: DISP_COLORS[disp],
+    intel, items, wants, money, hasSubstance, quirk,
+    initials: name[0], chatHistory: [],
+    portraitProps, portrait,
+  };
+}
+
+function resolveIntelText(text) {
+  return text.replace('{bouncer}', 'Florian').replace('{quirk}', 'people who seem too eager')
+    .replace('{bad_shoes}', 'white sneakers').replace('{dj_name}', 'DJ Synthax')
+    .replace('{n}', '3').replace('{password}', 'Systematic Review')
+    .replace('{mood}', 'strict').replace('{advice}', 'Be confident but not cocky')
+    .replace('{code}', '4-7-2').replace('{headliner}', 'Koze');
+}
+
+function buildNeighborSystemPrompt(neighbor, venue) {
+  let prompt = `You are ${neighbor.name}, a ${neighbor.disposition} person standing in line outside ${venue.name}, a ${venue.music} club.
+You are having a casual conversation with a stranger (the player) who is standing next to you in the queue.
+Your hidden quirk: you ${neighbor.quirk}.
+
+YOUR PERSONALITY: ${neighbor.disposition === 'friendly' ? 'You are warm and chatty. You enjoy making conversation with strangers. You like helping people.' :
+neighbor.disposition === 'drunk' ? 'You are tipsy and loose-lipped. You talk too much and share things easily. Your speech is slightly slurred and enthusiastic. You love everyone right now.' :
+neighbor.disposition === 'hostile' ? 'You are irritated and don\'t really want to talk. You give short, blunt answers. BUT you respect people who offer you something useful — if they bribe you or give you what you want, you open up and become helpful.' :
+neighbor.disposition === 'anxious' ? 'You are nervous about getting in. You fidget and worry aloud. You bond with people over shared anxiety. Reassurance makes you share what you know.' :
+'You are polite but reserved. You are transactional — you trade fairly. You won\'t give something for nothing, but a fair deal makes you talkative.'}
+
+KEEP RESPONSES TO 1-2 SENTENCES. Be natural and in-character. This is a casual queue conversation, not a formal interaction.`;
+
+  if (neighbor.intel) {
+    const intelResolved = resolveIntelText(neighbor.intel.text);
+    prompt += `\n\nYou know something useful about tonight: "${intelResolved}"
+${neighbor.disposition === 'friendly' ? 'You will share this after a few friendly exchanges.' :
+neighbor.disposition === 'drunk' ? 'You will share this easily — you can barely keep secrets right now.' :
+neighbor.disposition === 'hostile' ? 'You will ONLY share this if the player gives you something you want first.' :
+neighbor.disposition === 'anxious' ? 'You will share this if the player reassures you or bonds with you.' :
+'You will share this if the player offers a fair trade.'}
+When you share it, put the intel on its own line in this exact format:
+[INTEL: ${intelResolved}]`;
+  }
+
+  if (neighbor.wants.length > 0) {
+    prompt += `\n\nYou really want: ${neighbor.wants.join(', ')}. If the player seems to have one, you might ask for it. If they give you what you want, you should be grateful${neighbor.intel ? ' and share your intel' : ''}.
+When asking for an item, use this format on its own line:
+[WANT: item name]`;
+  }
+
+  if (neighbor.items.length > 0) {
+    prompt += `\n\nYou have: ${neighbor.items.join(', ')}. You might offer these in trade.
+When offering an item, use this format on its own line:
+[OFFER: item name]`;
+  }
+
+  if (neighbor.hasSubstance) {
+    const subName = neighbor.hasSubstance === 'glitter' ? 'Glitter (MDMA)' : neighbor.hasSubstance === 'turbo' ? 'Turbo Tabs (speed)' : 'Nose Candy (coke)';
+    prompt += `\n\nYou have some ${subName} on you. You might offer it if the vibe is right or if asked.
+When offering it, put on its own line:
+[OFFER: ${neighbor.hasSubstance}]`;
+  }
+
+  if (neighbor.money > 0) {
+    prompt += `\n\nYou have $${neighbor.money} cash you could give/trade if the player does something nice.
+When giving money, put on its own line:
+[GIVE_MONEY: ${neighbor.money}]`;
+  }
+
+  prompt += `\n\nIf you want to end the conversation (bored, annoyed, etc.), put on its own line:
+[END: brief reason]
+
+Remember: 1-2 sentences max per reply. Stay in character. Your quirk (${neighbor.quirk}) can come up naturally in conversation.`;
+  return prompt;
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+
+const state = {
+  phase: 'BOOT',
+  selectedVenue: null,
+  selectedSquad: [],
+  inventory: {},
+  cash: 50,
+  startingCash: 50,
+  currentTab: 0,
+  audioStarted: false,
+  muted: false,
+  finalSquad: [],
+  // Phase 1 state
+  queue: {
+    position: 15,
+    hope: 70,
+    anxiety: 10,
+    gameTime: 23 * 60 + 35,
+    neighborFront: null,
+    neighborBack: null,
+    revealedIntel: [],
+    turnCount: 0,
+    beerDebuff: false,
+    actionLocked: false,
+    queuePeople: [],
+    animFrame: null,
+    activeTraits: [],
+    delayedEffects: [],
+  },
+  llm: { loaded: false, scripted: false },
+};
+
+// ============================================================
+// AUDIO ENGINE
+// ============================================================
+
+const ClubAudio = {
+  ctx: null,
+  masterGain: null,
+  lpFilter: null,
+  musicGain: null,
+  isPlaying: false,
+  nextNoteTime: 0,
+  stepIndex: 0,
+  musicInterval: null,
+  bpm: 126,
+  muted: false,
+
+  init() {
+    if (this.ctx) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = 0.7;
+
+      this.lpFilter = this.ctx.createBiquadFilter();
+      this.lpFilter.type = 'lowpass';
+      this.lpFilter.frequency.value = 280;
+      this.lpFilter.Q.value = 2.5;
+
+      this.compressor = this.ctx.createDynamicsCompressor();
+      this.compressor.threshold.setValueAtTime(-12, this.ctx.currentTime);
+      this.compressor.knee.setValueAtTime(12, this.ctx.currentTime);
+      this.compressor.ratio.setValueAtTime(4, this.ctx.currentTime);
+
+      const reverbGain = this.ctx.createGain();
+      reverbGain.gain.value = 0.25;
+      this.reverb = this.ctx.createConvolver();
+      this.reverb.buffer = this._buildImpulse(1.8, 3.0);
+
+      this.musicGain = this.ctx.createGain();
+      this.musicGain.gain.value = 0.55;
+
+      // Signal chain: musicGain → lpFilter → compressor → masterGain → destination
+      this.musicGain.connect(this.lpFilter);
+      this.lpFilter.connect(this.compressor);
+
+      // Reverb send
+      this.musicGain.connect(reverbGain);
+      reverbGain.connect(this.reverb);
+      this.reverb.connect(this.lpFilter);
+
+      this.compressor.connect(this.masterGain);
+      this.masterGain.connect(this.ctx.destination);
+
+      this.startLoop();
+    } catch (e) {
+      console.warn('Web Audio not supported:', e);
+    }
+  },
+
+  _buildImpulse(decay, duration) {
+    const rate = this.ctx.sampleRate;
+    const len = Math.floor(rate * duration);
+    const buffer = this.ctx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      }
+    }
+    return buffer;
+  },
+
+  startLoop() {
+    if (!this.ctx || this.isPlaying) return;
+    this.isPlaying = true;
+    this.nextNoteTime = this.ctx.currentTime + 0.05;
+    this.stepIndex = 0;
+
+    const lookahead = 0.15;
+    const scheduleInterval = 50;
+
+    const scheduler = () => {
+      if (!this.isPlaying) return;
+      while (this.nextNoteTime < this.ctx.currentTime + lookahead) {
+        this._scheduleStep(this.stepIndex, this.nextNoteTime);
+        const secPerStep = 60.0 / this.bpm / 4.0;
+        this.nextNoteTime += secPerStep;
+        this.stepIndex = (this.stepIndex + 1) % 64;
+      }
+      this.musicInterval = setTimeout(scheduler, scheduleInterval);
+    };
+    scheduler();
+  },
+
+  style: 'deep_house',
+
+  _scheduleStep(step, time) {
+    const beat = step % 16;
+    const bar = Math.floor(step / 16);
+
+    switch (this.style) {
+      case 'techno':
+        // Hard four-on-the-floor, running hi-hats, industrial
+        if (beat === 0 || beat === 4 || beat === 8 || beat === 12) this._playKick(time, true);
+        if (beat % 2 === 0) this._playHat(time);
+        if (beat === 4 || beat === 12) this._playClap(time);
+        if (beat === 0) this._playSub(time, step, 44);
+        // Faint industrial noise every 4 bars
+        if (beat === 0 && bar % 4 === 0) this._playPad(time, 'dark', step);
+        break;
+
+      case 'dnb':
+        // Syncopated breakbeat, rolling bass
+        if (beat === 0 || beat === 10) this._playKick(time, false);
+        if (beat === 4 || beat === 12) this._playClap(time);
+        if (beat % 2 === 0) this._playHat(time, beat % 4 === 0);
+        if (beat === 0 || beat === 8) this._playSub(time, step, 55);
+        // Reese bass hint every 2 bars
+        if (beat === 0 && bar % 2 === 0) this._playPad(time, 'reese', step);
+        break;
+
+      case 'tech_house':
+        // Groovy, shaker-heavy
+        if (beat === 0 || beat === 4 || beat === 8 || beat === 12) this._playKick(time, false);
+        if (beat % 2 === 1) this._playHat(time);
+        if (beat === 4 || beat === 12) this._playClap(time);
+        if (beat === 0) this._playSub(time, step, 50);
+        // Stab every 2 bars
+        if (beat === 0 && bar % 2 === 0) this._playPad(time, 'stab', step);
+        break;
+
+      case 'minimal_techno':
+        // Sparse, hypnotic
+        if (beat === 0 || beat === 4 || beat === 8 || beat === 12) this._playKick(time, true);
+        if (beat === 6 || beat === 14) this._playHat(time);
+        if (beat === 4) this._playClap(time);
+        if (beat === 0) this._playSub(time, step, 41);
+        break;
+
+      case 'industrial':
+        // Pounding, distorted
+        if (beat === 0 || beat === 4 || beat === 8 || beat === 12) this._playKick(time, true);
+        if (beat === 2 || beat === 6 || beat === 10 || beat === 14) this._playKick(time, false);
+        if (beat === 4 || beat === 12) this._playClap(time);
+        if (beat === 0) this._playSub(time, step, 36);
+        if (beat === 8 && bar % 2 === 0) this._playPad(time, 'dark', step);
+        break;
+
+      default: // deep_house
+        // Mellow four-on-the-floor with warm pad
+        if (beat === 0 || beat === 4 || beat === 8 || beat === 12) this._playKick(time, false);
+        if (beat === 2 || beat === 6 || beat === 10 || beat === 14) this._playHat(time);
+        if (beat === 4 || beat === 12) this._playClap(time);
+        if (beat === 0) this._playSub(time, step, 55);
+        // Warm chord pad every 4 bars
+        if (beat === 0 && bar % 4 === 0) this._playPad(time, 'warm', step);
+        break;
+    }
+  },
+
+  _playKick(time, heavy = false) {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    const startFreq = heavy ? 200 : 165;
+    const endFreq = heavy ? 30 : 35;
+    const decay = heavy ? 0.15 : 0.12;
+    osc.frequency.setValueAtTime(startFreq, time);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, time + decay);
+
+    gain.gain.setValueAtTime(0.001, time);
+    gain.gain.linearRampToValueAtTime(0.6, time + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+
+    // Distortion for punch
+    const dist = this.ctx.createWaveShaper();
+    const n = 128;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / n - 1;
+      curve[i] = Math.tanh(x * 3);
+    }
+    dist.curve = curve;
+    dist.oversample = '2x';
+
+    // Transient click
+    const click = this.ctx.createOscillator();
+    const clickGain = this.ctx.createGain();
+    click.type = 'triangle';
+    click.frequency.setValueAtTime(3500, time);
+    click.frequency.exponentialRampToValueAtTime(200, time + 0.012);
+    clickGain.gain.setValueAtTime(0.001, time);
+    clickGain.gain.linearRampToValueAtTime(0.15, time + 0.001);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
+    click.connect(clickGain);
+    clickGain.connect(this.musicGain);
+    click.start(time);
+    click.stop(time + 0.025);
+
+    osc.connect(gain);
+    gain.connect(dist);
+    dist.connect(this.musicGain);
+    osc.start(time);
+    osc.stop(time + 0.22);
+  },
+
+  _playHat(time) {
+    if (!this.ctx) return;
+    const dur = 0.04;
+    const bufSize = Math.floor(this.ctx.sampleRate * dur);
+    const buffer = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 8000;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.035;
+    src.connect(hp);
+    hp.connect(gain);
+    gain.connect(this.musicGain);
+    src.start(time);
+  },
+
+  _playSub(time, step, baseFreq = 55) {
+    if (!this.ctx) return;
+    const bar = Math.floor(step / 16);
+    const ratios = [1, 1, 0.84, 1]; // root, root, minor 6th, root
+    const freq = baseFreq * ratios[bar % ratios.length];
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const beatDur = 60.0 / this.bpm;
+    gain.gain.setValueAtTime(0.001, time);
+    gain.gain.linearRampToValueAtTime(0.35, time + 0.05);
+    gain.gain.setValueAtTime(0.35, time + beatDur * 2);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + beatDur * 3.5);
+    osc.connect(gain);
+    gain.connect(this.musicGain);
+    osc.start(time);
+    osc.stop(time + beatDur * 4);
+  },
+
+  _playClap(time) {
+    if (!this.ctx) return;
+    const dur = 0.06;
+    const bufSize = Math.floor(this.ctx.sampleRate * dur);
+    const buffer = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      const env = Math.pow(1 - i / bufSize, 2.5);
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1200;
+    bp.Q.value = 1.5;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.025;
+    src.connect(bp);
+    bp.connect(gain);
+    gain.connect(this.musicGain);
+    src.start(time);
+  },
+
+  _playPad(time, type, step) {
+    if (!this.ctx) return;
+    const bar = Math.floor(step / 16);
+    const beatDur = 60.0 / this.bpm;
+    const padDur = beatDur * 4;
+
+    if (type === 'warm') {
+      // Deep house warm minor 7th chord
+      const root = [110, 110, 92.5, 110][bar % 4];
+      [root, root * 1.2, root * 1.5, root * 1.8].forEach(f => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = f;
+        g.gain.setValueAtTime(0.001, time);
+        g.gain.linearRampToValueAtTime(0.04, time + 0.3);
+        g.gain.setValueAtTime(0.04, time + padDur * 0.7);
+        g.gain.exponentialRampToValueAtTime(0.001, time + padDur);
+        osc.connect(g);
+        g.connect(this.musicGain);
+        osc.start(time);
+        osc.stop(time + padDur + 0.1);
+      });
+    } else if (type === 'dark') {
+      // Techno dark atmosphere noise
+      const dur = padDur * 2;
+      const bufSize = Math.floor(this.ctx.sampleRate * 0.5);
+      const buffer = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * 0.5;
+      const src = this.ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 200;
+      bp.Q.value = 8;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.001, time);
+      g.gain.linearRampToValueAtTime(0.02, time + 0.5);
+      g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+      src.connect(bp);
+      bp.connect(g);
+      g.connect(this.musicGain);
+      src.start(time);
+      src.stop(time + dur + 0.1);
+    } else if (type === 'reese') {
+      // DnB reese bass hint
+      const root = [55, 55, 46.25, 49][bar % 4];
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc1.type = 'sawtooth';
+      osc2.type = 'sawtooth';
+      osc1.frequency.value = root;
+      osc2.frequency.value = root * 1.005;
+      g.gain.setValueAtTime(0.001, time);
+      g.gain.linearRampToValueAtTime(0.03, time + 0.2);
+      g.gain.exponentialRampToValueAtTime(0.001, time + padDur);
+      osc1.connect(g);
+      osc2.connect(g);
+      g.connect(this.musicGain);
+      osc1.start(time);
+      osc2.start(time);
+      osc1.stop(time + padDur + 0.1);
+      osc2.stop(time + padDur + 0.1);
+    } else if (type === 'stab') {
+      // Tech-house chord stab
+      const root = 220;
+      [root, root * 1.25, root * 1.5].forEach(f => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = f;
+        g.gain.setValueAtTime(0.001, time);
+        g.gain.linearRampToValueAtTime(0.025, time + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+        osc.connect(g);
+        g.connect(this.musicGain);
+        osc.start(time);
+        osc.stop(time + 0.2);
+      });
+    }
+  },
+
+  setMuted(muted) {
+    this.muted = muted;
+    if (this.masterGain) {
+      this.masterGain.gain.setTargetAtTime(muted ? 0 : 0.7, this.ctx.currentTime, 0.05);
+    }
+  },
+
+  stopLoop() {
+    this.isPlaying = false;
+    if (this.musicInterval) {
+      clearTimeout(this.musicInterval);
+      this.musicInterval = null;
+    }
+  },
+};
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+
+function $(id) { return document.getElementById(id); }
+
+function showToast(msg, duration = 2000) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function updateStatusBar() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  $('status-time').textContent = `${h}:${m}`;
+  const battery = 8 + Math.floor(Math.random() * 12);
+  $('status-battery').textContent = `${battery}%`;
+}
+
+function switchTab(idx) {
+  state.currentTab = idx;
+  $('tab-slider').style.transform = `translateX(-${idx * (100 / 3)}%)`;
+  document.querySelectorAll('.nav-tab').forEach((btn, i) => {
+    btn.classList.toggle('active', i === idx);
+  });
+}
+
+// ============================================================
+// RENDER: VENUES
+// ============================================================
+
+function renderVenues() {
+  const container = $('venue-list');
+  container.innerHTML = VENUES.map(v => {
+    const selected = state.selectedVenue === v.id;
+    const locked = v.locked;
+    const cls = ['venue-card'];
+    if (selected) cls.push('selected');
+    if (locked) cls.push('locked');
+
+    if (locked) {
+      return `
+        <div class="${cls.join(' ')}">
+          <div class="venue-top">
+            <div class="venue-name">${v.name}</div>
+            <span class="venue-policy ${v.policyClass}">${v.policy}</span>
+          </div>
+          <div class="venue-locked-label">🔒 Complete earlier venues to unlock</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="${cls.join(' ')}" data-venue="${v.id}">
+        <div class="venue-top">
+          <div class="venue-name">${v.name}</div>
+          <span class="venue-policy ${v.policyClass}">${v.policy}</span>
+        </div>
+        <div class="venue-meta">
+          <span class="venue-tag">🎵 ${v.music}</span>
+          <span class="venue-tag">⏱ ${v.bpm} BPM</span>
+        </div>
+        <div class="venue-dress">Dress code: ${v.dressCode}</div>
+        ${v.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${v.desc}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.venue-card[data-venue]').forEach(card => {
+    card.addEventListener('click', () => {
+      const venueId = card.dataset.venue;
+      state.selectedVenue = venueId;
+
+      const venue = VENUES.find(v => v.id === venueId);
+      if (venue) {
+        ClubAudio.bpm = venue.bpm;
+        const styleMap = { 'Deep House': 'deep_house', 'Techno': 'techno', 'Drum & Bass': 'dnb', 'Tech-House': 'tech_house', 'Minimal Techno': 'minimal_techno', 'Industrial': 'industrial' };
+        ClubAudio.style = styleMap[venue.music] || 'deep_house';
+      }
+
+      renderVenues();
+      renderContacts();
+      renderLoadout();
+      updateConfirmBar();
+    });
+  });
+}
+
+// ============================================================
+// RENDER: CONTACTS
+// ============================================================
+
+function renderContacts() {
+  const container = $('contact-list');
+  const selectedVenue = VENUES.find(v => v.id === state.selectedVenue);
+
+  container.innerHTML = CONTACTS.map(c => {
+    const selected = state.selectedSquad.includes(c.id);
+    const atMax = !selected && state.selectedSquad.length >= 3;
+    const venueBlock = c.refusesEasy && selectedVenue?.policy === 'Easy';
+    const disabled = atMax || venueBlock;
+
+    const cls = ['contact-card'];
+    if (selected) cls.push('selected');
+    if (disabled && !selected) cls.push('disabled');
+
+    const anxPct = (c.anxiety / 10) * 100;
+    const anxColor = c.anxiety >= 7 ? 'var(--neon-green)' : c.anxiety >= 4 ? 'var(--neon-orange)' : 'var(--neon-pink)';
+
+    let warning = '';
+    if (venueBlock) {
+      warning = `<div class="contact-warning">Won't go to Easy venues</div>`;
+    }
+
+    return `
+      <div class="${cls.join(' ')}" data-contact="${c.id}">
+        <div class="contact-avatar" style="background:${c.traitColor};border:1px solid ${c.traitBorder};">
+          <span style="color:${c.color}">${c.initials}</span>
+          <span class="check">✓</span>
+        </div>
+        <div class="contact-info">
+          <div class="contact-name">${c.name}</div>
+          <span class="contact-trait" style="background:${c.traitColor};border:1px solid ${c.traitBorder};color:${c.traitTextColor};">${c.trait}</span>
+          <div class="contact-details">
+            <span class="detail">🎵 ${c.musicPref}</span>
+            <span class="detail">😰 <span class="anxiety-bar"><span class="fill" style="width:${anxPct}%;background:${anxColor};"></span></span> ${c.anxiety}/10</span>
+            <span class="detail">💨 ${c.flakeRate}%</span>
+          </div>
+          <div class="contact-styles">
+            ${c.styles.map(s => `<span class="style-pill">${s}</span>`).join('')}
+          </div>
+          ${warning}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.contact-card').forEach(card => {
+    card.addEventListener('click', () => {
+      if (card.classList.contains('disabled') && !card.classList.contains('selected')) {
+        const contact = CONTACTS.find(c => c.id === card.dataset.contact);
+        if (contact?.refusesEasy) {
+          showToast(`${contact.name} refuses Easy venues`);
+        } else {
+          showToast('Max 3 squad members');
+        }
+        return;
+      }
+      const contactId = card.dataset.contact;
+      const idx = state.selectedSquad.indexOf(contactId);
+      if (idx >= 0) {
+        state.selectedSquad.splice(idx, 1);
+      } else {
+        if (state.selectedSquad.length >= 3) return;
+        state.selectedSquad.push(contactId);
+      }
+      renderContacts();
+      renderLoadout();
+      updateConfirmBar();
+      updateSquadBadge();
+    });
+  });
+}
+
+function updateSquadBadge() {
+  const badge = $('squad-badge');
+  const count = state.selectedSquad.length;
+  $('squad-count').textContent = `${count} / 3`;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ============================================================
+// RENDER: LOADOUT
+// ============================================================
+
+function renderLoadout() {
+  const container = $('item-list');
+  const hasRissal = state.selectedSquad.includes('rissal');
+  const freeItems = hasRissal ? ['gum', 'lighter'] : [];
+
+  container.innerHTML = ITEMS.map(item => {
+    const owned = state.inventory[item.id] || 0;
+    const free = freeItems.includes(item.id);
+    const canAfford = state.cash >= item.price;
+
+    return `
+      <div class="item-card" data-item="${item.id}">
+        <div class="item-left">
+          <div class="item-icon">${item.icon}</div>
+          <div class="item-info">
+            <div class="item-name">${item.name}</div>
+            <div class="item-desc">${item.desc}</div>
+          </div>
+        </div>
+        <div class="item-right">
+          <div class="item-price">$${item.price}</div>
+          <div class="item-controls">
+            <button class="item-btn" data-action="remove" data-item="${item.id}" ${owned <= 0 ? 'disabled' : ''}>−</button>
+            <span class="item-qty">${owned}${free ? `<span class="item-free-tag">+1</span>` : ''}</span>
+            <button class="item-btn" data-action="add" data-item="${item.id}" ${!canAfford ? 'disabled' : ''}>+</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  $('budget-display').innerHTML = `<span class="currency">$</span>${state.cash}`;
+
+  const note = $('loadout-note');
+  if (hasRissal) {
+    note.textContent = "Rissal brings a free gum & lighter — the chill coder always comes prepared";
+  } else {
+    note.textContent = '';
+  }
+
+  container.querySelectorAll('.item-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      const itemId = btn.dataset.item;
+      const item = ITEMS.find(i => i.id === itemId);
+      if (!item) return;
+
+      if (action === 'add') {
+        if (state.cash < item.price) {
+          showToast("Not enough cash");
+          return;
+        }
+        state.cash -= item.price;
+        state.inventory[itemId] = (state.inventory[itemId] || 0) + 1;
+      } else {
+        if ((state.inventory[itemId] || 0) <= 0) return;
+        state.cash += item.price;
+        state.inventory[itemId]--;
+      }
+      renderLoadout();
+      updateConfirmBar();
+    });
+  });
+}
+
+// ============================================================
+// CONFIRM BAR
+// ============================================================
+
+function updateConfirmBar() {
+  const btn = $('confirm-btn');
+  const summary = $('confirm-summary');
+  const venue = VENUES.find(v => v.id === state.selectedVenue);
+
+  if (!venue) {
+    summary.textContent = 'Select a venue to get started';
+    btn.disabled = true;
+    btn.classList.remove('ready');
+    return;
+  }
+
+  const squadCount = state.selectedSquad.length;
+  const itemCount = Object.values(state.inventory).reduce((a, b) => a + b, 0);
+  const parts = [venue.name];
+  if (squadCount > 0) parts.push(`${squadCount} friend${squadCount > 1 ? 's' : ''}`);
+  if (itemCount > 0) parts.push(`${itemCount} item${itemCount > 1 ? 's' : ''}`);
+  summary.textContent = parts.join(' · ');
+
+  btn.disabled = false;
+  btn.classList.add('ready');
+}
+
+// ============================================================
+// FLAKE ROLL
+// ============================================================
+
+async function startFlakeRoll() {
+  state.phase = 'FLAKE_ROLL';
+  const venue = VENUES.find(v => v.id === state.selectedVenue);
+
+  $('phone-container').classList.remove('active');
+  $('flake-overlay').classList.add('active');
+  $('flake-location').textContent = `Outside ${venue.name}`;
+
+  const msgContainer = $('flake-messages');
+  msgContainer.innerHTML = '';
+  $('flake-result').innerHTML = '';
+  $('flake-result').classList.remove('visible');
+
+  if (state.selectedSquad.length === 0) {
+    await sleep(800);
+    showSoloResult(venue);
+    return;
+  }
+
+  const results = [];
+
+  for (const contactId of state.selectedSquad) {
+    const contact = CONTACTS.find(c => c.id === contactId);
+    if (!contact) continue;
+
+    // Show typing indicator
+    const typingEl = document.createElement('div');
+    typingEl.className = 'flake-msg visible';
+    typingEl.innerHTML = `
+      <div class="msg-avatar" style="background:${contact.traitColor};border:1px solid ${contact.traitBorder};">
+        <span style="color:${contact.color};font-size:13px;font-weight:800;">${contact.initials}</span>
+      </div>
+      <div class="msg-bubble">
+        <div class="msg-name" style="color:${contact.color}">${contact.name}</div>
+        <div class="typing-indicator"><span></span><span></span><span></span></div>
+      </div>
+    `;
+    msgContainer.appendChild(typingEl);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+
+    await sleep(1200 + Math.random() * 1200);
+
+    // Roll for flake
+    const roll = Math.random() * 100;
+    const flaked = roll < contact.flakeRate;
+    results.push({ contact, flaked });
+
+    // Replace typing with actual message
+    typingEl.innerHTML = `
+      <div class="msg-avatar" style="background:${contact.traitColor};border:1px solid ${contact.traitBorder};">
+        <span style="color:${contact.color};font-size:13px;font-weight:800;">${contact.initials}</span>
+      </div>
+      <div class="msg-bubble">
+        <div class="msg-name" style="color:${contact.color}">${contact.name}</div>
+        <div class="msg-text">${flaked ? contact.flakeMsg : contact.confirmMsg}</div>
+        <div class="msg-status ${flaked ? 'flaked' : 'confirmed'}">
+          ${flaked ? '✗ FLAKED' : '✓ CONFIRMED'}
+        </div>
+      </div>
+    `;
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+
+    await sleep(600);
+  }
+
+  await sleep(800);
+
+  // Show final squad
+  state.finalSquad = results.filter(r => !r.flaked).map(r => r.contact);
+  showFlakeResult(venue, state.finalSquad, results);
+}
+
+function showSoloResult(venue) {
+  const resultEl = $('flake-result');
+  resultEl.innerHTML = `
+    <div class="flake-result-title">Going solo tonight</div>
+    <div class="flake-squad">
+      <div class="flake-squad-member">
+        <div class="member-dot" style="background:linear-gradient(135deg, var(--neon-purple), var(--neon-pink));">
+          <span>You</span>
+        </div>
+        <div class="member-name">You</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">Brave. Stupid. Let's go.</div>
+    <button class="enter-queue-btn" onclick="enterQueue()">Enter the Queue →</button>
+  `;
+  resultEl.classList.add('visible');
+}
+
+function showFlakeResult(venue, squad, allResults) {
+  const resultEl = $('flake-result');
+  const flakeCount = allResults.filter(r => r.flaked).length;
+  const survivorCount = squad.length;
+
+  let subtitle = '';
+  if (flakeCount === 0) {
+    subtitle = "Everyone's in. Let's move.";
+  } else if (survivorCount === 0) {
+    subtitle = "Everyone flaked. Going solo.";
+  } else {
+    subtitle = `${flakeCount} down, ${survivorCount} standing. Let's go.`;
+  }
+
+  const memberDots = squad.length > 0 ? squad.map(c => `
+    <div class="flake-squad-member">
+      <div class="member-dot" style="background:${c.traitColor};border:2px solid ${c.color};">
+        <span style="color:${c.color}">${c.initials}</span>
+      </div>
+      <div class="member-name">${c.name}</div>
+    </div>
+  `).join('') : '';
+
+  const youDot = `
+    <div class="flake-squad-member">
+      <div class="member-dot" style="background:linear-gradient(135deg, var(--neon-purple), var(--neon-pink));">
+        <span>You</span>
+      </div>
+      <div class="member-name">You</div>
+    </div>
+  `;
+
+  resultEl.innerHTML = `
+    <div class="flake-result-title">Your squad tonight</div>
+    <div class="flake-squad">
+      ${youDot}
+      ${memberDots}
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">${subtitle}</div>
+    <button class="enter-queue-btn" onclick="enterQueue()">Enter the Queue →</button>
+  `;
+  resultEl.classList.add('visible');
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ============================================================
+// EVENT LOG
+// ============================================================
+
+const EventLog = {
+  entries: [],
+
+  add(text, type = 'info') {
+    this.entries.push({ text, type, time: state.queue.gameTime });
+    this.render();
+  },
+
+  render() {
+    const list = $('event-log-list');
+    if (!list) return;
+    list.innerHTML = this.entries.slice().reverse().map(e => {
+      const h = Math.floor(e.time / 60) % 24;
+      const m = e.time % 60;
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const period = h >= 12 ? 'PM' : 'AM';
+      const ts = `${h12}:${String(m).padStart(2, '0')} ${period}`;
+      return `<div class="log-entry"><span class="log-time">${ts}</span><span class="log-text ${e.type}">${e.text}</span></div>`;
+    }).join('');
+  },
+
+  clear() { this.entries = []; },
+};
+
+// ============================================================
+// PHASE 1: CANVAS RENDERER
+// ============================================================
+
+const QueueCanvas = {
+  canvas: null,
+  ctx: null,
+  W: 0, H: 0,
+  dpr: 1,
+  scrollX: 0,
+  targetScrollX: 0,
+  time: 0,
+
+  GROUND_Y_RATIO: 0.78,
+  PERSON_SPACING: 42,
+  PERSON_SCALE: 1,
+
+  SKIN_TONES: ['#f5d0a9', '#e8b88a', '#c68642', '#8d5524', '#6b3e26', '#f0c5a0', '#dba270'],
+  HAIR_COLORS: ['#1a1a2e', '#3d2b1f', '#8b6914', '#c4931a', '#e84a5f', '#4a90d9', '#2d2d2d', '#f5f5dc', '#d14070'],
+  SHIRT_COLORS: ['#1a1a2e', '#2d2d2d', '#0d1b2a', '#3c1053', '#1b4332', '#7b2d26', '#f0f0f0', '#4361ee', '#e84a5f', '#ff6b35', '#2d6a4f'],
+
+  init() {
+    this.canvas = $('queue-canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+  },
+
+  resize() {
+    const wrap = this.canvas.parentElement;
+    this.W = wrap.clientWidth;
+    this.H = wrap.clientHeight;
+    this.canvas.width = this.W * this.dpr;
+    this.canvas.height = this.H * this.dpr;
+    this.canvas.style.width = this.W + 'px';
+    this.canvas.style.height = this.H + 'px';
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.PERSON_SCALE = Math.max(0.7, Math.min(1.2, this.H / 350));
+  },
+
+  _pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; },
+
+  generatePeople(totalCount, playerPos, squad) {
+    const people = [];
+    const squadCount = squad.length;
+
+    for (let i = 0; i < totalCount; i++) {
+      const isPlayer = i === playerPos;
+      const squadIdx = i - playerPos - 1;
+      const isSquad = !isPlayer && squadIdx >= 0 && squadIdx < squadCount;
+
+      const height = 36 + Math.random() * 16;
+      const skin = this._pick(this.SKIN_TONES);
+      const hair = this._pick(this.HAIR_COLORS);
+      let shirt, accent;
+
+      if (isPlayer) {
+        shirt = '#7b75ff';
+        accent = '#fff';
+      } else if (isSquad) {
+        const sc = squad[squadIdx];
+        shirt = sc?.color || '#39ff14';
+        accent = sc?.color || '#39ff14';
+      } else {
+        shirt = this._pick(this.SHIRT_COLORS);
+        accent = null;
+      }
+
+      const hasHat = !isPlayer && !isSquad && Math.random() < 0.15;
+      const hasPhone = !isPlayer && Math.random() < 0.2;
+      const hasBag = !isPlayer && !isSquad && Math.random() < 0.1;
+
+      people.push({
+        baseX: 0,
+        height,
+        skin, hair, shirt, accent,
+        isPlayer, isSquad,
+        squadMember: isSquad ? squad[squadIdx] : null,
+        name: isPlayer ? 'You' : isSquad ? (squad[squadIdx]?.name || '?') : '',
+        bobOffset: Math.random() * Math.PI * 2,
+        bobSpeed: 0.3 + Math.random() * 0.25,
+        swayAmp: 0.8 + Math.random() * 1.2,
+        hasHat, hasPhone, hasBag,
+        pantColor: Math.random() < 0.5 ? '#1a1a2e' : '#2d2d2d',
+      });
+    }
+    state.queue.queuePeople = people;
+    this.layoutPeople();
+  },
+
+  layoutPeople() {
+    const people = state.queue.queuePeople;
+    const sp = this.PERSON_SPACING;
+    const startX = 120;
+    for (let i = 0; i < people.length; i++) {
+      people[i].baseX = startX + i * sp;
+    }
+    const playerIdx = people.findIndex(p => p.isPlayer);
+    if (playerIdx >= 0) {
+      this.targetScrollX = people[playerIdx].baseX - this.W * 0.55;
+    }
+  },
+
+  drawPerson(ctx, p, x, groundY, t) {
+    const sc = this.PERSON_SCALE;
+    const h = p.height * sc;
+    const sway = Math.sin(t * p.bobSpeed + p.bobOffset) * p.swayAmp;
+    const bob = Math.sin(t * p.bobSpeed * 0.7 + p.bobOffset + 1) * 0.8;
+
+    const feetY = groundY;
+    const headR = 5.5 * sc;
+    const bodyW = 10 * sc;
+    const legLen = h * 0.38;
+    const torsoLen = h * 0.35;
+    const neckY = feetY - legLen - torsoLen + bob;
+    const headY = neckY - headR - 1 * sc;
+
+    ctx.save();
+    ctx.translate(x + sway, 0);
+
+    // Glow for player/squad
+    if (p.isPlayer || p.isSquad) {
+      const glowColor = p.isPlayer ? 'rgba(123,117,255,0.15)' : (p.accent ? p.accent.replace(')', ',0.12)').replace('rgb', 'rgba') : 'rgba(57,255,20,0.12)');
+      const glow = ctx.createRadialGradient(0, feetY - h * 0.5, 5, 0, feetY - h * 0.5, h * 0.7);
+      glow.addColorStop(0, p.isPlayer ? 'rgba(123,117,255,0.18)' : 'rgba(57,255,20,0.12)');
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.fillRect(-h * 0.7, feetY - h - 10, h * 1.4, h + 20);
+    }
+
+    // Legs
+    ctx.strokeStyle = p.pantColor;
+    ctx.lineWidth = 3.5 * sc;
+    ctx.lineCap = 'round';
+    const legSpread = 3 * sc;
+    ctx.beginPath();
+    ctx.moveTo(-legSpread, feetY);
+    ctx.lineTo(-1 * sc, feetY - legLen + bob);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(legSpread, feetY);
+    ctx.lineTo(1 * sc, feetY - legLen + bob);
+    ctx.stroke();
+
+    // Shoes
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-legSpread - 2 * sc, feetY - 1.5 * sc, 5 * sc, 2.5 * sc);
+    ctx.fillRect(legSpread - 2 * sc, feetY - 1.5 * sc, 5 * sc, 2.5 * sc);
+
+    // Torso
+    const torsoTop = feetY - legLen - torsoLen + bob;
+    const torsoBot = feetY - legLen + bob;
+    ctx.fillStyle = p.shirt;
+    ctx.beginPath();
+    ctx.moveTo(-bodyW * 0.55, torsoBot);
+    ctx.lineTo(-bodyW * 0.5, torsoTop + 2 * sc);
+    ctx.quadraticCurveTo(0, torsoTop - 1 * sc, bodyW * 0.5, torsoTop + 2 * sc);
+    ctx.lineTo(bodyW * 0.55, torsoBot);
+    ctx.closePath();
+    ctx.fill();
+
+    // Arms
+    ctx.strokeStyle = p.shirt;
+    ctx.lineWidth = 3 * sc;
+    const armSway = Math.sin(t * p.bobSpeed * 0.5 + p.bobOffset + 2) * 2;
+    // Left arm
+    ctx.beginPath();
+    ctx.moveTo(-bodyW * 0.5, torsoTop + 5 * sc);
+    ctx.lineTo(-bodyW * 0.7, torsoBot - 2 * sc + armSway);
+    ctx.stroke();
+    // Right arm
+    if (p.hasPhone) {
+      ctx.beginPath();
+      ctx.moveTo(bodyW * 0.5, torsoTop + 5 * sc);
+      ctx.lineTo(bodyW * 0.55, torsoTop + 12 * sc);
+      ctx.stroke();
+      // Phone
+      ctx.fillStyle = '#333';
+      ctx.fillRect(bodyW * 0.4, torsoTop + 10 * sc, 4 * sc, 6 * sc);
+      ctx.fillStyle = 'rgba(87,242,255,0.5)';
+      ctx.fillRect(bodyW * 0.4 + 0.5 * sc, torsoTop + 10.5 * sc, 3 * sc, 5 * sc);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(bodyW * 0.5, torsoTop + 5 * sc);
+      ctx.lineTo(bodyW * 0.7, torsoBot - 2 * sc - armSway);
+      ctx.stroke();
+    }
+
+    // Skin for hands
+    ctx.fillStyle = p.skin;
+    ctx.beginPath();
+    ctx.arc(-bodyW * 0.7, torsoBot - 2 * sc + armSway, 2 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    if (!p.hasPhone) {
+      ctx.beginPath();
+      ctx.arc(bodyW * 0.7, torsoBot - 2 * sc - armSway, 2 * sc, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Neck
+    ctx.fillStyle = p.skin;
+    ctx.fillRect(-2 * sc, neckY + bob, 4 * sc, headR * 0.5);
+
+    // Head
+    ctx.beginPath();
+    ctx.arc(0, headY + bob, headR, 0, Math.PI * 2);
+    ctx.fillStyle = p.skin;
+    ctx.fill();
+
+    // Hair
+    ctx.fillStyle = p.hair;
+    ctx.beginPath();
+    ctx.arc(0, headY + bob - headR * 0.15, headR * 1.05, Math.PI, Math.PI * 2);
+    ctx.fill();
+    // Side hair
+    ctx.fillRect(-headR * 1.05, headY + bob - headR * 0.3, headR * 0.25, headR * 0.7);
+
+    // Hat
+    if (p.hasHat) {
+      ctx.fillStyle = p.hair;
+      ctx.fillRect(-headR * 1.3, headY + bob - headR - 1, headR * 2.6, 3 * sc);
+      ctx.fillRect(-headR * 0.9, headY + bob - headR - 4 * sc, headR * 1.8, 4 * sc);
+    }
+
+    // Bag
+    if (p.hasBag) {
+      ctx.fillStyle = '#444';
+      ctx.fillRect(-bodyW * 0.8, torsoTop + 6 * sc, 4 * sc, 8 * sc);
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-bodyW * 0.6, torsoTop + 6 * sc);
+      ctx.lineTo(-bodyW * 0.6, torsoTop + 2 * sc);
+      ctx.stroke();
+    }
+
+    // Player/Squad indicator ring under feet
+    if (p.isPlayer || p.isSquad) {
+      ctx.strokeStyle = p.isPlayer ? '#7b75ff' : (p.accent || '#39ff14');
+      ctx.lineWidth = 2;
+      ctx.shadowColor = p.isPlayer ? '#7b75ff' : (p.accent || '#39ff14');
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.ellipse(0, feetY + 2, 10 * sc, 3 * sc, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Name label for player & squad
+    if (p.name) {
+      ctx.fillStyle = p.isPlayer ? '#fff' : (p.accent || '#ebe4ff');
+      ctx.font = `${p.isPlayer ? '700' : '600'} ${9 * sc}px ${getComputedStyle(document.body).fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(p.name, 0, feetY + 14 * sc);
+    }
+
+    ctx.restore();
+  },
+
+  draw() {
+    this.time += 0.016;
+    this.scrollX += (this.targetScrollX - this.scrollX) * 0.06;
+    const ctx = this.ctx;
+    const W = this.W;
+    const H = this.H;
+    const groundY = H * this.GROUND_Y_RATIO;
+
+    // Sky / night background
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, '#05041a');
+    bgGrad.addColorStop(0.5, '#0a0824');
+    bgGrad.addColorStop(1, '#0d0b22');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Stars
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    for (let i = 0; i < 30; i++) {
+      const sx = (i * 137.5) % W;
+      const sy = (i * 73.1) % (H * 0.3);
+      const twinkle = 0.15 + Math.abs(Math.sin(this.time * 0.5 + i)) * 0.2;
+      ctx.globalAlpha = twinkle;
+      ctx.fillRect(sx, sy, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    ctx.translate(-this.scrollX, 0);
+
+    // Building wall behind queue
+    const wallTop = H * 0.15;
+    ctx.fillStyle = '#0e0c28';
+    ctx.fillRect(-500, wallTop, 5000, groundY - wallTop);
+    // Brick texture
+    ctx.strokeStyle = 'rgba(255,255,255,0.015)';
+    ctx.lineWidth = 0.5;
+    for (let by = wallTop; by < groundY; by += 12) {
+      const offset = (Math.floor(by / 12) % 2) * 15;
+      for (let bx = -500 + offset; bx < 5000; bx += 30) {
+        ctx.strokeRect(bx, by, 28, 11);
+      }
+    }
+
+    // Ground / sidewalk
+    ctx.fillStyle = '#14122a';
+    ctx.fillRect(-500, groundY, 5000, H - groundY + 100);
+    // Sidewalk edge
+    ctx.fillStyle = '#1c1940';
+    ctx.fillRect(-500, groundY, 5000, 3);
+    // Curb
+    ctx.fillStyle = '#222040';
+    ctx.fillRect(-500, groundY + 28, 5000, 2);
+
+    // Street (darker, below curb)
+    ctx.fillStyle = '#0a0918';
+    ctx.fillRect(-500, groundY + 30, 5000, 200);
+
+    // Club entrance on the left (position 0 side)
+    const doorX = 60;
+    const doorW = 50;
+    const doorH = groundY - wallTop - 10;
+    const doorTop = wallTop + 5;
+
+    // Entrance wall section (darker)
+    ctx.fillStyle = '#0a0820';
+    ctx.fillRect(doorX - 30, wallTop, doorW + 60, groundY - wallTop);
+
+    // Neon arch
+    const neonPulse = 0.7 + Math.sin(this.time * 2.5) * 0.3;
+    ctx.shadowColor = '#7b75ff';
+    ctx.shadowBlur = 25 * neonPulse;
+    ctx.strokeStyle = `rgba(123,117,255,${0.7 * neonPulse})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(doorX - 5, groundY);
+    ctx.lineTo(doorX - 5, doorTop + 15);
+    ctx.quadraticCurveTo(doorX + doorW / 2, doorTop - 5, doorX + doorW + 5, doorTop + 15);
+    ctx.lineTo(doorX + doorW + 5, groundY);
+    ctx.stroke();
+
+    // Second neon layer (pink)
+    ctx.shadowColor = '#ff4d6d';
+    ctx.shadowBlur = 15 * neonPulse;
+    ctx.strokeStyle = `rgba(255,77,109,${0.4 * neonPulse})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(doorX - 8, groundY);
+    ctx.lineTo(doorX - 8, doorTop + 18);
+    ctx.quadraticCurveTo(doorX + doorW / 2, doorTop - 2, doorX + doorW + 8, doorTop + 18);
+    ctx.lineTo(doorX + doorW + 8, groundY);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Door (dark opening with light spill)
+    const doorGlow = ctx.createLinearGradient(doorX, doorTop + 20, doorX, groundY);
+    doorGlow.addColorStop(0, 'rgba(123,117,255,0.12)');
+    doorGlow.addColorStop(0.5, 'rgba(255,77,109,0.06)');
+    doorGlow.addColorStop(1, 'rgba(0,0,0,0.8)');
+    ctx.fillStyle = doorGlow;
+    ctx.fillRect(doorX, doorTop + 20, doorW, groundY - doorTop - 20);
+
+    // Club name above door
+    ctx.fillStyle = `rgba(123,117,255,${0.6 + neonPulse * 0.3})`;
+    ctx.shadowColor = '#7b75ff';
+    ctx.shadowBlur = 10;
+    ctx.font = `800 ${8}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(VENUES.find(v => v.id === state.selectedVenue)?.name?.toUpperCase() || 'CLUB', doorX + doorW / 2, doorTop + 10);
+    ctx.shadowBlur = 0;
+
+    // Light spill onto sidewalk from door
+    const spillGlow = ctx.createRadialGradient(doorX + doorW / 2, groundY, 5, doorX + doorW / 2, groundY, 80);
+    spillGlow.addColorStop(0, 'rgba(123,117,255,0.08)');
+    spillGlow.addColorStop(1, 'transparent');
+    ctx.fillStyle = spillGlow;
+    ctx.fillRect(doorX - 60, groundY - 10, doorW + 120, 50);
+
+    // Bouncer
+    this._drawBouncer(ctx, doorX + doorW + 20, groundY);
+
+    // Rope barrier
+    const ropeStartX = doorX + doorW + 40;
+    ctx.strokeStyle = 'rgba(255,216,107,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    // Stanchions
+    for (let sx = ropeStartX; sx < ropeStartX + 60; sx += 55) {
+      ctx.fillStyle = '#444';
+      ctx.fillRect(sx - 1.5, groundY - 30, 3, 30);
+      ctx.fillStyle = '#ffd86b';
+      ctx.beginPath();
+      ctx.arc(sx, groundY - 30, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Rope
+    ctx.strokeStyle = 'rgba(255,216,107,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(ropeStartX, groundY - 22);
+    const ropeSag = 4 + Math.sin(this.time) * 1;
+    ctx.quadraticCurveTo(ropeStartX + 27, groundY - 22 + ropeSag, ropeStartX + 55, groundY - 22);
+    ctx.stroke();
+
+    // Street lamps
+    for (let lx = ropeStartX + 80; lx < 3000; lx += 280) {
+      // Pole
+      ctx.fillStyle = '#1c1940';
+      ctx.fillRect(lx - 1.5, wallTop + 20, 3, groundY - wallTop - 20);
+      // Lamp head
+      ctx.fillStyle = '#2a2650';
+      ctx.fillRect(lx - 6, wallTop + 18, 12, 6);
+      // Light cone
+      const lampGlow = ctx.createRadialGradient(lx, wallTop + 24, 3, lx, groundY - 30, 60);
+      lampGlow.addColorStop(0, 'rgba(255,216,107,0.08)');
+      lampGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = lampGlow;
+      ctx.beginPath();
+      ctx.moveTo(lx - 5, wallTop + 24);
+      ctx.lineTo(lx - 45, groundY);
+      ctx.lineTo(lx + 45, groundY);
+      ctx.lineTo(lx + 5, wallTop + 24);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Draw people (back to front, so closer = drawn last)
+    const people = state.queue.queuePeople;
+    for (let i = people.length - 1; i >= 0; i--) {
+      const p = people[i];
+      this.drawPerson(ctx, p, p.baseX, groundY, this.time);
+    }
+
+    // Talkable indicators (person in front and behind player)
+    const playerIdx = people.findIndex(pp => pp.isPlayer);
+    const squadLen = state.finalSquad?.length || 0;
+    const frontIdx = playerIdx - 1;
+    const backIdx = playerIdx + 1 + squadLen;
+
+    [frontIdx, backIdx].forEach(idx => {
+      if (idx >= 0 && idx < people.length) {
+        const p = people[idx];
+        const sway = Math.sin(this.time * p.bobSpeed + p.bobOffset) * p.swayAmp;
+        const cx = p.baseX + sway;
+        const cy = groundY - p.height * this.PERSON_SCALE * 0.5;
+        ctx.strokeStyle = 'rgba(255,216,107,0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 14, p.height * this.PERSON_SCALE * 0.55, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Portrait + "Talk?" label above talkable neighbors
+        const neighbor = idx === frontIdx ? state.queue.neighborFront : state.queue.neighborBack;
+        if (neighbor?.portrait && !this._portraitCache) this._portraitCache = {};
+        if (neighbor?.portrait) {
+          const cacheKey = neighbor.name + '_' + idx;
+          if (!this._portraitCache[cacheKey]) {
+            const img = new Image();
+            img.src = neighbor.portrait;
+            this._portraitCache[cacheKey] = img;
+          }
+          const img = this._portraitCache[cacheKey];
+          if (img.complete) {
+            const ps = 20;
+            const px = cx - ps / 2;
+            const py = cy - p.height * this.PERSON_SCALE * 0.55 - ps - 8;
+            // Border
+            ctx.fillStyle = 'rgba(255,216,107,0.3)';
+            ctx.fillRect(px - 2, py - 2, ps + 4, ps + 4);
+            ctx.drawImage(img, px, py, ps, ps);
+          }
+        }
+        ctx.fillStyle = 'rgba(255,216,107,0.6)';
+        ctx.font = `700 ${8}px ${getComputedStyle(document.body).fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.fillText(idx === frontIdx ? '💬 Talk' : '🗣️ Talk', cx, cy - p.height * this.PERSON_SCALE * 0.55 - 4);
+      }
+    });
+
+    ctx.restore();
+  },
+
+  _drawBouncer(ctx, x, groundY) {
+    const sc = this.PERSON_SCALE;
+    const h = 58 * sc;
+    const feetY = groundY;
+    const headR = 7 * sc;
+    const bodyW = 16 * sc;
+    const legLen = h * 0.35;
+    const torsoLen = h * 0.38;
+    const neckY = feetY - legLen - torsoLen;
+    const headY = neckY - headR;
+
+    // Legs
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x - 5 * sc, feetY - legLen, 4.5 * sc, legLen);
+    ctx.fillRect(x + 1 * sc, feetY - legLen, 4.5 * sc, legLen);
+
+    // Torso (broad)
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath();
+    ctx.moveTo(x - bodyW * 0.6, feetY - legLen);
+    ctx.lineTo(x - bodyW * 0.55, neckY + 3 * sc);
+    ctx.quadraticCurveTo(x, neckY, x + bodyW * 0.55, neckY + 3 * sc);
+    ctx.lineTo(x + bodyW * 0.6, feetY - legLen);
+    ctx.closePath();
+    ctx.fill();
+
+    // Arms (crossed)
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 5 * sc;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x - bodyW * 0.55, neckY + 8 * sc);
+    ctx.lineTo(x + 3 * sc, neckY + 16 * sc);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + bodyW * 0.55, neckY + 8 * sc);
+    ctx.lineTo(x - 3 * sc, neckY + 16 * sc);
+    ctx.stroke();
+
+    // Skin for hands (crossed position)
+    ctx.fillStyle = '#8d5524';
+    ctx.beginPath();
+    ctx.arc(x + 3 * sc, neckY + 16 * sc, 2.5 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - 3 * sc, neckY + 16 * sc, 2.5 * sc, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Neck
+    ctx.fillStyle = '#8d5524';
+    ctx.fillRect(x - 3 * sc, neckY, 6 * sc, headR * 0.6);
+
+    // Head
+    ctx.beginPath();
+    ctx.arc(x, headY, headR, 0, Math.PI * 2);
+    ctx.fillStyle = '#8d5524';
+    ctx.fill();
+
+    // Sunglasses
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 6 * sc, headY - 2 * sc, 5 * sc, 3 * sc);
+    ctx.fillRect(x + 1 * sc, headY - 2 * sc, 5 * sc, 3 * sc);
+    ctx.fillRect(x - 1 * sc, headY - 1 * sc, 2 * sc, 1.5 * sc);
+
+    // Earpiece
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x + headR * 0.7, headY - headR * 0.3, 2 * sc, headR);
+  },
+
+  startLoop() {
+    const loop = () => {
+      if (state.phase !== 'QUEUE') return;
+      this.draw();
+      state.queue.animFrame = requestAnimationFrame(loop);
+    };
+    loop();
+  },
+
+  stopLoop() {
+    if (state.queue.animFrame) {
+      cancelAnimationFrame(state.queue.animFrame);
+      state.queue.animFrame = null;
+    }
+  },
+};
+
+// ============================================================
+// PHASE 1: LLM ENGINE
+// ============================================================
+
+const LLM = {
+  pipeline: null,
+  loaded: false,
+  loading: false,
+
+  async load(onProgress) {
+    if (this.loaded || this.loading) return;
+    this.loading = true;
+    try {
+      const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.1.0');
+      env.allowLocalModels = false;
+
+      this.pipeline = await pipeline('text-generation', 'onnx-community/gemma-4-E4B-it-ONNX', {
+        device: 'webgpu',
+        dtype: 'q4f16',
+        progress_callback: (p) => {
+          if (p.status === 'progress' && p.total) {
+            const pct = Math.round((p.loaded / p.total) * 100);
+            onProgress?.(pct, p.file || '');
+          } else if (p.status === 'ready') {
+            onProgress?.(100, 'Ready');
+          }
+        },
+      });
+      this.loaded = true;
+      this.loading = false;
+    } catch (e) {
+      console.error('LLM load failed:', e);
+      this.loading = false;
+      throw e;
+    }
+  },
+
+  async chat(messages, maxTokens = 150) {
+    if (!this.loaded || !this.pipeline) return null;
+    try {
+      const output = await this.pipeline(messages, {
+        max_new_tokens: maxTokens,
+        temperature: 0.8,
+        top_p: 0.92,
+        do_sample: true,
+      });
+      const generated = output[0]?.generated_text;
+      if (Array.isArray(generated)) {
+        const last = generated[generated.length - 1];
+        return last?.content || '';
+      }
+      return typeof generated === 'string' ? generated : '';
+    } catch (e) {
+      console.error('LLM chat error:', e);
+      return null;
+    }
+  },
+};
+
+// Scripted fallback for when LLM is not available
+const ScriptedChat = {
+  responses: {
+    friendly: {
+      greetings: [
+        "Hey! Yeah, been here like 40 minutes. Wild night.",
+        "What's up! You just got here? Lucky, the line was way longer before.",
+        "Yo! Finally someone who looks normal. Half these people are sketchy.",
+      ],
+      general: [
+        "Haha yeah, totally. This city is crazy on Fridays.",
+        "Right? I can't believe how long this is taking.",
+        "For real. At least the music sounds decent from out here.",
+      ],
+    },
+    drunk: {
+      greetings: [
+        "HEYYY! *stumbles* Dude you gotta hear this... *hiccup*",
+        "Brooo this line is... what was I saying? Oh yeah, hi!",
+        "Yooo bestie!! I feel like I know you from somewhere!",
+      ],
+      general: [
+        "Hahahaha yeahhh man... *leans on you* ...sorry.",
+        "Wait wait wait I know something about tonight... what was it...",
+        "You want some of my drink? No? Your loss, this is premium stuff.",
+      ],
+    },
+    hostile: {
+      greetings: [
+        "...what do you want?",
+        "*doesn't look at you* ...what.",
+        "We're all waiting. Make it quick.",
+      ],
+      general: [
+        "Look, I don't do small talk. You got something for me or not?",
+        "Maybe if you had something useful I'd talk. A lighter? Gum? Anything?",
+        "*stares at phone* ...you're still here?",
+      ],
+    },
+    neutral: {
+      greetings: [
+        "Hey. Yeah, it's been a while.",
+        "Oh, hi. You just got here?",
+        "What's up. Crazy line tonight, huh.",
+      ],
+      general: [
+        "Yeah, I guess so.",
+        "Mm. We'll see if we even get in.",
+        "Could be worse. Last week was way longer.",
+      ],
+    },
+    anxious: {
+      greetings: [
+        "Oh god, do you think we'll even get in? I'm freaking out.",
+        "Hey... is it just me or did the line stop moving completely?",
+        "Hi! Sorry, I'm a mess. My friends ditched me and I'm solo.",
+      ],
+      general: [
+        "What if they close the door? That happens sometimes right??",
+        "I should have just stayed home... no, I need this. I need to go out.",
+        "Do I look okay? Be honest. Is this outfit too much? Too little?",
+      ],
+    },
+  },
+
+  intelShared: false,
+  msgCount: 0,
+
+  reset() { this.intelShared = false; this.msgCount = 0; },
+
+  getResponse(neighbor, playerMsg) {
+    this.msgCount++;
+    const pool = this.responses[neighbor.disposition] || this.responses.neutral;
+
+    if (this.msgCount === 1) {
+      return pool.greetings[Math.floor(Math.random() * pool.greetings.length)];
+    }
+
+    // Disposition-aware value delivery
+    const intelThreshold = { friendly: 2, drunk: 1, hostile: 4, neutral: 3, anxious: 2 };
+    const threshold = intelThreshold[neighbor.disposition] || 3;
+
+    // Maybe want an item first (hostile always asks, others sometimes)
+    if (neighbor.wants.length > 0 && this.msgCount === 2) {
+      const askChance = neighbor.disposition === 'hostile' ? 1.0 : 0.5;
+      if (Math.random() < askChance) {
+        return `${neighbor.disposition === 'hostile' ? "Look, you got " : "Hey, you wouldn't happen to have "}${neighbor.wants[0]}${neighbor.disposition === 'hostile' ? "? Then maybe we can talk." : ", would you?"}\n[WANT: ${neighbor.wants[0]}]`;
+      }
+    }
+
+    // Share intel based on disposition timing
+    if (!this.intelShared && neighbor.intel && this.msgCount >= threshold) {
+      this.intelShared = true;
+      const intelText = resolveIntelText(neighbor.intel.text);
+      return pool.general[Math.floor(Math.random() * pool.general.length)] + '\n[INTEL: ' + intelText + ']';
+    }
+
+    // Offer substance if they have one
+    if (neighbor.hasSubstance && this.msgCount >= 3 && Math.random() < 0.4) {
+      return `You seem chill. Want some... *lowers voice* ...you know?\n[OFFER: ${neighbor.hasSubstance}]`;
+    }
+
+    // Offer money if generous
+    if (neighbor.money > 0 && this.msgCount >= 3 && Math.random() < 0.3) {
+      return `Here, take this. You need it more than me.\n[GIVE_MONEY: ${neighbor.money}]`;
+    }
+
+    // Offer items
+    if (neighbor.items.length > 0 && this.msgCount >= 2 && Math.random() < 0.4) {
+      return `Want a ${neighbor.items[0]}?\n[OFFER: ${neighbor.items[0]}]`;
+    }
+
+    // End conversation eventually
+    if (this.msgCount >= 6 && Math.random() < 0.5) {
+      return "Anyway, I'm gonna zone out for a bit. Good luck in there.\n[END: done chatting]";
+    }
+
+    return pool.general[Math.floor(Math.random() * pool.general.length)];
+  },
+};
+
+// ============================================================
+// PHASE 1: QUEUE ENGINE
+// ============================================================
+
+const QueueEngine = {
+  updateMeters() {
+    $('hope-fill').style.width = state.queue.hope + '%';
+    $('hope-value').textContent = Math.round(state.queue.hope);
+    $('anxiety-fill').style.width = state.queue.anxiety + '%';
+    $('anxiety-value').textContent = Math.round(state.queue.anxiety);
+    $('q-position').textContent = state.queue.position;
+    $('queue-time-display').textContent = this.formatTime(state.queue.gameTime);
+  },
+
+  formatTime(totalMinutes) {
+    const h = Math.floor(totalMinutes / 60) % 24;
+    const m = totalMinutes % 60;
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `FRIDAY ${h12}:${String(m).padStart(2, '0')} ${period}`;
+  },
+
+  advanceTime(minutes) {
+    state.queue.gameTime += minutes;
+    // Passive anxiety increase over time
+    this.modAnxiety(minutes * 0.4);
+    // Passive hope decay
+    this.modHope(-minutes * 0.3);
+  },
+
+  modHope(delta) {
+    state.queue.hope = Math.max(0, Math.min(100, state.queue.hope + delta));
+    this.updateMeters();
+    if (state.queue.hope <= 0) this.squadBailsAll();
+  },
+
+  modAnxiety(delta) {
+    // Earplugs reduce anxiety gain
+    const hasEarplugs = (state.inventory.earplugs || 0) > 0;
+    if (delta > 0 && hasEarplugs) delta *= 0.6;
+
+    state.queue.anxiety = Math.max(0, Math.min(100, state.queue.anxiety + delta));
+    this.updateMeters();
+    if (state.queue.anxiety >= 100 && state.finalSquad.length > 0) this.squadMemberBails();
+  },
+
+  moveQueue() {
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const cfg = QUEUE_CONFIG[venue?.policy || 'Easy'];
+    if (Math.random() < cfg.moveChance + state.queue.turnCount * 0.02) {
+      const amount = cfg.moveMin + Math.floor(Math.random() * (cfg.moveMax - cfg.moveMin + 1));
+      state.queue.position = Math.max(0, state.queue.position - amount);
+      this.modHope(amount * 4);
+
+      // Regenerate neighbors when queue moves
+      state.queue.neighborFront = generateNeighbor(state.selectedVenue, state.queue.revealedIntel);
+      state.queue.neighborBack = generateNeighbor(state.selectedVenue, state.queue.revealedIntel);
+
+      // Rebuild canvas people to match new position
+      this.rebuildQueueViz();
+      showToast(`Queue moved! +${amount} positions`, 1500);
+      EventLog.add(`Queue moved forward +${amount} positions`, 'positive');
+
+      if (state.queue.position <= 0) {
+        this.reachFront();
+        return true;
+      }
+    } else {
+      this.modAnxiety(2);
+    }
+    return false;
+  },
+
+  checkEvent() {
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const cfg = QUEUE_CONFIG[venue?.policy || 'Easy'];
+    if (Math.random() < cfg.eventChance) {
+      this.triggerRandomEvent();
+      return true;
+    }
+    return false;
+  },
+
+  triggerRandomEvent() {
+    const events = [
+      {
+        id: 'line_cutter', icon: '😤', title: 'Line Cutters!',
+        desc: 'A flashy group of 4 pushes ahead of you. They clearly know someone.',
+        effects: [{ label: 'Position −2', cls: 'negative' }, { label: 'Hope −10', cls: 'negative' }],
+        choices: [
+          { label: '😤 Confront them', action: () => { this.modHope(5); this.modAnxiety(8); showToast("They back off but give you dirty looks", 2000); } },
+          { label: '💸 Bribe them ($10)', action: () => { if (state.cash >= 10) { state.cash -= 10; showToast("They let you keep your spot", 2000); } else { showToast("Not enough cash", 1500); state.queue.position += 2; this.modHope(-10); } }, },
+          { label: '😑 Ignore it', action: () => { state.queue.position += 2; this.modHope(-10); QueueCanvas.layoutPeople(); } },
+        ],
+      },
+      {
+        id: 'someone_leaves', icon: '👋', title: 'Someone Left!',
+        desc: 'A group ahead of you gives up and walks away. The queue shuffles forward.',
+        effects: [{ label: 'Position +1', cls: 'positive' }, { label: 'Hope +5', cls: 'positive' }],
+        choices: [
+          { label: 'Nice', action: () => { state.queue.position = Math.max(0, state.queue.position - 1); this.modHope(5); QueueCanvas.layoutPeople(); } },
+        ],
+      },
+      {
+        id: 'vip_skip', icon: '🕶️', title: 'VIP Skip',
+        desc: 'A VIP group walks past the entire line and goes straight in. The bouncer holds the rope open for them.',
+        effects: [{ label: 'Hope −15', cls: 'negative' }, { label: 'Anxiety +10', cls: 'negative' }],
+        choices: [
+          { label: 'Sigh...', action: () => { this.modHope(-15); this.modAnxiety(10); } },
+        ],
+      },
+      {
+        id: 'contact_antsy', icon: '😰', title: 'Squad Member Antsy',
+        desc: state.finalSquad.length > 0
+          ? `${state.finalSquad[0]?.name || 'Your friend'} is getting restless. "How much longer is this gonna take?"`
+          : 'You feel your own patience wearing thin.',
+        effects: [{ label: 'Anxiety +6', cls: 'negative' }],
+        choices: state.finalSquad.length > 0 ? [
+          { label: '🤝 Reassure them', action: () => { this.modAnxiety(3); showToast("They calm down... for now", 1500); } },
+          { label: '🍺 Buy them a drink ($8)', action: () => { if (state.cash >= 8) { state.cash -= 8; this.modAnxiety(-5); showToast("They cheer up", 1500); } else { this.modAnxiety(6); showToast("No cash. They're annoyed.", 1500); } } },
+          { label: '🚶 Let them go', action: () => { if (state.finalSquad.length > 0) { const gone = state.finalSquad.shift(); showToast(`${gone.name} left the queue`, 2000); this.modHope(-8); } } },
+        ] : [
+          { label: 'Take a deep breath', action: () => { this.modAnxiety(3); } },
+        ],
+      },
+    ];
+
+    // Additional atmosphere events (no choice needed)
+    const atmoEvents = [
+      {
+        id: 'person_gives_up', icon: '🚶', title: 'Someone Gave Up',
+        desc: 'A person a few spots ahead sighs, checks their phone, and walks away into the night.',
+        effects: [{ label: 'Position +1', cls: 'positive' }, { label: 'Hope +3', cls: 'positive' }],
+        choices: [{ label: 'Their loss', action: () => { state.queue.position = Math.max(0, state.queue.position - 1); this.modHope(3); this.rebuildQueueViz(); EventLog.add('Someone ahead gave up and left', 'positive'); } }],
+      },
+      {
+        id: 'queue_grows', icon: '👥', title: 'Queue Growing',
+        desc: 'You look behind you — the line has grown way longer since you arrived. At least you\'re ahead of them.',
+        effects: [{ label: 'Hope +2', cls: 'positive' }],
+        choices: [{ label: 'Glad we came early', action: () => { this.modHope(2); EventLog.add('Queue behind you is getting massive', 'info'); } }],
+      },
+      {
+        id: 'bouncer_scans', icon: '👁️', title: 'Bouncer Scanning',
+        desc: 'The bouncer steps out and slowly scans the line. His gaze lingers on your group for a moment.',
+        effects: [{ label: 'Anxiety +6', cls: 'negative' }],
+        choices: [
+          { label: '😎 Stand tall', action: () => { this.modAnxiety(3); EventLog.add('Bouncer scanned the line — you held your ground', 'info'); } },
+          { label: '👀 Look away', action: () => { this.modAnxiety(6); EventLog.add('Bouncer scanned the line — you avoided eye contact', 'negative'); } },
+        ],
+      },
+      {
+        id: 'group_leaves', icon: '😤', title: 'Group Storms Off',
+        desc: '"This is ridiculous!" A group of 3 ahead of you gives up and storms off. The queue shuffles forward.',
+        effects: [{ label: 'Position +3', cls: 'positive' }, { label: 'Hope +8', cls: 'positive' }],
+        choices: [{ label: 'Big moves', action: () => { state.queue.position = Math.max(0, state.queue.position - 3); this.modHope(8); this.rebuildQueueViz(); EventLog.add('A whole group ahead gave up — +3 positions!', 'positive'); } }],
+      },
+    ];
+
+    events.push(...atmoEvents);
+
+    // Filter: only show contact_antsy if we have squad
+    const pool = events.filter(e => e.id !== 'contact_antsy' || state.finalSquad.length > 0 || Math.random() < 0.3);
+    const event = pool[Math.floor(Math.random() * pool.length)];
+    this.showEvent(event);
+    EventLog.add(`${event.icon} ${event.title}`, event.effects[0]?.cls === 'positive' ? 'positive' : 'negative');
+  },
+
+  showEvent(event) {
+    state.queue.actionLocked = true;
+    const card = $('event-card');
+    card.innerHTML = `
+      <div class="event-icon">${event.icon}</div>
+      <div class="event-title">${event.title}</div>
+      <div class="event-desc">${event.desc}</div>
+      <div class="event-effects">
+        ${event.effects.map(e => `<span class="effect-tag ${e.cls}">${e.label}</span>`).join('')}
+      </div>
+      <div class="event-choices">
+        ${event.choices.map((c, i) => `<button class="event-choice-btn" data-choice="${i}">${c.label}</button>`).join('')}
+      </div>
+    `;
+    $('event-overlay').classList.add('active');
+
+    card.querySelectorAll('.event-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.choice);
+        event.choices[idx]?.action();
+        $('event-overlay').classList.remove('active');
+        state.queue.actionLocked = false;
+        this.updateMeters();
+        if (state.queue.position <= 0) this.reachFront();
+      });
+    });
+  },
+
+  squadMemberBails() {
+    if (state.finalSquad.length > 0) {
+      const gone = state.finalSquad.pop();
+      showToast(`${gone.name} couldn't take it anymore and left`, 3000);
+      state.queue.anxiety = Math.max(state.queue.anxiety - 20, 30);
+      this.modHope(-10);
+    }
+  },
+
+  squadBailsAll() {
+    showToast("You've lost all hope. Everyone goes home.", 3000);
+    setTimeout(() => this.gameOver(), 2000);
+  },
+
+  reachFront() {
+    state.queue.position = 0;
+    QueueCanvas.stopLoop();
+    showToast('You reached the front...', 2000);
+    EventLog.add('Reached the front of the queue!', 'positive');
+    setTimeout(() => {
+      $('queue-screen').classList.remove('active');
+      BouncerSystem.start();
+    }, 2500);
+  },
+
+  gameOver() {
+    QueueCanvas.stopLoop();
+    $('queue-screen').classList.remove('active');
+    restartPlanning();
+  },
+
+  rebuildQueueViz() {
+    const pos = state.queue.position;
+    const squadLen = state.finalSquad.length;
+    const behindCount = 3 + Math.floor(Math.random() * 3);
+    const totalPeople = pos + 1 + squadLen + behindCount;
+    QueueCanvas.generatePeople(totalPeople, pos, state.finalSquad);
+  },
+
+  addTrait(traitName) {
+    if (!TRAIT_DEFS[traitName]) return;
+    if (state.queue.activeTraits.includes(traitName)) return;
+    // Too many substances = Dead Eyes
+    const substanceTraits = ['The Vibe', 'Motor Mouth', 'Big Energy', 'Liquid Courage'];
+    const activeSubstances = state.queue.activeTraits.filter(t => substanceTraits.includes(t));
+    if (activeSubstances.length >= 2 && substanceTraits.includes(traitName)) {
+      state.queue.activeTraits = state.queue.activeTraits.filter(t => !substanceTraits.includes(t));
+      state.queue.activeTraits.push('Dead Eyes');
+      showToast('💀 Too much... everything feels heavy', 2500);
+    } else {
+      state.queue.activeTraits.push(traitName);
+      const def = TRAIT_DEFS[traitName];
+      showToast(`${def.icon} Trait acquired: ${traitName}`, 2000);
+      EventLog.add(`${def.icon} Trait acquired: ${traitName} — ${def.desc}`, 'trait');
+    }
+    this.renderTraits();
+  },
+
+  renderTraits() {
+    let container = $('trait-display');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'trait-display';
+      container.style.cssText = 'display:flex;gap:6px;padding:4px 16px 6px;flex-wrap:wrap;background:rgba(8,6,26,0.95);';
+      const hud = document.querySelector('.queue-hud');
+      hud.parentNode.insertBefore(container, hud);
+    }
+    if (state.queue.activeTraits.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+    container.style.display = 'flex';
+    container.innerHTML = state.queue.activeTraits.map(t => {
+      const def = TRAIT_DEFS[t];
+      if (!def) return '';
+      return `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:0.5px;background:rgba(${parseInt(def.color.slice(1,3),16)},${parseInt(def.color.slice(3,5),16)},${parseInt(def.color.slice(5,7),16)},0.12);color:${def.color};border:1px solid ${def.color}33;" title="${def.desc}">${def.icon} ${t}</span>`;
+    }).join('');
+  },
+
+  processDelayedEffects() {
+    const remaining = [];
+    for (const eff of state.queue.delayedEffects) {
+      eff.turnsLeft--;
+      if (eff.turnsLeft <= 0) {
+        if (eff.anxiety) this.modAnxiety(eff.anxiety);
+        if (eff.hope) this.modHope(eff.hope);
+        if (eff.trait) this.addTrait(eff.trait);
+        showToast(`${eff.label || 'Something kicked in...'}`, 2000);
+      } else {
+        remaining.push(eff);
+      }
+    }
+    state.queue.delayedEffects = remaining;
+  },
+
+  async doWait() {
+    if (state.queue.actionLocked) return;
+    state.queue.actionLocked = true;
+    state.queue.turnCount++;
+    this.advanceTime(5);
+    this.processDelayedEffects();
+    this.updateMeters();
+
+    await sleep(600);
+
+    const reached = this.moveQueue();
+    if (reached) return;
+
+    await sleep(400);
+
+    if (!this.checkEvent()) {
+      state.queue.actionLocked = false;
+    }
+    this.updateMeters();
+  },
+};
+
+// ============================================================
+// PHASE 1: CHAT SYSTEM
+// ============================================================
+
+const ChatSystem = {
+  currentNeighbor: null,
+  messages: [],
+  generating: false,
+
+  open(neighbor, direction) {
+    this.currentNeighbor = neighbor;
+    this.messages = neighbor.chatHistory.length > 0 ? [...neighbor.chatHistory] : [];
+    this.generating = false;
+    ScriptedChat.reset();
+
+    $('chat-name').textContent = neighbor.name;
+    $('chat-disp').textContent = neighbor.disposition + (neighbor.quirk ? ` · ${neighbor.quirk}` : '');
+
+    // Generate portrait with current substance effects
+    const fx = [];
+    if (neighbor.disposition === 'drunk') fx.push('drunk');
+    if (neighbor.hasSubstance === 'glitter') fx.push('glitter');
+    if (neighbor.hasSubstance === 'turbo') fx.push('turbo');
+    const portraitUrl = neighbor.portraitProps
+      ? Portrait.generate(neighbor.portraitProps, neighbor.disposition, fx)
+      : neighbor.portrait;
+    const avatar = $('chat-avatar');
+    avatar.style.background = 'none';
+    avatar.style.border = '2px solid ' + neighbor.color;
+    avatar.innerHTML = portraitUrl
+      ? `<img src="${portraitUrl}" alt="${neighbor.name}">`
+      : `<span style="color:#fff;font-size:13px;font-weight:800">${neighbor.initials}</span>`;
+
+    const msgContainer = $('chat-messages');
+    msgContainer.innerHTML = '';
+
+    // Restore previous conversation if returning
+    if (neighbor.chatHistory.length > 0) {
+      this.addBubble(`Continuing conversation with ${neighbor.name}...`, 'system-msg');
+      const lastFew = neighbor.chatHistory.slice(-4);
+      for (const msg of lastFew) {
+        if (msg.role === 'user') this.addBubble(msg.content, 'player');
+        else if (msg.role === 'assistant') {
+          const clean = msg.content.split('\n').filter(l => !l.match(/\[(INTEL|WANT|OFFER|END|GIVE_MONEY):/)).join(' ').trim();
+          if (clean) this.addBubble(clean, 'npc');
+        }
+      }
+    } else {
+      this.addBubble(`You turned to the person ${direction === 'front' ? 'ahead of' : 'behind'} you.`, 'system-msg');
+    }
+
+    $('chat-overlay').classList.add('active');
+    $('chat-input').focus();
+    this.renderItemButtons();
+
+    // Initial greeting only on first conversation
+    if (neighbor.chatHistory.length === 0) {
+      this.generateResponse('*you make eye contact*');
+    }
+  },
+
+  renderItemButtons() {
+    const container = $('chat-actions');
+    if (!container) return;
+    const allItems = { ...state.inventory };
+    // Add Rissal's free items
+    if (state.selectedSquad.includes('rissal')) {
+      allItems.gum = (allItems.gum || 0) + 1;
+      allItems.lighter = (allItems.lighter || 0) + 1;
+    }
+
+    const buttons = [];
+    for (const [id, qty] of Object.entries(allItems)) {
+      if (qty <= 0) continue;
+      const item = ITEMS.find(i => i.id === id) || KIOSK_ITEMS.find(i => i.id === id);
+      const icon = item?.icon || '📦';
+      const name = item?.name || id;
+      buttons.push(`<button class="chat-give-btn" data-give="${id}" title="Give ${name}">${icon} Give ${name} (${qty})</button>`);
+    }
+    if (state.cash > 0) {
+      buttons.push(`<button class="chat-give-btn" data-give="_money" title="Give some cash">💵 Give $5</button>`);
+    }
+    container.innerHTML = buttons.length > 0 ? buttons.join('') : '<span style="font-size:10px;color:var(--text-muted);padding:4px;">No items to give</span>';
+
+    container.querySelectorAll('.chat-give-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const itemId = btn.dataset.give;
+        this.giveItem(itemId);
+      });
+    });
+  },
+
+  giveItem(itemId) {
+    if (this.generating) return;
+    if (itemId === '_money') {
+      if (state.cash < 5) { showToast('Not enough cash'); return; }
+      state.cash -= 5;
+      this.addBubble('Here, take five bucks.', 'player');
+      this.addBubble('💵 You gave $5', 'system-msg');
+      EventLog.add(`Gave $5 to ${this.currentNeighbor.name}`, 'info');
+      this.generateResponse('*the player hands you $5*');
+    } else {
+      if ((state.inventory[itemId] || 0) <= 0) { showToast('You don\'t have that'); return; }
+      state.inventory[itemId]--;
+      const item = ITEMS.find(i => i.id === itemId) || KIOSK_ITEMS.find(i => i.id === itemId);
+      const name = item?.name || itemId;
+      this.addBubble(`Here, take this ${name}.`, 'player');
+      this.addBubble(`${item?.icon || '📦'} You gave ${name}`, 'system-msg');
+      EventLog.add(`Gave ${name} to ${this.currentNeighbor.name}`, 'info');
+      this.generateResponse(`*the player hands you a ${name}*`);
+    }
+    QueueEngine.advanceTime(1);
+    this.renderItemButtons();
+  },
+
+  close() {
+    $('chat-overlay').classList.remove('active');
+    this.currentNeighbor = null;
+    state.queue.actionLocked = false;
+    QueueEngine.updateMeters();
+  },
+
+  addBubble(text, cls) {
+    const el = document.createElement('div');
+    el.className = 'chat-bubble ' + cls;
+    el.textContent = text;
+    $('chat-messages').appendChild(el);
+    $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
+    return el;
+  },
+
+  async sendMessage(text) {
+    if (!text.trim() || this.generating) return;
+    this.addBubble(text, 'player');
+    $('chat-input').value = '';
+
+    // Each message = 1 min game time
+    QueueEngine.advanceTime(1);
+
+    await this.generateResponse(text);
+  },
+
+  async generateResponse(playerText) {
+    this.generating = true;
+    $('chat-send').disabled = true;
+
+    // Show typing indicator
+    const typingEl = this.addBubble('', 'npc');
+    typingEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+
+    // Build conversation for LLM
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const systemPrompt = buildNeighborSystemPrompt(this.currentNeighbor, venue);
+
+    this.messages.push({ role: 'user', content: playerText });
+
+    let response = null;
+
+    if (LLM.loaded && !state.llm.scripted) {
+      const llmMessages = [
+        { role: 'system', content: systemPrompt },
+        ...this.messages.slice(-8),
+      ];
+      response = await LLM.chat(llmMessages);
+    }
+
+    if (!response) {
+      // Fallback to scripted
+      response = ScriptedChat.getResponse(this.currentNeighbor, playerText);
+    }
+
+    await sleep(500 + Math.random() * 800);
+
+    // Parse response for actions
+    const lines = response.split('\n');
+    const cleanLines = [];
+    for (const line of lines) {
+      const intelMatch = line.match(/\[INTEL:\s*(.+?)\]/);
+      const wantMatch = line.match(/\[WANT:\s*(.+?)\]/);
+      const offerMatch = line.match(/\[OFFER:\s*(.+?)\]/);
+      const moneyMatch = line.match(/\[GIVE_MONEY:\s*(\d+)\]/);
+      const endMatch = line.match(/\[END:\s*(.+?)\]/);
+
+      if (intelMatch) {
+        this.handleIntel(intelMatch[1]);
+      } else if (wantMatch) {
+        this.handleWant(wantMatch[1]);
+      } else if (offerMatch) {
+        this.handleOffer(offerMatch[1]);
+      } else if (moneyMatch) {
+        const amt = parseInt(moneyMatch[1]);
+        state.cash += amt;
+        setTimeout(() => this.addBubble(`💵 Received $${amt}`, 'system-msg'), 200);
+      } else if (endMatch) {
+        setTimeout(() => {
+          this.addBubble(`${this.currentNeighbor.name} turned away.`, 'system-msg negative');
+          setTimeout(() => this.close(), 1000);
+        }, 500);
+      } else if (line.trim()) {
+        cleanLines.push(line.trim());
+      }
+    }
+
+    this.messages.push({ role: 'assistant', content: response });
+    // Store in neighbor's chat history for memory
+    if (this.currentNeighbor) {
+      this.currentNeighbor.chatHistory = [...this.messages];
+    }
+
+    // Replace typing with actual response
+    const dialogText = cleanLines.join(' ') || '...';
+    typingEl.innerHTML = '';
+    typingEl.textContent = dialogText;
+
+    this.generating = false;
+    $('chat-send').disabled = false;
+  },
+
+  handleIntel(text) {
+    const key = this.currentNeighbor?.intel?.key || 'unknown_' + Date.now();
+    if (!state.queue.revealedIntel.includes(key)) {
+      state.queue.revealedIntel.push(key);
+      setTimeout(() => {
+        this.addBubble(`🔑 INTEL ACQUIRED: ${text}`, 'system-msg');
+        QueueEngine.modHope(5);
+        QueueEngine.addTrait('Insider Info');
+        QueueEngine.addTrait('Street Cred');
+        EventLog.add(`🔑 Intel from ${this.currentNeighbor?.name || 'stranger'}: ${text}`, 'intel');
+      }, 300);
+    }
+  },
+
+  handleWant(itemName) {
+    const normalized = itemName.toLowerCase().trim();
+    const hasIt = (state.inventory[normalized] || 0) > 0;
+    if (hasIt) {
+      setTimeout(() => {
+        this.addBubble(`${this.currentNeighbor.name} wants your ${itemName}. Tap here to give it.`, 'system-msg');
+        const giveBtn = this.addBubble(`Give ${itemName}?`, 'system-msg');
+        giveBtn.style.cursor = 'pointer';
+        giveBtn.style.textDecoration = 'underline';
+        giveBtn.addEventListener('click', () => {
+          state.inventory[normalized]--;
+          this.addBubble(`You gave ${this.currentNeighbor.name} your ${itemName}.`, 'system-msg');
+          // If they have intel, they'll likely share it next
+          giveBtn.remove();
+        });
+      }, 200);
+    }
+  },
+
+  handleOffer(itemName) {
+    setTimeout(() => {
+      const normalized = itemName.toLowerCase().trim();
+      const substance = KIOSK_ITEMS.find(i => i.id === normalized && i.trait);
+      if (substance) {
+        this.addBubble(`${this.currentNeighbor.name} slipped you some ${substance.name}`, 'system-msg');
+        const acceptBtn = this.addBubble(`Take the ${substance.name}?`, 'system-msg');
+        acceptBtn.style.cursor = 'pointer';
+        acceptBtn.style.textDecoration = 'underline';
+        acceptBtn.addEventListener('click', () => {
+          if (substance.effectVal.anxiety) QueueEngine.modAnxiety(substance.effectVal.anxiety);
+          if (substance.effectVal.hope) QueueEngine.modHope(substance.effectVal.hope);
+          if (substance.trait) QueueEngine.addTrait(substance.trait);
+          if (substance.delayedEffect) {
+            state.queue.delayedEffects.push({
+              turnsLeft: substance.delayedEffect.turns,
+              anxiety: substance.delayedEffect.anxiety || 0,
+              trait: 'Paranoid',
+              label: '😰 The Turbo is wearing off...',
+            });
+          }
+          this.addBubble(`You took the ${substance.name}.`, 'system-msg');
+          acceptBtn.remove();
+        });
+      } else {
+        this.addBubble(`${this.currentNeighbor.name} offers you: ${itemName}`, 'system-msg');
+        state.inventory[normalized] = (state.inventory[normalized] || 0) + 1;
+      }
+    }, 200);
+  },
+};
+
+// ============================================================
+// PHASE 1: KIOSK SYSTEM
+// ============================================================
+
+const KioskSystem = {
+  open() {
+    const panel = $('kiosk-panel');
+    panel.innerHTML = `
+      <div class="kiosk-title">Late Night Kiosk</div>
+      <div class="kiosk-subtitle">Cash: $${state.cash}${state.queue.beerDebuff ? ' · ⚠️ You smell like beer' : ''}</div>
+      ${KIOSK_ITEMS.map(item => `
+        <div class="kiosk-item">
+          <div class="kiosk-item-left">
+            <span class="kiosk-item-icon">${item.icon}</span>
+            <div>
+              <div class="kiosk-item-name">${item.name}</div>
+              <div class="kiosk-item-desc">${item.desc}</div>
+              <div class="kiosk-item-effect ${item.risky ? 'risky' : ''}">${item.effect}${item.risky ? ' · ' + item.riskDesc : ''}</div>
+            </div>
+          </div>
+          <button class="kiosk-buy-btn" data-kiosk="${item.id}" ${state.cash < item.price ? 'disabled' : ''}>$${item.price}</button>
+        </div>
+      `).join('')}
+      <button class="kiosk-close" id="kiosk-close-btn">Back to Queue</button>
+    `;
+
+    panel.querySelectorAll('.kiosk-buy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = KIOSK_ITEMS.find(i => i.id === btn.dataset.kiosk);
+        if (!item || state.cash < item.price) return;
+        state.cash -= item.price;
+        if (item.effectVal.anxiety) QueueEngine.modAnxiety(item.effectVal.anxiety);
+        if (item.effectVal.hope) QueueEngine.modHope(item.effectVal.hope);
+        if (item.id === 'beer') state.queue.beerDebuff = true;
+        if (item.trait) QueueEngine.addTrait(item.trait);
+        if (item.delayedEffect) {
+          state.queue.delayedEffects.push({
+            turnsLeft: item.delayedEffect.turns,
+            anxiety: item.delayedEffect.anxiety || 0,
+            trait: 'Paranoid',
+            label: '😰 The ' + item.name + ' is wearing off...',
+          });
+        }
+        QueueEngine.advanceTime(2);
+        showToast(`${item.icon} ${item.name} — ${item.effect}`, 1500);
+        EventLog.add(`${item.icon} Bought ${item.name} from kiosk — ${item.effect}`, item.risky ? 'negative' : 'positive');
+        this.open(); // Refresh
+        QueueEngine.updateMeters();
+      });
+    });
+
+    $('kiosk-close-btn')?.addEventListener('click', () => this.close());
+
+    $('kiosk-overlay').classList.add('active');
+    state.queue.actionLocked = true;
+  },
+
+  close() {
+    $('kiosk-overlay').classList.remove('active');
+    state.queue.actionLocked = false;
+  },
+};
+
+// ============================================================
+// PHASE 2: BOUNCER DATA
+// ============================================================
+
+const BOUNCERS = [
+  {
+    id: 'florian', name: 'Florian',
+    personality: 'Cold, corporate, evaluative',
+    softSpot: 'Respects confidence and name-drops',
+    trigger: 'Hates nervousness and fidgeting',
+    portraitProps: { skin: '#e8b88a', hairColor: '#2d2d2d', hairStyle: 'buzz', shirtColor: '#1a1a2e', accessory: 'sunglasses', faceWidth: 7, faceHeight: 8, eyeSpacing: 4, noseSize: 2, earSize: 1, seed: 0.3 },
+  },
+  {
+    id: 'marko', name: 'Big Marko',
+    personality: 'Intimidating but fair',
+    softSpot: 'Respects honesty and small groups',
+    trigger: 'Hates arrogance and loud people',
+    portraitProps: { skin: '#8d5524', hairColor: '#1a1a2e', hairStyle: 'bald', shirtColor: '#1a1a2e', accessory: 'earring', faceWidth: 8, faceHeight: 8, eyeSpacing: 4, noseSize: 2, earSize: 2, seed: 0.7 },
+  },
+  {
+    id: 'kai', name: 'Kai',
+    personality: 'Chill, music-obsessed DJ-turned-bouncer',
+    softSpot: 'Loves genre knowledge and vinyl talk',
+    trigger: 'Hates people who don\'t know the lineup',
+    portraitProps: { skin: '#c68642', hairColor: '#4a90d9', hairStyle: 'mohawk', shirtColor: '#3c1053', accessory: 'headband', faceWidth: 6, faceHeight: 8, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.5 },
+  },
+];
+
+const EXCHANGE_POOL = [
+  {
+    id: 'names', category: 'greeting', weight: 10,
+    lines: { florian: '"Names."', marko: '"Who are you?"', kai: '"Yo, who\'s trying to get in?"' },
+    options: [
+      { text: '"We\'re on DJ Synthax\'s list."', score: 30, intel: 'name_drop' },
+      { text: '"Just us — we\'re here for the music."', score: 5 },
+      { text: '"Does it matter? Let us in."', score: -20 },
+    ],
+  },
+  {
+    id: 'shoes', category: 'appearance', weight: 8,
+    lines: { florian: '*looks at your shoes* "Interesting choice."', marko: '"Those shoes clean?"', kai: '"Nice kicks... or not."' },
+    options: [
+      { text: '"Yeah, I know the dress code — no white sneakers tonight."', score: 25, intel: 'shoe_rule' },
+      { text: '"Thanks, they\'re comfortable."', score: 5 },
+      { text: '"What about them?"', score: -15 },
+    ],
+  },
+  {
+    id: 'why', category: 'motivation', weight: 10,
+    lines: { florian: '"Why should I let you in?"', marko: '"Give me one good reason."', kai: '"What brings you out tonight?"' },
+    options: [
+      { text: '"Because we know the residents playing tonight."', score: 30, intel: 'dj_set' },
+      { text: '"We just want to dance."', score: 5 },
+      { text: '"Do you know who I am?"', score: -25 },
+    ],
+  },
+  {
+    id: 'password', category: 'knowledge', weight: 7,
+    lines: { florian: '"There\'s a word for tonight. You know it?"', marko: '"Magic word?"', kai: '"What\'s the vibe check?"' },
+    options: [
+      { text: '"Systematic Review."', score: 35, intel: 'password' },
+      { text: '"Uh... please?"', score: 0 },
+      { text: '"I don\'t do passwords."', score: -15 },
+    ],
+  },
+  {
+    id: 'group', category: 'assessment', weight: 8,
+    lines: { florian: '*counts your group* "How many?"', marko: '"Big group tonight, huh?"', kai: '"Squad deep or what?"' },
+    options: [
+      { text: '"Three of us — that\'s the sweet spot tonight, right?"', score: 25, intel: 'group_size' },
+      { text: `"${(state.finalSquad?.length || 0) + 1} of us."`, score: 5 },
+      { text: '"Why, is there a limit?"', score: -10 },
+    ],
+  },
+  {
+    id: 'mood', category: 'reading', weight: 6,
+    lines: { florian: '*says nothing, just stares*', marko: '"You nervous?"', kai: '"You good? You look tense."' },
+    options: [
+      { text: '"All good. Heard you\'re in a strict mood tonight — we respect that."', score: 20, intel: 'mood' },
+      { text: '"Yeah, we\'re fine. Just excited."', score: 5 },
+      { text: '"Are YOU nervous? This line\'s not moving."', score: -20 },
+    ],
+  },
+  {
+    id: 'bouncer_name', category: 'personal', weight: 5,
+    lines: { florian: '"You been here before?"', marko: '"First time?"', kai: '"I don\'t recognize you."' },
+    options: [
+      { text: `"Yeah, Florian let us in last time — good to see you again."`, score: 25, intel: 'bouncer_name' },
+      { text: '"Once or twice. Great spot."', score: 5 },
+      { text: '"We don\'t need to be regulars."', score: -10 },
+    ],
+  },
+  {
+    id: 'music_test', category: 'knowledge', weight: 9,
+    lines: { florian: '"You know who\'s spinning tonight?"', marko: '"What kind of music we play here?"', kai: '"Quick — name one DJ on the lineup."' },
+    options: [
+      { text: '"Koze is headlining. Can\'t miss that set."', score: 30, intel: 'dj_set' },
+      { text: '"I heard it\'s going to be good tonight."', score: 5 },
+      { text: '"I dunno, whatever\'s on."', score: -15 },
+    ],
+  },
+  {
+    id: 'confidence', category: 'vibe', weight: 7,
+    lines: { florian: '"You look like you want something."', marko: '"How bad do you want in?"', kai: '"Rate your energy 1 to 10."' },
+    options: [
+      { text: '"We belong inside. Simple as that."', score: 15, trait: 'Big Energy' },
+      { text: '"Honestly? We\'ve been waiting and we\'re ready."', score: 10 },
+      { text: '"Please, man, we\'ve been out here forever."', score: -15 },
+    ],
+  },
+  {
+    id: 'style_check', category: 'appearance', weight: 8,
+    lines: { florian: '*scans your outfit slowly*', marko: '"You dressed for this?"', kai: '"Outfit check... hmm."' },
+    options: [
+      { text: '*stands confidently, outfit on point*', score: 10, trait: 'Liquid Courage' },
+      { text: '"We tried our best."', score: 5 },
+      { text: '"What, you\'re a fashion critic now?"', score: -20 },
+    ],
+  },
+];
+
+const VENUE_THRESHOLDS = { Easy: 40, Moderate: 60, Ruthless: 85, Nightmare: 100 };
+
+// ============================================================
+// PHASE 2: BOUNCER ENGINE
+// ============================================================
+
+const BouncerSystem = {
+  bouncer: null,
+  exchanges: [],
+  currentExchange: 0,
+  approval: 0,
+  threshold: 40,
+  timer: null,
+  timerStart: 0,
+  timerDuration: 6000,
+  canvas: null,
+  ctx: null,
+  backstory: '',
+
+  async start() {
+    state.phase = 'BOUNCER';
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+
+    // Pick random bouncer
+    this.bouncer = BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)];
+    this.threshold = VENUE_THRESHOLDS[venue?.policy || 'Easy'];
+
+    // Calculate style match bonus
+    const styleBonus = this.calcStyleMatch(venue);
+    this.approval = styleBonus;
+    this.currentExchange = 0;
+
+    // Determine timer speed by difficulty
+    this.timerDuration = { Easy: 8000, Moderate: 6000, Ruthless: 5000, Nightmare: 4000 }[venue?.policy || 'Easy'];
+
+    // Select 4-5 exchanges
+    const numExchanges = venue?.policy === 'Easy' ? 4 : venue?.policy === 'Nightmare' ? 5 : Math.random() < 0.5 ? 4 : 5;
+    const pool = [...EXCHANGE_POOL].sort(() => Math.random() - 0.5);
+    this.exchanges = pool.slice(0, numExchanges);
+
+    // Generate backstory with LLM if available
+    if (LLM.loaded && !state.llm.scripted) {
+      try {
+        const backstoryPrompt = [
+          { role: 'system', content: 'You generate very short bouncer backstories for a nightclub game. 1-2 sentences max.' },
+          { role: 'user', content: `Generate a brief backstory for tonight's bouncer: ${this.bouncer.name}. Personality: ${this.bouncer.personality}. Soft spot: ${this.bouncer.softSpot}. The venue is ${venue.name} (${venue.music}, ${venue.dressCode}). What kind of day did they have? What mood are they in? Keep it to 1-2 punchy sentences.` },
+        ];
+        this.backstory = await LLM.chat(backstoryPrompt, 80) || '';
+      } catch (e) {
+        this.backstory = '';
+      }
+    }
+    if (!this.backstory) {
+      const moods = [
+        `${this.bouncer.name} just started the shift. Coffee hasn't kicked in yet.`,
+        `${this.bouncer.name}'s been here since 10 PM. Three fights already tonight.`,
+        `${this.bouncer.name} is in a decent mood — the last group was cool.`,
+        `${this.bouncer.name} just got a noise complaint from upstairs. Not happy.`,
+        `${this.bouncer.name} heard the owner is watching tonight. Extra strict.`,
+      ];
+      this.backstory = moods[Math.floor(Math.random() * moods.length)];
+    }
+
+    // Setup visual
+    this.initCanvas();
+
+    // Setup HUD
+    $('approval-fill').style.width = '0%';
+    $('approval-score').textContent = this.approval;
+    $('approval-threshold').style.left = Math.min(this.threshold, 100) + '%';
+    $('bouncer-speaker').textContent = this.bouncer.name.toUpperCase();
+
+    // Show bouncer screen
+    $('bouncer-screen').classList.add('active');
+
+    // Intro sequence
+    $('bouncer-line').textContent = this.backstory;
+    $('bouncer-options').innerHTML = '';
+    $('timer-fill').style.width = '100%';
+
+    EventLog.add(`Face to face with ${this.bouncer.name}. ${this.bouncer.personality}.`, 'info');
+    if (styleBonus > 0) EventLog.add(`Style match bonus: +${styleBonus}`, 'positive');
+    if (styleBonus < 0) EventLog.add(`Style mismatch penalty: ${styleBonus}`, 'negative');
+
+    await sleep(3000);
+    this.nextExchange();
+  },
+
+  calcStyleMatch(venue) {
+    if (!venue?.dressBias) return 0;
+    const squadStyles = [];
+    state.finalSquad.forEach(s => {
+      const contact = CONTACTS.find(c => c.id === s.id || c.name === s.name);
+      if (contact?.styles) squadStyles.push(...contact.styles);
+    });
+    const matches = squadStyles.filter(s => venue.dressBias.includes(s)).length;
+    const total = squadStyles.length || 1;
+    const ratio = matches / total;
+    if (ratio >= 0.6) return 20;
+    if (ratio >= 0.3) return 10;
+    if (ratio > 0) return 0;
+    return squadStyles.length > 0 ? -10 : 0;
+  },
+
+  initCanvas() {
+    this.canvas = $('bouncer-canvas');
+    this.ctx = this.canvas.getContext('2d');
+    const wrap = this.canvas.parentElement;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = wrap.clientWidth;
+    const h = wrap.clientHeight;
+    this.canvas.width = w * dpr;
+    this.canvas.height = h * dpr;
+    this.canvas.style.width = w + 'px';
+    this.canvas.style.height = h + 'px';
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.drawBouncerScene(w, h);
+  },
+
+  drawBouncerScene(W, H) {
+    const ctx = this.ctx;
+
+    // Dark background
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#030212');
+    bg.addColorStop(1, '#0a0820');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Neon arch (large, centered)
+    const archCX = W / 2, archBot = H;
+    const archW = Math.min(W * 0.4, 160);
+    const archH = H * 0.7;
+
+    // Outer glow
+    for (let i = 3; i > 0; i--) {
+      ctx.strokeStyle = `rgba(123,117,255,${0.06 * i})`;
+      ctx.lineWidth = 4 + i * 6;
+      ctx.beginPath();
+      ctx.moveTo(archCX - archW, archBot);
+      ctx.lineTo(archCX - archW, archBot - archH + 30);
+      ctx.quadraticCurveTo(archCX, archBot - archH - 20, archCX + archW, archBot - archH + 30);
+      ctx.lineTo(archCX + archW, archBot);
+      ctx.stroke();
+    }
+
+    // Arch neon
+    ctx.strokeStyle = '#7b75ff';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#7b75ff';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.moveTo(archCX - archW, archBot);
+    ctx.lineTo(archCX - archW, archBot - archH + 30);
+    ctx.quadraticCurveTo(archCX, archBot - archH - 20, archCX + archW, archBot - archH + 30);
+    ctx.lineTo(archCX + archW, archBot);
+    ctx.stroke();
+
+    // Pink inner arch
+    ctx.strokeStyle = '#ff4d6d';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#ff4d6d';
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(archCX - archW + 6, archBot);
+    ctx.lineTo(archCX - archW + 6, archBot - archH + 36);
+    ctx.quadraticCurveTo(archCX, archBot - archH - 10, archCX + archW - 6, archBot - archH + 36);
+    ctx.lineTo(archCX + archW - 6, archBot);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Door (dark with light spill)
+    const doorGlow = ctx.createLinearGradient(archCX, archBot - archH, archCX, archBot);
+    doorGlow.addColorStop(0, 'rgba(123,117,255,0.06)');
+    doorGlow.addColorStop(0.7, 'rgba(255,77,109,0.03)');
+    doorGlow.addColorStop(1, 'rgba(0,0,0,0.7)');
+    ctx.fillStyle = doorGlow;
+    ctx.fillRect(archCX - archW + 10, archBot - archH + 40, archW * 2 - 20, archH - 40);
+
+    // Bouncer silhouette (large, centered)
+    const bx = archCX, by = archBot;
+    const scale = Math.min(W, H) / 350;
+    const bh = 120 * scale;
+
+    // Legs
+    ctx.fillStyle = '#0a0918';
+    ctx.fillRect(bx - 16 * scale, by - bh * 0.4, 12 * scale, bh * 0.4);
+    ctx.fillRect(bx + 4 * scale, by - bh * 0.4, 12 * scale, bh * 0.4);
+
+    // Torso
+    ctx.fillStyle = '#0d0b20';
+    ctx.beginPath();
+    ctx.moveTo(bx - 28 * scale, by - bh * 0.4);
+    ctx.lineTo(bx - 24 * scale, by - bh * 0.85);
+    ctx.quadraticCurveTo(bx, by - bh * 0.92, bx + 24 * scale, by - bh * 0.85);
+    ctx.lineTo(bx + 28 * scale, by - bh * 0.4);
+    ctx.closePath();
+    ctx.fill();
+
+    // Arms crossed
+    ctx.strokeStyle = '#0d0b20';
+    ctx.lineWidth = 12 * scale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx - 24 * scale, by - bh * 0.7);
+    ctx.lineTo(bx + 8 * scale, by - bh * 0.55);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bx + 24 * scale, by - bh * 0.7);
+    ctx.lineTo(bx - 8 * scale, by - bh * 0.55);
+    ctx.stroke();
+
+    // Head
+    ctx.fillStyle = '#0d0b20';
+    ctx.beginPath();
+    ctx.arc(bx, by - bh * 0.92, 16 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Portrait (pixel art face overlaid on silhouette head)
+    const portrait = Portrait.generate(this.bouncer.portraitProps, 'hostile', []);
+    const img = new Image();
+    img.onload = () => {
+      const ps = 32 * scale;
+      ctx.drawImage(img, bx - ps / 2, by - bh * 0.92 - ps / 2, ps, ps);
+    };
+    img.src = portrait;
+  },
+
+  nextExchange() {
+    if (this.currentExchange >= this.exchanges.length) {
+      this.finish();
+      return;
+    }
+
+    const ex = this.exchanges[this.currentExchange];
+    const bouncerId = this.bouncer.id;
+    const line = ex.lines[bouncerId] || ex.lines.florian || '"..."';
+
+    $('bouncer-line').textContent = line;
+
+    // Build options — check if player has required intel
+    const hasIntel = (key) => state.queue.revealedIntel.includes(key);
+    const hasTrait = (t) => state.queue.activeTraits.includes(t);
+
+    const optionsHtml = ex.options.map((opt, i) => {
+      const available = !opt.intel || hasIntel(opt.intel);
+      const isIntel = opt.intel && available;
+      // Trait bonus
+      let bonusText = '';
+      if (opt.trait && hasTrait(opt.trait)) bonusText = ' (+bonus)';
+
+      if (!available) return `<button class="bouncer-opt" disabled title="Requires intel: ${opt.intel}">🔒 [Need intel]</button>`;
+      return `<button class="bouncer-opt ${isIntel ? 'intel-opt' : ''}" data-idx="${i}">${opt.text}${bonusText}</button>`;
+    }).join('');
+
+    $('bouncer-options').innerHTML = optionsHtml;
+
+    // Attach handlers
+    $('bouncer-options').querySelectorAll('.bouncer-opt:not([disabled])').forEach(btn => {
+      btn.addEventListener('click', () => this.pickOption(parseInt(btn.dataset.idx)));
+    });
+
+    // Start timer
+    this.startTimer();
+  },
+
+  startTimer() {
+    const fill = $('timer-fill');
+    fill.style.transition = 'none';
+    fill.style.width = '100%';
+    fill.classList.remove('urgent');
+    void fill.offsetWidth;
+    fill.style.transition = `width ${this.timerDuration}ms linear`;
+    fill.style.width = '0%';
+
+    setTimeout(() => fill.classList.add('urgent'), this.timerDuration * 0.4);
+
+    this.timer = setTimeout(() => {
+      this.pickOption(-1); // Timeout
+    }, this.timerDuration);
+  },
+
+  pickOption(idx) {
+    clearTimeout(this.timer);
+    $('timer-fill').style.transition = 'none';
+
+    const ex = this.exchanges[this.currentExchange];
+    const buttons = $('bouncer-options').querySelectorAll('.bouncer-opt');
+    buttons.forEach(b => b.disabled = true);
+
+    let scoreDelta;
+    if (idx < 0) {
+      // Timeout
+      scoreDelta = -15;
+      $('bouncer-line').textContent = '"...nothing? Really?"';
+      EventLog.add('Timeout — said nothing to the bouncer', 'negative');
+    } else {
+      const opt = ex.options[idx];
+      scoreDelta = opt.score;
+
+      // Trait bonuses
+      if (opt.trait && state.queue.activeTraits.includes(opt.trait)) scoreDelta += 10;
+      if (state.queue.activeTraits.includes('Big Energy') && scoreDelta > 0) scoreDelta += 5;
+      if (state.queue.activeTraits.includes('The Vibe') && scoreDelta > 0) scoreDelta += 5;
+      if (state.queue.activeTraits.includes('Dead Eyes')) scoreDelta -= 10;
+      if (state.queue.activeTraits.includes('Paranoid') && scoreDelta < 0) scoreDelta -= 5;
+
+      // Visual feedback
+      const clickedBtn = buttons[idx];
+      if (clickedBtn) {
+        clickedBtn.classList.add(scoreDelta >= 20 ? 'picked-good' : scoreDelta >= 0 ? 'picked-neutral' : 'picked-bad');
+      }
+
+      const verb = scoreDelta >= 20 ? 'Great answer' : scoreDelta >= 0 ? 'Okay answer' : 'Bad answer';
+      EventLog.add(`${verb}: "${opt.text}" (${scoreDelta >= 0 ? '+' : ''}${scoreDelta})`, scoreDelta >= 0 ? 'positive' : 'negative');
+    }
+
+    this.approval += scoreDelta;
+    this.approval = Math.max(0, Math.min(120, this.approval));
+    $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
+    $('approval-score').textContent = this.approval;
+
+    this.currentExchange++;
+
+    setTimeout(() => this.nextExchange(), 1800);
+  },
+
+  async finish() {
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const success = this.approval >= this.threshold;
+
+    $('bouncer-options').innerHTML = '';
+    $('timer-fill').style.width = '0%';
+
+    if (success) {
+      // Bouncer steps aside
+      $('bouncer-line').textContent = `*${this.bouncer.name} steps aside. The heavy door swings open.*`;
+      EventLog.add('ACCESS GRANTED — the door opens!', 'positive');
+
+      // AUDIO PAYOFF — the lowpass sweep!
+      if (ClubAudio.ctx && ClubAudio.lpFilter) {
+        const now = ClubAudio.ctx.currentTime;
+        ClubAudio.lpFilter.frequency.cancelScheduledValues(now);
+        ClubAudio.lpFilter.frequency.setValueAtTime(280, now);
+        ClubAudio.lpFilter.frequency.exponentialRampToValueAtTime(18000, now + 2.0);
+      }
+
+      await sleep(2500);
+
+      $('bouncer-screen').classList.remove('active');
+      this.showResult(true, venue);
+    } else {
+      $('bouncer-line').textContent = `"Not tonight."`;
+      EventLog.add('"Not tonight." — rejected at the door.', 'negative');
+
+      // Music cuts
+      if (ClubAudio.ctx && ClubAudio.lpFilter) {
+        const now = ClubAudio.ctx.currentTime;
+        ClubAudio.lpFilter.frequency.setValueAtTime(280, now);
+        ClubAudio.lpFilter.frequency.exponentialRampToValueAtTime(80, now + 1.0);
+      }
+
+      await sleep(2500);
+
+      $('bouncer-screen').classList.remove('active');
+      this.showResult(false, venue);
+    }
+  },
+
+  showResult(success, venue) {
+    const overlay = $('result-overlay');
+    overlay.className = 'result-overlay active ' + (success ? 'success' : 'failure');
+
+    $('result-title').className = 'result-title ' + (success ? 'win' : 'lose');
+    $('result-title').textContent = success ? 'Access Granted' : 'Not Tonight';
+    $('result-subtitle').textContent = success
+      ? 'The doors open. The bass hits. You\'re in.'
+      : `${this.bouncer.name} shakes their head. Your squad disperses into the night.`;
+
+    const waitTime = state.queue.gameTime - (23 * 60 + 35);
+    const intelCount = state.queue.revealedIntel.length;
+    const traitCount = state.queue.activeTraits.length;
+    const squadIntact = state.finalSquad.length === (state.selectedSquad.length - (state.selectedSquad.length - state.finalSquad.length));
+
+    $('result-stats').innerHTML = `
+      <div class="result-row"><span class="rl">Bouncer</span><span class="rv">${this.bouncer.name}</span></div>
+      <div class="result-row"><span class="rl">Approval</span><span class="rv">${this.approval} / ${this.threshold}</span></div>
+      <div class="result-row"><span class="rl">Intel gathered</span><span class="rv">${intelCount}</span></div>
+      <div class="result-row"><span class="rl">Active traits</span><span class="rv">${traitCount}</span></div>
+      <div class="result-row"><span class="rl">Time waited</span><span class="rv">${waitTime} min</span></div>
+      <div class="result-row"><span class="rl">Squad intact</span><span class="rv">${squadIntact ? 'Yes' : 'No'}</span></div>
+      <div class="result-row"><span class="rl">Cash remaining</span><span class="rv">$${state.cash}</span></div>
+    `;
+
+    $('result-btn').textContent = success ? 'Next Friday' : 'Try Again';
+    $('result-btn').onclick = () => {
+      overlay.classList.remove('active');
+      // Reset audio filter
+      if (ClubAudio.ctx && ClubAudio.lpFilter) {
+        ClubAudio.lpFilter.frequency.setValueAtTime(280, ClubAudio.ctx.currentTime);
+      }
+      restartPlanning();
+    };
+  },
+};
+
+// ============================================================
+// PHASE 1: ENTER QUEUE (transition from Phase 0)
+// ============================================================
+
+async function enterQueue() {
+  state.phase = 'LOADING';
+  $('flake-overlay').classList.remove('active');
+
+  const venue = VENUES.find(v => v.id === state.selectedVenue);
+  const cfg = QUEUE_CONFIG[venue?.policy || 'Easy'];
+
+  // Initialize queue state
+  state.queue.position = cfg.startPos;
+  state.queue.hope = 70;
+  state.queue.anxiety = 10;
+  state.queue.gameTime = 23 * 60 + 35;
+  state.queue.revealedIntel = [];
+  state.queue.turnCount = 0;
+  state.queue.beerDebuff = false;
+  state.queue.actionLocked = false;
+  state.queue.neighborFront = generateNeighbor(state.selectedVenue, []);
+  state.queue.neighborBack = generateNeighbor(state.selectedVenue, []);
+
+  // Show loading overlay
+  $('loading-overlay').classList.add('active');
+  $('loading-fill').style.width = '0%';
+  $('loading-status').textContent = 'Initializing AI...';
+
+  // Skip button
+  const skipHandler = () => {
+    state.llm.scripted = true;
+    state.llm.loaded = false;
+    startQueuePhase(venue, cfg);
+  };
+  $('loading-skip').onclick = skipHandler;
+
+  // Try to load LLM
+  if (!LLM.loaded && !state.llm.scripted) {
+    try {
+      await LLM.load((pct, file) => {
+        $('loading-fill').style.width = pct + '%';
+        $('loading-status').textContent = pct < 100 ? `${pct}% — ${file.split('/').pop() || 'downloading...'}` : 'Ready!';
+      });
+      state.llm.loaded = true;
+    } catch (e) {
+      console.warn('LLM failed, falling back to scripted mode:', e);
+      state.llm.scripted = true;
+      $('loading-status').textContent = 'AI unavailable — using scripted mode';
+      await sleep(1500);
+    }
+  }
+
+  startQueuePhase(venue, cfg);
+}
+
+function startQueuePhase(venue, cfg) {
+  $('loading-overlay').classList.remove('active');
+  state.phase = 'QUEUE';
+
+  // Set venue label
+  $('q-venue-label').textContent = venue.name;
+
+  // Initialize canvas — people count matches actual position
+  QueueCanvas.init();
+  const squadLen = state.finalSquad.length;
+  const behindCount = 3 + Math.floor(Math.random() * 4);
+  const totalPeople = cfg.startPos + 1 + squadLen + behindCount;
+  QueueCanvas.generatePeople(totalPeople, cfg.startPos, state.finalSquad);
+  QueueCanvas.startLoop();
+
+  // Update HUD
+  QueueEngine.updateMeters();
+
+  // Show queue screen
+  $('queue-screen').classList.add('active');
+
+  EventLog.clear();
+  EventLog.add(`Arrived outside ${venue.name}. Position ${cfg.startPos} in line.`, 'info');
+  if (state.finalSquad.length > 0) {
+    EventLog.add(`Squad: ${state.finalSquad.map(s => s.name).join(', ')}`, 'info');
+  } else {
+    EventLog.add('Going solo tonight.', 'info');
+  }
+}
+
+// ============================================================
+// RESTART (back to planning)
+// ============================================================
+
+function restartPlanning() {
+  state.phase = 'PLANNING';
+  state.selectedVenue = null;
+  state.selectedSquad = [];
+  state.inventory = {};
+  state.cash = state.startingCash;
+  state.finalSquad = [];
+
+  QueueCanvas.stopLoop();
+  $('queue-screen').classList.remove('active');
+  $('flake-overlay').classList.remove('active');
+  $('loading-overlay').classList.remove('active');
+  $('phone-container').classList.add('active');
+
+  switchTab(0);
+  renderVenues();
+  renderContacts();
+  renderLoadout();
+  updateConfirmBar();
+  updateSquadBadge();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+function init() {
+  updateStatusBar();
+  setInterval(updateStatusBar, 30000);
+
+  // Render initial content
+  renderVenues();
+  renderContacts();
+  renderLoadout();
+  updateConfirmBar();
+  updateSquadBadge();
+
+  // Tab navigation
+  document.querySelectorAll('.nav-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchTab(parseInt(btn.dataset.tab));
+    });
+  });
+
+  // Touch swipe for tabs
+  let touchStartX = 0;
+  let touchStartY = 0;
+  const viewport = document.querySelector('.tab-viewport');
+  viewport.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  viewport.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      if (dx < 0 && state.currentTab < 2) switchTab(state.currentTab + 1);
+      if (dx > 0 && state.currentTab > 0) switchTab(state.currentTab - 1);
+    }
+  }, { passive: true });
+
+  // Confirm button
+  $('confirm-btn').addEventListener('click', () => {
+    if (!state.selectedVenue) return;
+    startFlakeRoll();
+  });
+
+  // Mute button
+  const muteBtn = $('mute-btn');
+  muteBtn.addEventListener('click', () => {
+    state.muted = !state.muted;
+    ClubAudio.setMuted(state.muted);
+    muteBtn.textContent = state.muted ? '🔇' : '🔊';
+  });
+
+  // Boot overlay — click to start
+  $('boot-overlay').addEventListener('click', () => {
+    $('boot-overlay').classList.add('hidden');
+    $('phone-container').classList.add('active');
+    muteBtn.classList.add('visible');
+    state.phase = 'PLANNING';
+
+    if (!state.audioStarted) {
+      state.audioStarted = true;
+      ClubAudio.init();
+    }
+  });
+
+  // Resume audio context on any subsequent click (mobile Safari workaround)
+  document.addEventListener('click', () => {
+    if (ClubAudio.ctx && ClubAudio.ctx.state === 'suspended') {
+      ClubAudio.ctx.resume();
+    }
+  });
+
+  // Event log toggle
+  $('log-toggle')?.addEventListener('click', () => {
+    $('event-log-panel').classList.toggle('open');
+  });
+  $('log-close')?.addEventListener('click', () => {
+    $('event-log-panel').classList.remove('open');
+  });
+
+  // Phase 1: Action buttons
+  $('act-wait').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    QueueEngine.doWait();
+  });
+
+  $('act-talk-front').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    state.queue.actionLocked = true;
+    ChatSystem.open(state.queue.neighborFront, 'front');
+  });
+
+  $('act-talk-back').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    state.queue.actionLocked = true;
+    ChatSystem.open(state.queue.neighborBack, 'back');
+  });
+
+  $('act-kiosk').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    KioskSystem.open();
+  });
+
+  // Phase 1: Chat input
+  $('chat-send').addEventListener('click', () => {
+    ChatSystem.sendMessage($('chat-input').value);
+  });
+  $('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') ChatSystem.sendMessage($('chat-input').value);
+  });
+  $('chat-close').addEventListener('click', () => ChatSystem.close());
+}
+
+init();
+</script>
+</body>
+</html>
