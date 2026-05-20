@@ -5405,6 +5405,33 @@ const QueueCanvas = {
 // PHASE 1: LLM ENGINE
 // ============================================================
 
+// ============================================================
+// NATIVE TOOL DEFINITIONS (OpenAI format for Gemma 4)
+// ============================================================
+
+const NEIGHBOR_TOOLS = [
+  { type: 'function', function: { name: 'share_intel', description: 'Share a piece of secret information about tonight with the player', parameters: { type: 'object', properties: { intel: { type: 'string', description: 'The intel to share' } }, required: ['intel'] } } },
+  { type: 'function', function: { name: 'offer_item', description: 'Offer an item to the player', parameters: { type: 'object', properties: { item: { type: 'string', description: 'Item name' } }, required: ['item'] } } },
+  { type: 'function', function: { name: 'give_money', description: 'Give cash to the player', parameters: { type: 'object', properties: { amount: { type: 'number', description: 'Dollar amount' } }, required: ['amount'] } } },
+  { type: 'function', function: { name: 'want_item', description: 'Ask the player for an item', parameters: { type: 'object', properties: { item: { type: 'string', description: 'Item you want' } }, required: ['item'] } } },
+  { type: 'function', function: { name: 'change_affinity', description: 'How much you like or dislike this person after their message', parameters: { type: 'object', properties: { delta: { type: 'number', description: '-15 to +15' } }, required: ['delta'] } } },
+  { type: 'function', function: { name: 'exchange_numbers', description: 'Offer to become contacts and stay in touch', parameters: { type: 'object', properties: {}, required: [] } } },
+  { type: 'function', function: { name: 'end_conversation', description: 'End the conversation', parameters: { type: 'object', properties: { reason: { type: 'string' } }, required: ['reason'] } } },
+];
+
+const BOUNCER_TOOLS = [
+  { type: 'function', function: { name: 'approve', description: 'Increase approval — they said something good', parameters: { type: 'object', properties: { amount: { type: 'number', description: '5 to 35' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
+  { type: 'function', function: { name: 'disapprove', description: 'Decrease approval — they said something bad', parameters: { type: 'object', properties: { amount: { type: 'number', description: '5 to 25' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
+  { type: 'function', function: { name: 'let_in', description: 'Let them into the club', parameters: { type: 'object', properties: {}, required: [] } } },
+  { type: 'function', function: { name: 'reject', description: 'Reject them — not tonight', parameters: { type: 'object', properties: {}, required: [] } } },
+  { type: 'function', function: { name: 'ban', description: 'Ban them from the venue', parameters: { type: 'object', properties: {}, required: [] } } },
+  { type: 'function', function: { name: 'inspect_bag', description: 'Check their bag and pockets', parameters: { type: 'object', properties: {}, required: [] } } },
+];
+
+// ============================================================
+// LLM ENGINE
+// ============================================================
+
 const LLM = {
   pipeline: null,
   loaded: false,
@@ -5438,25 +5465,102 @@ const LLM = {
     }
   },
 
-  async chat(messages, maxTokens = 150) {
+  async chat(messages, tools = null, maxTokens = 150) {
     if (!this.loaded || !this.pipeline) return null;
     try {
-      const output = await this.pipeline(messages, {
+      const opts = {
         max_new_tokens: maxTokens,
         temperature: 0.8,
         top_p: 0.92,
         do_sample: true,
-      });
+      };
+      if (tools) opts.tools = tools;
+
+      const output = await this.pipeline(messages, opts);
       const generated = output[0]?.generated_text;
+
       if (Array.isArray(generated)) {
         const last = generated[generated.length - 1];
-        return last?.content || '';
+        // Check for tool_calls in the response message
+        if (last?.tool_calls && last.tool_calls.length > 0) {
+          return { text: last.content || '', toolCalls: last.tool_calls };
+        }
+        return { text: last?.content || '', toolCalls: [] };
       }
-      return typeof generated === 'string' ? generated : '';
+
+      // String response — try to parse tool calls from Gemma 4 format
+      const text = typeof generated === 'string' ? generated : '';
+      const toolCalls = this._parseToolCalls(text);
+      const cleanText = text.replace(/call:\w+\{[^}]*\}/g, '').trim();
+      return { text: cleanText, toolCalls };
     } catch (e) {
       console.error('LLM chat error:', e);
       return null;
     }
+  },
+
+  _parseToolCalls(text) {
+    const calls = [];
+    // Gemma 4 native format: call:function_name{key:value,key2:value2}
+    const callPattern = /call:(\w+)\{([^}]*)\}/g;
+    let match;
+    while ((match = callPattern.exec(text)) !== null) {
+      const name = match[1];
+      const argsStr = match[2];
+      const args = {};
+      // Parse key:value pairs
+      argsStr.split(',').forEach(pair => {
+        const [k, ...vParts] = pair.split(':');
+        if (k && vParts.length > 0) {
+          let v = vParts.join(':').trim().replace(/^["']|["']$/g, '');
+          if (!isNaN(v) && v !== '') v = Number(v);
+          args[k.trim()] = v;
+        }
+      });
+      calls.push({ function: { name, arguments: args } });
+    }
+    // Also try JSON format: {"name": "fn", "arguments": {...}}
+    if (calls.length === 0) {
+      try {
+        const jsonMatch = text.match(/\{[^{}]*"name"\s*:\s*"[^"]+"/);
+        if (jsonMatch) {
+          const startIdx = text.indexOf(jsonMatch[0]);
+          let depth = 0, endIdx = startIdx;
+          for (let i = startIdx; i < text.length; i++) {
+            if (text[i] === '{') depth++;
+            if (text[i] === '}') { depth--; if (depth === 0) { endIdx = i + 1; break; } }
+          }
+          const parsed = JSON.parse(text.slice(startIdx, endIdx));
+          if (parsed.name) calls.push({ function: { name: parsed.name, arguments: parsed.arguments || {} } });
+        }
+      } catch (e) {}
+    }
+    // Fallback: parse bracket tags for compatibility
+    const bracketPattern = /\[(\w+)(?::\s*([^\]]*))?\]/g;
+    while ((match = bracketPattern.exec(text)) !== null) {
+      const tag = match[1].toLowerCase();
+      const val = match[2]?.trim() || '';
+      const tagMap = {
+        'intel': 'share_intel', 'want': 'want_item', 'offer': 'offer_item',
+        'give_money': 'give_money', 'affinity': 'change_affinity', 'unlock': 'exchange_numbers',
+        'end': 'end_conversation', 'approve': 'approve', 'disapprove': 'disapprove',
+        'let_in': 'let_in', 'reject': 'reject', 'ban': 'ban', 'inspect_bag': 'inspect_bag',
+        'score': 'approve',
+      };
+      const fnName = tagMap[tag];
+      if (fnName) {
+        const args = {};
+        if (fnName === 'share_intel') args.intel = val;
+        else if (fnName === 'offer_item' || fnName === 'want_item') args.item = val;
+        else if (fnName === 'give_money') args.amount = parseInt(val) || 0;
+        else if (fnName === 'change_affinity') args.delta = parseInt(val) || 0;
+        else if (fnName === 'approve') { const n = parseInt(val); args.amount = Math.abs(n) || 10; args.reason = val.replace(/^[+-]?\d+\s*/, ''); }
+        else if (fnName === 'disapprove') { const n = parseInt(val); args.amount = Math.abs(n) || 10; args.reason = val.replace(/^-?\d+\s*/, ''); }
+        else if (fnName === 'end_conversation') args.reason = val;
+        calls.push({ function: { name: fnName, arguments: args } });
+      }
+    }
+    return calls;
   },
 };
 
@@ -5648,10 +5752,10 @@ const GroupChat = {
       const contact = CONTACTS.find(c => c.name === speaker.name);
       const venue = VENUES.find(v => v.id === state.selectedVenue);
       try {
-        msg = await LLM.chat([
+        const result = await LLM.chat([
           { role: 'system', content: `You are ${speaker.name}, texting in a group chat while waiting in line at ${venue?.name || 'a club'}. Your personality: ${contact?.trait || 'chill'}. You like ${contact?.musicPref || 'music'}. Current mood: hope is ${Math.round(state.queue.hope)}%, anxiety is ${Math.round(state.queue.anxiety)}%. Position in queue: ${state.queue.position}. Write ONE short text message (max 10 words). Be casual, funny, in-character. No emojis. No quotes.` },
-        ], 30);
-        if (msg) msg = `${speaker.name}: ${msg.replace(/^["']|["']$/g, '').trim()}`;
+        ], null, 30);
+        if (result?.text) msg = `${speaker.name}: ${result.text.replace(/^["']|["']$/g, '').trim()}`;
       } catch (e) { msg = ''; }
     }
 
@@ -6208,61 +6312,59 @@ const ChatSystem = {
 
     let response = null;
 
+    let llmResult = null;
     if (LLM.loaded && !state.llm.scripted) {
       const llmMessages = [
         { role: 'system', content: systemPrompt },
         ...this.messages.slice(-8),
       ];
-      response = await LLM.chat(llmMessages);
+      llmResult = await LLM.chat(llmMessages, NEIGHBOR_TOOLS);
     }
 
-    if (!response) {
+    let dialogText = '';
+    let toolCalls = [];
+
+    if (llmResult) {
+      dialogText = llmResult.text || '';
+      toolCalls = llmResult.toolCalls || [];
+      // Clean any remaining bracket tags from text
+      dialogText = dialogText.replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
+    }
+
+    if (!dialogText && toolCalls.length === 0) {
       // Fallback to scripted
-      response = ScriptedChat.getResponse(this.currentNeighbor, playerText);
+      const scripted = ScriptedChat.getResponse(this.currentNeighbor, playerText);
+      // Parse bracket tags from scripted response
+      const parsed = LLM._parseToolCalls(scripted);
+      toolCalls = parsed;
+      dialogText = scripted.replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
     }
 
     await sleep(500 + Math.random() * 800);
 
-    // Parse response for actions
-    const lines = response.split('\n');
-    const cleanLines = [];
-    for (const line of lines) {
-      const intelMatch = line.match(/\[INTEL:\s*(.+?)\]/);
-      const wantMatch = line.match(/\[WANT:\s*(.+?)\]/);
-      const offerMatch = line.match(/\[OFFER:\s*(.+?)\]/);
-      const moneyMatch = line.match(/\[GIVE_MONEY:\s*(\d+)\]/);
-      const affinityMatch = line.match(/\[AFFINITY:\s*([+-]?\d+)\]/);
-      const unlockMatch = line.match(/\[UNLOCK:\s*(.+?)\]/);
-      const endMatch = line.match(/\[END:\s*(.+?)\]/);
-
-      if (intelMatch) {
-        this.handleIntel(intelMatch[1]);
-      } else if (wantMatch) {
-        this.handleWant(wantMatch[1]);
-      } else if (offerMatch) {
-        this.handleOffer(offerMatch[1]);
-      } else if (moneyMatch) {
-        const amt = parseInt(moneyMatch[1]);
-        state.cash += amt;
-        setTimeout(() => this.addBubble(`${PX.i('coin','#ffd86b',12)} Received $${amt}`, 'system-msg'), 200);
-      } else if (affinityMatch) {
-        const delta = parseInt(affinityMatch[1]);
-        if (this.currentNeighbor) {
-          this.currentNeighbor.affinity = Math.max(0, Math.min(100, (this.currentNeighbor.affinity || 50) + delta));
-        }
-      } else if (unlockMatch) {
-        this.handleUnlock(unlockMatch[1]);
-      } else if (endMatch) {
-        setTimeout(() => {
-          this.addBubble(`${this.currentNeighbor.name} turned away.`, 'system-msg negative');
-          setTimeout(() => this.close(), 1000);
-        }, 500);
-      } else if (line.trim()) {
-        cleanLines.push(line.trim());
+    // Handle tool calls
+    for (const tc of toolCalls) {
+      const fn = tc.function?.name || tc.name;
+      const args = tc.function?.arguments || tc.arguments || {};
+      switch (fn) {
+        case 'share_intel': this.handleIntel(args.intel || ''); break;
+        case 'want_item': this.handleWant(args.item || ''); break;
+        case 'offer_item': this.handleOffer(args.item || ''); break;
+        case 'give_money':
+          const amt = args.amount || 0;
+          if (amt > 0) { state.cash += amt; setTimeout(() => this.addBubble(`${PX.i('coin','#ffd86b',12)} Received $${amt}`, 'system-msg'), 200); }
+          break;
+        case 'change_affinity':
+          if (this.currentNeighbor) this.currentNeighbor.affinity = Math.max(0, Math.min(100, (this.currentNeighbor.affinity || 50) + (args.delta || 0)));
+          break;
+        case 'exchange_numbers': this.handleUnlock(''); break;
+        case 'end_conversation':
+          setTimeout(() => { this.addBubble(`${this.currentNeighbor.name} turned away.`, 'system-msg negative'); setTimeout(() => this.close(), 1000); }, 500);
+          break;
       }
     }
 
-    this.messages.push({ role: 'assistant', content: response });
+    this.messages.push({ role: 'assistant', content: dialogText });
     // Store in neighbor's chat history for memory
     if (this.currentNeighbor) {
       this.currentNeighbor.chatHistory = [...this.messages];
@@ -6938,13 +7040,18 @@ CRITICAL RULES:
     this.messages.push({ role: 'user', content: context });
 
     let response = '';
+    let bouncerToolCalls = [];
 
     if (LLM.loaded && !state.llm.scripted) {
       try {
-        response = await LLM.chat([
+        const result = await LLM.chat([
           { role: 'system', content: sysPrompt },
           ...this.messages.slice(-10),
-        ], 100) || '';
+        ], BOUNCER_TOOLS, 100);
+        if (result) {
+          response = result.text || '';
+          bouncerToolCalls = result.toolCalls || [];
+        }
       } catch (e) { response = ''; }
     }
 
@@ -6967,39 +7074,40 @@ CRITICAL RULES:
       }
     }
 
-    // Parse tool calls from response
-    const approveMatches = response.matchAll(/\[APPROVE:\s*\+?(\d+)\s*(.*?)\]/g);
-    const disapproveMatches = response.matchAll(/\[DISAPPROVE:\s*-?(\d+)\s*(.*?)\]/g);
-    const letInMatch = response.match(/\[LET_IN\]/) || response.match(/\[VERDICT:\s*IN\]/i);
-    const rejectMatch = response.match(/\[REJECT\]/) || response.match(/\[VERDICT:\s*OUT\]/i);
-    const banMatch = response.match(/\[BAN\]/);
-    const inspectMatch = response.match(/\[INSPECT_BAG\]/);
-
-    // Also support old SCORE format as fallback
-    const scoreMatch = response.match(/\[SCORE:\s*([+-]?\d+)\]/);
+    // Parse tool calls — from native tool calling OR bracket tags
+    if (bouncerToolCalls.length === 0 && response) {
+      bouncerToolCalls = LLM._parseToolCalls(response);
+    }
 
     const cleanText = response
-      .replace(/\[APPROVE:.*?\]/g, '').replace(/\[DISAPPROVE:.*?\]/g, '')
-      .replace(/\[LET_IN\]/g, '').replace(/\[REJECT\]/g, '').replace(/\[BAN\]/g, '')
-      .replace(/\[INSPECT_BAG\]/g, '').replace(/\[SCORE:.*?\]/g, '').replace(/\[VERDICT:.*?\]/g, '')
       .replace(/\[[A-Z_]+(?::.*?)?\]/g, '')
+      .replace(/call:\w+\{[^}]*\}/g, '')
       .trim();
 
-    // Apply approval changes
-    for (const m of approveMatches) {
-      const delta = parseInt(m[1]);
-      this.approval = Math.min(120, this.approval + delta);
-      EventLog.add(`${PX.i('heart','#39ff14',10)} +${delta} approval: ${m[2] || 'good'}`, 'positive');
-    }
-    for (const m of disapproveMatches) {
-      const delta = parseInt(m[1]);
-      this.approval = Math.max(0, this.approval - delta);
-      EventLog.add(`${PX.i('skull','#ff4d6d',10)} -${delta} approval: ${m[2] || 'bad'}`, 'negative');
-    }
-    if (scoreMatch) {
-      const delta = parseInt(scoreMatch[1]);
-      this.approval = Math.max(0, Math.min(120, this.approval + delta));
-      if (delta !== 0) EventLog.add(`Bouncer: ${delta >= 0 ? '+' : ''}${delta}`, delta >= 0 ? 'positive' : 'negative');
+    // Process tool calls
+    let hasLetIn = false, hasReject = false, hasBan = false, hasInspect = false;
+
+    for (const tc of bouncerToolCalls) {
+      const fn = tc.function?.name || tc.name;
+      const args = tc.function?.arguments || tc.arguments || {};
+      switch (fn) {
+        case 'approve': {
+          const delta = args.amount || 10;
+          this.approval = Math.min(120, this.approval + delta);
+          EventLog.add(`${PX.i('heart','#39ff14',10)} +${delta}: ${args.reason || 'good'}`, 'positive');
+          break;
+        }
+        case 'disapprove': {
+          const delta = args.amount || 10;
+          this.approval = Math.max(0, this.approval - delta);
+          EventLog.add(`${PX.i('skull','#ff4d6d',10)} -${delta}: ${args.reason || 'bad'}`, 'negative');
+          break;
+        }
+        case 'let_in': hasLetIn = true; break;
+        case 'reject': hasReject = true; break;
+        case 'ban': hasBan = true; break;
+        case 'inspect_bag': hasInspect = true; break;
+      }
     }
 
     $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
@@ -7015,7 +7123,7 @@ CRITICAL RULES:
     $('bouncer-send').disabled = false;
 
     // Handle INSPECT_BAG — show bag contents and let bouncer react
-    if (inspectMatch) {
+    if (hasInspect) {
       const bagItems = [];
       Object.entries(state.inventory).forEach(([id, qty]) => {
         if (qty > 0) {
@@ -7038,19 +7146,19 @@ CRITICAL RULES:
     }
 
     // Handle final decisions
-    if (letInMatch) {
+    if (hasLetIn) {
       this.finished = true;
       await sleep(1000);
       await this._handleVerdict(true);
       return;
     }
-    if (rejectMatch) {
+    if (hasReject) {
       this.finished = true;
       await sleep(1000);
       await this._handleVerdict(false);
       return;
     }
-    if (banMatch) {
+    if (hasBan) {
       this.finished = true;
       this._addBubble(`${PX.i('skull','#ff0000',14)} BANNED from ${VENUES.find(v => v.id === state.selectedVenue)?.name || 'this venue'} tonight.`, 'system-msg negative');
       EventLog.add('BANNED from this venue!', 'negative');
