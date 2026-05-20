@@ -2033,12 +2033,12 @@ body::before {
         <span class="approval-score" id="approval-score">0</span>
       </div>
     </div>
-    <div class="bouncer-speech">
-      <div class="bouncer-speaker" id="bouncer-speaker">BOUNCER</div>
-      <div class="bouncer-line" id="bouncer-line">...</div>
-      <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:100%"></div></div>
+    <div class="bouncer-chat" id="bouncer-chat" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;scrollbar-width:none;"></div>
+    <div style="padding:4px 16px 0;"><div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:100%"></div></div></div>
+    <div class="chat-input-area" style="border-top:1px solid var(--border-subtle);background:rgba(8,6,26,0.95);">
+      <input class="chat-input" id="bouncer-input" type="text" placeholder="Say something to the bouncer..." autocomplete="off" />
+      <button class="chat-send" id="bouncer-send">→</button>
     </div>
-    <div class="bouncer-options" id="bouncer-options"></div>
   </div>
 </div>
 
@@ -6144,84 +6144,117 @@ const VENUE_THRESHOLDS = { Easy: 40, Moderate: 60, Ruthless: 85, Nightmare: 100 
 
 const BouncerSystem = {
   bouncer: null,
-  exchanges: [],
-  currentExchange: 0,
+  messages: [],
+  exchangeCount: 0,
+  maxExchanges: 4,
   approval: 0,
   threshold: 40,
   timer: null,
-  timerStart: 0,
-  timerDuration: 6000,
+  timerDuration: 10000,
   canvas: null,
   ctx: null,
   backstory: '',
+  generating: false,
+  finished: false,
+
+  _buildSystemPrompt(venue) {
+    const djs = tonightsDJs || { headliner: 'Koze', support: ['DJ Synthax'] };
+    const squadDesc = state.finalSquad.length > 0
+      ? `a group of ${state.finalSquad.length + 1} people`
+      : 'one person, alone';
+    const traitWarnings = [];
+    if (state.queue.activeTraits.includes('Dead Eyes')) traitWarnings.push('One of them looks completely out of it — glazed eyes, barely standing.');
+    if (state.queue.activeTraits.includes('The Vibe')) traitWarnings.push('One of them has dilated pupils.');
+    if (state.queue.beerDebuff) traitWarnings.push('They smell like beer.');
+    if (state.queue.activeTraits.includes('Big Energy')) traitWarnings.push('One of them is grinding their jaw.');
+
+    return `You are ${this.bouncer.name}, the bouncer at ${venue.name} tonight.
+Personality: ${this.bouncer.personality}
+What you respect: ${this.bouncer.softSpot}
+What you hate: ${this.bouncer.trigger}
+Tonight's mood: ${this.backstory}
+
+TONIGHT'S FACTS (you know these):
+- Venue: ${venue.name} (${venue.music}, ${venue.bpm} BPM)
+- Dress code: ${venue.dressCode}
+- Headliner tonight: ${djs.headliner}
+- Support DJs: ${djs.support.join(', ')}
+- The password tonight is "Systematic Review"
+- You don't like white sneakers
+- You prefer groups of exactly 3
+
+WHAT YOU SEE:
+- ${squadDesc} approaching the door
+${traitWarnings.length > 0 ? '- ' + traitWarnings.join('\n- ') : '- They look normal enough.'}
+
+You will have ${this.maxExchanges} exchanges with this person. After EACH response, rate their last message on its own line:
+[SCORE: X] where X is between -25 and +35
+
+Scoring guide:
++30 to +35: Used specific correct knowledge (right DJ name, right password, correct name-drop)
++15 to +20: Confident, respectful, showed genuine interest or humor
++5 to +10: Fine, nothing special
+-5 to -10: Boring, generic, slightly annoying
+-15 to -25: Rude, desperate, clueless, aggressive, or obviously wasted
+
+After exchange ${this.maxExchanges}, also add on its own line:
+[VERDICT: IN] if you'd let them in, or [VERDICT: OUT] if not.
+Base this on the total conversation quality, not just one answer.
+
+RULES:
+- Keep responses to 1-2 sentences MAX. You're a bouncer, not a novelist.
+- Stay in character. Be tough but fair.
+- Start the conversation. You speak first.`;
+  },
 
   async start() {
     state.phase = 'BOUNCER';
     const venue = VENUES.find(v => v.id === state.selectedVenue);
 
-    // Pick random bouncer
     this.bouncer = BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)];
     this.threshold = VENUE_THRESHOLDS[venue?.policy || 'Easy'];
+    this.maxExchanges = venue?.policy === 'Easy' ? 4 : venue?.policy === 'Nightmare' ? 5 : 4;
+    this.timerDuration = { Easy: 12000, Moderate: 10000, Ruthless: 8000, Nightmare: 6000 }[venue?.policy || 'Easy'];
 
-    // Calculate style match bonus
     const styleBonus = this.calcStyleMatch(venue);
     this.approval = styleBonus;
-    this.currentExchange = 0;
+    this.exchangeCount = 0;
+    this.messages = [];
+    this.generating = false;
+    this.finished = false;
 
-    // Determine timer speed by difficulty
-    this.timerDuration = { Easy: 8000, Moderate: 6000, Ruthless: 5000, Nightmare: 4000 }[venue?.policy || 'Easy'];
+    // Backstory
+    const moods = [
+      `${this.bouncer.name} just started the shift. Coffee hasn't kicked in yet.`,
+      `${this.bouncer.name}'s been here since 10 PM. Three fights already tonight.`,
+      `${this.bouncer.name} is in a decent mood — the last group was cool.`,
+      `${this.bouncer.name} just got a noise complaint from upstairs. Not happy.`,
+      `${this.bouncer.name} heard the owner is watching tonight. Extra strict.`,
+    ];
+    this.backstory = moods[Math.floor(Math.random() * moods.length)];
 
-    // Select 4-5 exchanges
-    const numExchanges = venue?.policy === 'Easy' ? 4 : venue?.policy === 'Nightmare' ? 5 : Math.random() < 0.5 ? 4 : 5;
-    const pool = [...EXCHANGE_POOL].sort(() => Math.random() - 0.5);
-    this.exchanges = pool.slice(0, numExchanges);
-
-    // Generate backstory with LLM if available
-    if (LLM.loaded && !state.llm.scripted) {
-      try {
-        const backstoryPrompt = [
-          { role: 'system', content: 'You generate very short bouncer backstories for a nightclub game. 1-2 sentences max.' },
-          { role: 'user', content: `Generate a brief backstory for tonight's bouncer: ${this.bouncer.name}. Personality: ${this.bouncer.personality}. Soft spot: ${this.bouncer.softSpot}. The venue is ${venue.name} (${venue.music}, ${venue.dressCode}). What kind of day did they have? What mood are they in? Keep it to 1-2 punchy sentences.` },
-        ];
-        this.backstory = await LLM.chat(backstoryPrompt, 80) || '';
-      } catch (e) {
-        this.backstory = '';
-      }
-    }
-    if (!this.backstory) {
-      const moods = [
-        `${this.bouncer.name} just started the shift. Coffee hasn't kicked in yet.`,
-        `${this.bouncer.name}'s been here since 10 PM. Three fights already tonight.`,
-        `${this.bouncer.name} is in a decent mood — the last group was cool.`,
-        `${this.bouncer.name} just got a noise complaint from upstairs. Not happy.`,
-        `${this.bouncer.name} heard the owner is watching tonight. Extra strict.`,
-      ];
-      this.backstory = moods[Math.floor(Math.random() * moods.length)];
-    }
-
-    // Setup visual
     this.initCanvas();
 
-    // Setup HUD
-    $('approval-fill').style.width = '0%';
+    $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
     $('approval-score').textContent = this.approval;
     $('approval-threshold').style.left = Math.min(this.threshold, 100) + '%';
     $('bouncer-speaker').textContent = this.bouncer.name.toUpperCase();
-
-    // Show bouncer screen
-    $('bouncer-screen').classList.add('active');
-
-    // Intro sequence
-    $('bouncer-line').textContent = this.backstory;
-    $('bouncer-options').innerHTML = '';
+    $('bouncer-chat').innerHTML = '';
+    $('bouncer-input').value = '';
     $('timer-fill').style.width = '100%';
+
+    $('bouncer-screen').classList.add('active');
 
     EventLog.add(`Face to face with ${this.bouncer.name}. ${this.bouncer.personality}.`, 'info');
     if (styleBonus > 0) EventLog.add(`Style match bonus: +${styleBonus}`, 'positive');
     if (styleBonus < 0) EventLog.add(`Style mismatch penalty: ${styleBonus}`, 'negative');
 
-    await sleep(3000);
-    this.nextExchange();
+    // Show backstory briefly
+    this._addBubble(this.backstory, 'system-msg');
+    await sleep(2000);
+
+    // Bouncer speaks first
+    await this._bouncerSpeak('*A group approaches the door*');
   },
 
   calcStyleMatch(venue) {
@@ -6387,46 +6420,93 @@ const BouncerSystem = {
     img.src = portrait;
   },
 
-  nextExchange() {
-    if (this.currentExchange >= this.exchanges.length) {
-      this.finish();
+  _addBubble(text, cls) {
+    const el = document.createElement('div');
+    el.className = 'chat-bubble ' + cls;
+    el.textContent = text;
+    $('bouncer-chat').appendChild(el);
+    $('bouncer-chat').scrollTop = $('bouncer-chat').scrollHeight;
+    return el;
+  },
+
+  async _bouncerSpeak(context) {
+    this.generating = true;
+    $('bouncer-send').disabled = true;
+
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const sysPrompt = this._buildSystemPrompt(venue);
+
+    this.messages.push({ role: 'user', content: context });
+
+    let response = '';
+
+    if (LLM.loaded && !state.llm.scripted) {
+      try {
+        response = await LLM.chat([
+          { role: 'system', content: sysPrompt },
+          ...this.messages.slice(-10),
+        ], 100) || '';
+      } catch (e) { response = ''; }
+    }
+
+    if (!response) {
+      // Scripted fallback
+      const lines = {
+        0: { florian: '"Names."', marko: '"Who are you?"', kai: '"Yo, who\'s trying to get in?"', silent: '*stares*', mira: '"Name, please."' },
+        1: { florian: '"Why should I let you in?"', marko: '"Give me one reason."', kai: '"What brings you out?"', silent: '*crosses arms*', mira: '"Purpose of visit?"' },
+        2: { florian: '"You know who\'s playing tonight?"', marko: '"What music do we play here?"', kai: '"Name one DJ."', silent: '*glances at flyer*', mira: '"Familiar with the program?"' },
+        3: { florian: '*scans your outfit*', marko: '"You dressed for this?"', kai: '"Outfit check."', silent: '*looks you up and down*', mira: '*checks clipboard*' },
+      };
+      const lineSet = lines[this.exchangeCount] || lines[0];
+      response = (lineSet[this.bouncer.id] || lineSet.florian) + '\n[SCORE: 0]';
+      if (this.exchangeCount >= this.maxExchanges - 1) {
+        response += `\n[VERDICT: ${this.approval >= this.threshold ? 'IN' : 'OUT'}]`;
+      }
+    }
+
+    // Parse score and verdict from response
+    const scoreMatch = response.match(/\[SCORE:\s*([+-]?\d+)\]/);
+    const verdictMatch = response.match(/\[VERDICT:\s*(IN|OUT)\]/);
+    const cleanText = response.replace(/\[SCORE:.*?\]/g, '').replace(/\[VERDICT:.*?\]/g, '').trim();
+
+    if (scoreMatch) {
+      const delta = parseInt(scoreMatch[1]);
+      this.approval = Math.max(0, Math.min(120, this.approval + delta));
+      $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
+      $('approval-score').textContent = this.approval;
+      if (delta !== 0) EventLog.add(`Bouncer: ${delta >= 0 ? '+' : ''}${delta} approval`, delta >= 0 ? 'positive' : 'negative');
+    }
+
+    this.messages.push({ role: 'assistant', content: response });
+
+    // Show bouncer's line
+    if (cleanText) this._addBubble(cleanText, 'npc');
+
+    this.exchangeCount++;
+    this.generating = false;
+    $('bouncer-send').disabled = false;
+
+    if (verdictMatch) {
+      this.finished = true;
+      await sleep(1500);
+      await this._handleVerdict(verdictMatch[1] === 'IN');
       return;
     }
 
-    const ex = this.exchanges[this.currentExchange];
-    const bouncerId = this.bouncer.id;
-    const line = ex.lines[bouncerId] || ex.lines.florian || '"..."';
+    if (this.exchangeCount > this.maxExchanges) {
+      this.finished = true;
+      await sleep(1000);
+      await this._handleVerdict(this.approval >= this.threshold);
+      return;
+    }
 
-    $('bouncer-line').textContent = line;
-
-    // Build options — check if player has required intel
-    const hasIntel = (key) => state.queue.revealedIntel.includes(key);
-    const hasTrait = (t) => state.queue.activeTraits.includes(t);
-
-    const optionsHtml = ex.options.map((opt, i) => {
-      const available = !opt.intel || hasIntel(opt.intel);
-      const isIntel = opt.intel && available;
-      // Trait bonus
-      let bonusText = '';
-      if (opt.trait && hasTrait(opt.trait)) bonusText = ' (+bonus)';
-
-      const optText = typeof opt.text === 'function' ? opt.text() : opt.text;
-      if (!available) return `<button class="bouncer-opt" disabled title="Requires intel: ${opt.intel}">${PX.i('key','#666',12)} [Need intel]</button>`;
-      return `<button class="bouncer-opt ${isIntel ? 'intel-opt' : ''}" data-idx="${i}">${optText}${bonusText}</button>`;
-    }).join('');
-
-    $('bouncer-options').innerHTML = optionsHtml;
-
-    // Attach handlers
-    $('bouncer-options').querySelectorAll('.bouncer-opt:not([disabled])').forEach(btn => {
-      btn.addEventListener('click', () => this.pickOption(parseInt(btn.dataset.idx)));
-    });
-
-    // Start timer
-    this.startTimer();
+    // Start timer for player response
+    this._startTimer();
+    $('bouncer-input').focus();
   },
 
-  startTimer() {
+  _startTimer() {
+    clearTimeout(this.timer);
     const fill = $('timer-fill');
     fill.style.transition = 'none';
     fill.style.width = '100%';
@@ -6434,73 +6514,34 @@ const BouncerSystem = {
     void fill.offsetWidth;
     fill.style.transition = `width ${this.timerDuration}ms linear`;
     fill.style.width = '0%';
-
     setTimeout(() => fill.classList.add('urgent'), this.timerDuration * 0.4);
-
     this.timer = setTimeout(() => {
-      this.pickOption(-1); // Timeout
+      if (this.finished || this.generating) return;
+      this._addBubble('*silence*', 'player');
+      EventLog.add('Said nothing to the bouncer...', 'negative');
+      this._bouncerSpeak('*the player says nothing and just stares awkwardly*');
     }, this.timerDuration);
   },
 
-  pickOption(idx) {
+  sendMessage(text) {
+    if (!text.trim() || this.generating || this.finished) return;
     clearTimeout(this.timer);
     $('timer-fill').style.transition = 'none';
+    $('timer-fill').style.width = '0%';
+    $('bouncer-input').value = '';
 
-    const ex = this.exchanges[this.currentExchange];
-    const buttons = $('bouncer-options').querySelectorAll('.bouncer-opt');
-    buttons.forEach(b => b.disabled = true);
-
-    let scoreDelta;
-    if (idx < 0) {
-      // Timeout
-      scoreDelta = -15;
-      $('bouncer-line').textContent = '"...nothing? Really?"';
-      EventLog.add('Timeout — said nothing to the bouncer', 'negative');
-    } else {
-      const opt = ex.options[idx];
-      scoreDelta = opt.score;
-
-      // Trait bonuses
-      if (opt.trait && state.queue.activeTraits.includes(opt.trait)) scoreDelta += 10;
-      if (state.queue.activeTraits.includes('Big Energy') && scoreDelta > 0) scoreDelta += 5;
-      if (state.queue.activeTraits.includes('The Vibe') && scoreDelta > 0) scoreDelta += 5;
-      if (state.queue.activeTraits.includes('Dead Eyes')) scoreDelta -= 10;
-      if (state.queue.activeTraits.includes('Paranoid') && scoreDelta < 0) scoreDelta -= 5;
-
-      // Visual feedback
-      const clickedBtn = buttons[idx];
-      if (clickedBtn) {
-        clickedBtn.classList.add(scoreDelta >= 20 ? 'picked-good' : scoreDelta >= 0 ? 'picked-neutral' : 'picked-bad');
-      }
-
-      const optText = typeof opt.text === 'function' ? opt.text() : opt.text;
-      const verb = scoreDelta >= 20 ? 'Great answer' : scoreDelta >= 0 ? 'Okay answer' : 'Bad answer';
-      EventLog.add(`${verb}: "${optText}" (${scoreDelta >= 0 ? '+' : ''}${scoreDelta})`, scoreDelta >= 0 ? 'positive' : 'negative');
-    }
-
-    this.approval += scoreDelta;
-    this.approval = Math.max(0, Math.min(120, this.approval));
-    $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
-    $('approval-score').textContent = this.approval;
-
-    this.currentExchange++;
-
-    setTimeout(() => this.nextExchange(), 1800);
+    this._addBubble(text, 'player');
+    EventLog.add(`You: "${text}"`, 'info');
+    this._bouncerSpeak(text);
   },
 
-  async finish() {
+  async _handleVerdict(success) {
     const venue = VENUES.find(v => v.id === state.selectedVenue);
-    const success = this.approval >= this.threshold;
-
-    $('bouncer-options').innerHTML = '';
-    $('timer-fill').style.width = '0%';
 
     if (success) {
-      // Bouncer steps aside
-      $('bouncer-line').textContent = `*${this.bouncer.name} steps aside. The heavy door swings open.*`;
+      this._addBubble(`*${this.bouncer.name} steps aside. The heavy door swings open.*`, 'system-msg');
       EventLog.add('ACCESS GRANTED — the door opens!', 'positive');
 
-      // AUDIO PAYOFF — the lowpass sweep!
       if (ClubAudio.ctx && ClubAudio.lpFilter) {
         const now = ClubAudio.ctx.currentTime;
         ClubAudio.lpFilter.frequency.cancelScheduledValues(now);
@@ -6509,16 +6550,11 @@ const BouncerSystem = {
       }
 
       await sleep(2500);
-
-      // Go to in-club phase before result screen
-      const venueForClub = venue;
-      ClubScene.start(venueForClub);
-      return;
+      ClubScene.start(venue);
     } else {
-      $('bouncer-line').textContent = `"Not tonight."`;
+      this._addBubble('"Not tonight."', 'npc');
       EventLog.add('"Not tonight." — rejected at the door.', 'negative');
 
-      // Music cuts
       if (ClubAudio.ctx && ClubAudio.lpFilter) {
         const now = ClubAudio.ctx.currentTime;
         ClubAudio.lpFilter.frequency.setValueAtTime(280, now);
@@ -6527,8 +6563,6 @@ const BouncerSystem = {
 
       await sleep(2000);
       $('bouncer-screen').classList.remove('active');
-
-      // Walk of shame before result
       await WalkOfShame.play();
       this.showResult(false, venue);
     }
@@ -7166,6 +7200,14 @@ function init() {
   });
   $('chat-close').addEventListener('click', () => ChatSystem.close());
   $('chat-leave').addEventListener('click', () => ChatSystem.close());
+
+  // Bouncer phase: free text input
+  $('bouncer-send').addEventListener('click', () => {
+    BouncerSystem.sendMessage($('bouncer-input').value);
+  });
+  $('bouncer-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') BouncerSystem.sendMessage($('bouncer-input').value);
+  });
 
   // Club scene: leave at sunrise
   $('club-done').addEventListener('click', () => {
