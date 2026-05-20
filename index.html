@@ -7235,21 +7235,20 @@ const WalkOfShame = {
 // ============================================================
 
 const CLUB_EVENTS = [
-  { icon: '💃', text: 'The dance floor is packed. Your crew finds a spot near the speakers.', effect: '+Bond with squad', type: 'positive', bondBoost: 5 },
-  { icon: '🎵', text: 'The DJ drops a massive tune. Everyone loses their minds.', effect: 'Hope +10', type: 'positive', hope: 10 },
-  { icon: '🍹', text: 'You grab drinks at the bar. The bartender is fast tonight.', effect: '-$8, Anxiety −10', type: 'positive', cost: 8, anxiety: -10 },
-  { icon: '🤝', text: (sq) => `${sq.length > 0 ? sq[0].name : 'You'} bumps into someone they know from another scene. Numbers exchanged.`, effect: 'New connection possible', type: 'special', contactChance: true },
-  { icon: '🔑', text: 'You overhear the next DJ mention a secret after-party location.', effect: 'Intel for future runs', type: 'special', futureIntel: true },
-  { icon: '💎', text: 'Someone drops a lighter on the dance floor. Finders keepers.', effect: '+Lighter', type: 'positive', item: 'lighter' },
-  { icon: '📸', text: 'Your crew takes a group photo in the neon light. Memories made.', effect: '+Bond, +Reputation', type: 'positive', bondBoost: 8, rep: 1 },
-  { icon: '😵', text: 'The bass is relentless. One of you needs fresh air.', effect: 'Squad morale test', type: 'negative' },
-  { icon: '🗣️', text: (sq) => `A stranger compliments ${sq.length > 0 ? sq[Math.floor(Math.random() * sq.length)].name + "'s" : 'your'} outfit.`, effect: '+Vibe', type: 'positive', hope: 5 },
-  { icon: '🚰', text: 'You all drink water. Staying hydrated like responsible adults.', effect: 'Anxiety −5', type: 'positive', anxiety: -5 },
-  { icon: '🎧', text: 'The headliner starts their set. The whole room shifts energy.', effect: 'Hope +15', type: 'positive', hope: 15 },
-  { icon: '🌅', text: 'The lights slowly come up. It\'s 6 AM. What a night.', effect: 'Final event', type: 'special', final: true },
-  { icon: '💰', text: 'You find $10 on the bathroom floor. Don\'t ask questions.', effect: '+$10', type: 'positive', cash: 10 },
-  { icon: '🤮', text: 'The substances are catching up. The room spins for a moment.', effect: 'Substance comedown', type: 'negative', conditionalOnSubstance: true },
-  { icon: '🎉', text: (sq) => `${sq.length > 1 ? sq[0].name + ' and ' + sq[1].name : 'You and a stranger'} have an amazing conversation about life.`, effect: '+Deep bond', type: 'special', bondBoost: 15 },
+  { px: 'people', pxColor: '#39ff14', text: 'The dance floor is packed. Your crew finds a spot near the speakers.', effect: '+Bond', type: 'positive', bondBoost: 5 },
+  { px: 'note', pxColor: '#7b75ff', text: 'The DJ drops a massive tune. Everyone loses their minds.', effect: 'Hope +10', type: 'positive', hope: 10 },
+  { px: 'beer', pxColor: '#ffd86b', text: 'You grab drinks at the bar. The bartender is fast tonight.', effect: '-$8, Anxiety −10', type: 'positive', cost: 8, anxiety: -10 },
+  { px: 'hand', pxColor: '#ffd86b', text: (sq) => `${sq.length > 0 ? sq[0].name : 'You'} bumps into someone they know. Numbers exchanged.`, effect: 'New connection', type: 'special', contactChance: true },
+  { px: 'fire', pxColor: '#fd9927', text: 'Someone drops a lighter on the dance floor. Finders keepers.', effect: '+Lighter', type: 'positive', item: 'lighter' },
+  { px: 'eye', pxColor: '#ff69b4', text: 'Your crew takes a group photo in the neon light. Memories made.', effect: '+Bond, +Rep', type: 'positive', bondBoost: 8, rep: 1 },
+  { px: 'shield', pxColor: '#ff4d6d', text: 'The bass is relentless. One of you needs fresh air.', effect: 'Morale test', type: 'negative' },
+  { px: 'star', pxColor: '#ffd86b', text: (sq) => `A stranger compliments ${sq.length > 0 ? sq[Math.floor(Math.random() * sq.length)].name + "'s" : 'your'} outfit.`, effect: '+Vibe', type: 'positive', hope: 5 },
+  { px: 'drop', pxColor: '#57f2ff', text: 'You all drink water. Staying hydrated like responsible adults.', effect: 'Anxiety −5', type: 'positive', anxiety: -5 },
+  { px: 'note', pxColor: '#ff69b4', text: 'The headliner starts their set. The whole room shifts energy.', effect: 'Hope +15', type: 'positive', hope: 15 },
+  { px: 'star', pxColor: '#ffd86b', text: 'The lights slowly come up. It\'s 6 AM. What a night.', effect: 'Sunrise', type: 'special', final: true },
+  { px: 'coin', pxColor: '#ffd86b', text: 'You find $10 on the bathroom floor. Don\'t ask questions.', effect: '+$10', type: 'positive', cash: 10 },
+  { px: 'skull', pxColor: '#ff4d6d', text: 'The substances are catching up. The room spins for a moment.', effect: 'Comedown', type: 'negative', conditionalOnSubstance: true },
+  { px: 'heart', pxColor: '#ff69b4', text: (sq) => `${sq.length > 1 ? sq[0].name + ' and ' + sq[1].name : 'You and a stranger'} have an amazing conversation about life.`, effect: '+Deep bond', type: 'special', bondBoost: 15 },
 ];
 
 const ClubScene = {
@@ -7298,7 +7297,7 @@ const ClubScene = {
     const el = document.createElement('div');
     el.className = 'club-event';
     el.innerHTML = `
-      <span class="ce-icon">${evt.icon}</span>
+      <span class="ce-icon">${PX.i(evt.px || 'star', evt.pxColor || '#ebe4ff', 20)}</span>
       <div>
         <div class="ce-text">${text}</div>
         <div class="ce-effect ${evt.type}">${evt.effect}</div>
@@ -7347,7 +7346,7 @@ const ClubScene = {
         const c = CONTACTS.find(ct => ct.id === newId);
         const unlockEl = document.createElement('div');
         unlockEl.className = 'club-event';
-        unlockEl.innerHTML = `<span class="ce-icon">🆕</span><div><div class="ce-text" style="color:var(--neon-green)">You exchanged numbers with ${c?.name || 'someone new'}! New contact unlocked.</div></div>`;
+        unlockEl.innerHTML = `<span class="ce-icon">${PX.i('hand','#39ff14',20)}</span><div><div class="ce-text" style="color:var(--neon-green)">You exchanged numbers with ${c?.name || 'someone new'}! New contact unlocked.</div></div>`;
         await sleep(800);
         feed.appendChild(unlockEl);
         feed.scrollTop = feed.scrollHeight;
