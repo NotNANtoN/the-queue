@@ -1675,27 +1675,88 @@ body::before {
   background: rgba(8, 6, 26, 0.95);
   border-bottom: 1px solid var(--border-subtle);
 }
-.member-status {
+.member-chip {
   display: flex; align-items: center; gap: 5px;
-  padding: 3px 8px;
+  padding: 4px 8px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  font-size: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
-.member-status .ms-name { font-weight: 700; color: var(--text-secondary); }
-.member-status .ms-bar {
-  width: 30px; height: 3px;
+.member-chip:hover { border-color: var(--neon-purple); background: var(--bg-card-hover); }
+.member-chip .mc-portrait {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.member-chip .mc-portrait img { width: 20px; height: 20px; image-rendering: pixelated; }
+.member-chip .mc-name { font-size: 10px; font-weight: 700; }
+.member-chip .mc-vibe {
+  width: 24px; height: 4px;
   background: rgba(255,255,255,0.06);
   border-radius: 2px; overflow: hidden;
 }
-.member-status .ms-fill {
-  height: 100%; border-radius: 2px;
-  transition: width 0.5s ease;
+.member-chip .mc-vibe-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+/* Member detail popup */
+.member-detail {
+  position: fixed;
+  bottom: 200px; left: 50%; transform: translateX(-50%);
+  width: calc(100% - 32px); max-width: 340px;
+  background: rgba(15, 12, 35, 0.98);
+  border: 1px solid var(--border-glow);
+  border-radius: 16px;
+  padding: 16px;
+  z-index: 47;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: eventSlide 0.25s ease;
+  display: none;
 }
-.member-status.cold .ms-fill { background: var(--neon-cyan); }
-.member-status.warm .ms-fill { background: var(--neon-green); }
-.member-status.danger .ms-fill { background: var(--neon-pink); }
+.member-detail.open { display: block; }
+.member-detail-header {
+  display: flex; gap: 12px; align-items: center;
+  margin-bottom: 12px;
+}
+.member-detail-portrait {
+  width: 48px; height: 48px;
+  border-radius: 12px; overflow: hidden;
+}
+.member-detail-portrait img { width: 48px; height: 48px; image-rendering: pixelated; }
+.member-detail-name { font-size: 16px; font-weight: 800; }
+.member-detail-trait { font-size: 11px; color: var(--text-muted); }
+.member-detail-meters { display: flex; flex-direction: column; gap: 8px; }
+.md-meter {
+  display: flex; align-items: center; gap: 8px;
+}
+.md-meter-icon { width: 16px; text-align: center; }
+.md-meter-label {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  min-width: 50px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.md-meter-track {
+  flex: 1; height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px; overflow: hidden;
+}
+.md-meter-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.md-meter-val {
+  font-size: 11px; font-weight: 800;
+  font-family: var(--font-mono);
+  min-width: 28px; text-align: right;
+}
+.member-detail-close {
+  position: absolute; top: 10px; right: 10px;
+  width: 24px; height: 24px;
+  border-radius: 6px; border: 1px solid var(--border-subtle);
+  background: none; color: var(--text-muted);
+  font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.member-detail-close:hover { color: var(--neon-pink); border-color: var(--neon-pink); }
 
 /* === CREW PROFILE CARD === */
 .crew-profile {
@@ -2050,6 +2111,12 @@ body::before {
   <div class="club-visual"><canvas id="club-canvas"></canvas></div>
   <div class="club-feed" id="club-feed"></div>
   <button class="club-done-btn" id="club-done" style="display:none">Leave at Sunrise →</button>
+</div>
+
+<!-- Member Detail Popup -->
+<div class="member-detail" id="member-detail">
+  <button class="member-detail-close" id="member-detail-close">✕</button>
+  <div id="member-detail-content"></div>
 </div>
 
 <!-- Walk of Shame -->
@@ -3438,15 +3505,65 @@ const MemberStats = {
     container.innerHTML = state.finalSquad.map(m => {
       const s = state.queue.memberStats[m.name];
       if (!s) return '';
-      const warmthPct = s.warmth;
-      const moralePct = s.morale;
-      const cls = warmthPct < 30 ? 'danger' : warmthPct < 60 ? 'cold' : 'warm';
-      return `<div class="member-status ${cls}">
-        <span class="ms-name" style="color:${m.color || '#ebe4ff'}">${m.name}</span>
-        <span title="Warmth ${Math.round(warmthPct)}%">🌡<span class="ms-bar"><span class="ms-fill" style="width:${warmthPct}%"></span></span></span>
-        <span title="Morale ${Math.round(moralePct)}%">😊<span class="ms-bar"><span class="ms-fill" style="width:${moralePct}%;background:${moralePct < 30 ? 'var(--neon-pink)' : 'var(--neon-gold)'}"></span></span></span>
+      const avg = (s.warmth + s.morale) / 2;
+      const vibeColor = avg > 60 ? '#39ff14' : avg > 30 ? '#fd9927' : '#ff4d6d';
+      const contact = CONTACTS.find(c => c.name === m.name);
+      const portrait = contact?.portraitProps ? Portrait.generate(contact.portraitProps, 'friendly', []) : '';
+      return `<div class="member-chip" data-member="${m.name}">
+        <div class="mc-portrait">${portrait ? `<img src="${portrait}" alt="${m.name}">` : ''}</div>
+        <span class="mc-name" style="color:${m.color || '#ebe4ff'}">${m.name}</span>
+        <span class="mc-vibe"><span class="mc-vibe-fill" style="width:${avg}%;background:${vibeColor};"></span></span>
       </div>`;
     }).join('');
+
+    container.querySelectorAll('.member-chip').forEach(chip => {
+      chip.addEventListener('click', () => this.showDetail(chip.dataset.member));
+    });
+  },
+
+  showDetail(name) {
+    const s = state.queue.memberStats[name];
+    if (!s) return;
+    const m = state.finalSquad.find(sq => sq.name === name);
+    const contact = CONTACTS.find(c => c.name === name);
+    const portrait = contact?.portraitProps ? Portrait.generate(contact.portraitProps, 'friendly', []) : '';
+
+    const content = $('member-detail-content');
+    content.innerHTML = `
+      <div class="member-detail-header">
+        <div class="member-detail-portrait">${portrait ? `<img src="${portrait}" alt="${name}">` : ''}</div>
+        <div>
+          <div class="member-detail-name" style="color:${m?.color || '#fff'}">${name}</div>
+          <div class="member-detail-trait">${contact?.trait || ''} — ${contact?.traitDesc || ''}</div>
+        </div>
+      </div>
+      <div class="member-detail-meters">
+        <div class="md-meter">
+          ${PX.i('fire','#ff6b35',14)}
+          <span class="md-meter-label">Warmth</span>
+          <div class="md-meter-track"><div class="md-meter-fill" style="width:${s.warmth}%;background:${s.warmth > 60 ? '#39ff14' : s.warmth > 30 ? '#fd9927' : '#ff4d6d'};"></div></div>
+          <span class="md-meter-val" style="color:${s.warmth > 60 ? '#39ff14' : s.warmth > 30 ? '#fd9927' : '#ff4d6d'}">${Math.round(s.warmth)}</span>
+        </div>
+        <div class="md-meter">
+          ${PX.i('heart','#ff69b4',14)}
+          <span class="md-meter-label">Morale</span>
+          <div class="md-meter-track"><div class="md-meter-fill" style="width:${s.morale}%;background:${s.morale > 60 ? '#ffd86b' : s.morale > 30 ? '#fd9927' : '#ff4d6d'};"></div></div>
+          <span class="md-meter-val" style="color:${s.morale > 60 ? '#ffd86b' : s.morale > 30 ? '#fd9927' : '#ff4d6d'}">${Math.round(s.morale)}</span>
+        </div>
+        <div class="md-meter">
+          ${PX.i('shield','#57f2ff',14)}
+          <span class="md-meter-label">Anxiety</span>
+          <div class="md-meter-track"><div class="md-meter-fill" style="width:${Math.min(100, s.anxietyThreshold)}%;background:rgba(255,255,255,0.1);"></div></div>
+          <span class="md-meter-val" style="color:var(--text-muted)">lv${Math.round(s.anxietyThreshold / 10)}</span>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--text-muted);">
+        ${PX.i('note','#666',10)} Likes: ${contact?.musicPref || '?'} · 
+        Styles: ${contact?.styles?.join(', ') || '?'}
+      </div>
+    `;
+
+    $('member-detail').classList.add('open');
   },
 };
 
@@ -7605,6 +7722,11 @@ function init() {
   });
   $('chat-close').addEventListener('click', () => ChatSystem.close());
   $('chat-leave').addEventListener('click', () => ChatSystem.close());
+
+  // Member detail close
+  $('member-detail-close')?.addEventListener('click', () => {
+    $('member-detail').classList.remove('open');
+  });
 
   // Bouncer phase: free text input
   $('bouncer-send').addEventListener('click', () => {
