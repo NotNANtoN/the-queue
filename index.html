@@ -3125,14 +3125,14 @@ ALWAYS use this format on its own line when offering:
 
   if (neighbor.hasSubstance) {
     const subName = neighbor.hasSubstance === 'glitter' ? 'Glitter (MDMA)' : neighbor.hasSubstance === 'turbo' ? 'Turbo Tabs (speed)' : 'Nose Candy (coke)';
-    prompt += `\n\nYou have some ${subName} on you. Offer it after 2 messages if the vibe is decent. Don't be shy about it.
-ALWAYS use this format on its own line when offering:
+    prompt += `\n\nYou have some ${subName} on you. You might offer it if the vibe is right or if asked.
+When offering it, put on its own line:
 [OFFER: ${neighbor.hasSubstance}]`;
   }
 
   if (neighbor.money > 0) {
-    prompt += `\n\nYou have $${neighbor.money} cash. If the player is nice to you or gives you something, share some cash with them.
-ALWAYS use this format on its own line:
+    prompt += `\n\nYou have $${neighbor.money} cash you could give/trade if the player does something nice.
+When giving money, put on its own line:
 [GIVE_MONEY: ${neighbor.money}]`;
   }
 
@@ -6168,7 +6168,11 @@ const ChatSystem = {
   addBubble(text, cls) {
     const el = document.createElement('div');
     el.className = 'chat-bubble ' + cls;
-    el.textContent = text;
+    if (text.includes('<img') || text.includes('<span')) {
+      el.innerHTML = text;
+    } else {
+      el.textContent = text;
+    }
     $('chat-messages').appendChild(el);
     $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
     return el;
@@ -6911,7 +6915,11 @@ CRITICAL RULES:
   _addBubble(text, cls) {
     const el = document.createElement('div');
     el.className = 'chat-bubble ' + cls;
-    el.textContent = text;
+    if (text.includes('<img') || text.includes('<span')) {
+      el.innerHTML = text;
+    } else {
+      el.textContent = text;
+    }
     $('bouncer-chat').appendChild(el);
     $('bouncer-chat').scrollTop = $('bouncer-chat').scrollHeight;
     return el;
