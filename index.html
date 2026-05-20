@@ -2865,7 +2865,16 @@ const SECRET_TEMPLATES = [
 
 function generateTonightsSecrets(venue, bouncer) {
   const secrets = {};
+  const isHard = venue.policy === 'Ruthless' || venue.policy === 'Nightmare';
+  const isVibe = venue.vibeCheck;
+
   SECRET_TEMPLATES.forEach(t => {
+    // Skip irrelevant secrets based on venue type
+    if (t.key === 'password' && !isHard) return;
+    if (t.key === 'vip_table' && (isVibe || venue.policy === 'Easy')) return;
+    if (t.key === 'owner_name' && isVibe) return;
+    if (t.key === 'dress_tip' && isVibe) return;
+
     if (t.key === 'bouncer_name') {
       secrets[t.key] = `The bouncer tonight is ${bouncer.name}. ${bouncer.personality}.`;
     } else {
@@ -6458,21 +6467,57 @@ const BouncerSystem = {
       }
     });
 
+    // Venue-specific bouncer knowledge and requirements
+    const queueLen = state.queue.allNeighbors?.length || 15;
+    const isVibeVenue = venue.vibeCheck;
+    const isEasy = venue.policy === 'Easy';
+    const isHard = venue.policy === 'Ruthless' || venue.policy === 'Nightmare';
+
+    let venueContext;
+    if (isVibeVenue) {
+      venueContext = `VENUE TYPE: Vibe-check venue. No password, no guest list. You judge based on ENERGY and GROUP VIBE.
+What matters: Are they genuinely here for the music? Do they seem fun and respectful? Is the group energy good?
+What doesn't matter: What they're wearing, who they know, VIP tables.
+There is NO password tonight. Don't ask for one.
+- The headliner tonight is ${djs.headliner}. Support: ${djs.support.join(', ')}.
+- The queue is ${queueLen} people long right now.
+- ${secrets.facts.bouncer_weakness || 'You respect genuine vibes.'}`;
+    } else if (isEasy) {
+      venueContext = `VENUE TYPE: Relaxed door. You let most people in unless they're being rude or obviously wasted.
+- ${secrets.facts.headliner || 'Headliner: ' + djs.headliner}
+- ${secrets.facts.support_dj || 'Support: ' + djs.support.join(', ')}
+- The queue is ${queueLen} people long right now.
+- Dress code: ${venue.dressCode} (but you're flexible)
+- ${secrets.facts.bouncer_weakness || 'You respect people who are polite.'}
+There is NO password tonight. Just be cool and you're in.`;
+    } else if (isHard) {
+      venueContext = `VENUE TYPE: Exclusive door. You are highly selective.
+- ${secrets.facts.headliner || 'Headliner: ' + djs.headliner}
+- ${secrets.facts.support_dj || 'Support: ' + djs.support.join(', ')}
+- ${secrets.facts.password || 'Password tonight: Systematic Review'}
+- ${secrets.facts.owner_name || 'Owner: Viktor'}
+- ${secrets.facts.vip_table || 'VIP table: Regulaido'}
+- Dress code: ${venue.dressCode} (strictly enforced)
+- The queue is ${queueLen} people long. You've already turned away many tonight.
+- ${secrets.facts.bouncer_weakness || 'You respect genuine connections.'}
+Password, name-drops, and VIP references matter here. Music knowledge is a plus.`;
+    } else {
+      venueContext = `VENUE TYPE: Standard door. Selective but not impossible.
+- ${secrets.facts.headliner || 'Headliner: ' + djs.headliner}
+- ${secrets.facts.support_dj || 'Support: ' + djs.support.join(', ')}
+- Dress code: ${venue.dressCode}
+- The queue is ${queueLen} people long right now.
+- ${secrets.facts.bouncer_weakness || 'You respect people who know why they\'re here.'}
+No password required, but knowing the lineup and being respectful goes a long way.`;
+    }
+
     return `You are ${this.bouncer.name}, the bouncer at ${venue.name} tonight.
 Personality: ${this.bouncer.personality}
 What you respect: ${this.bouncer.softSpot}
 What you hate: ${this.bouncer.trigger}
 Tonight's mood: ${this.backstory}
 
-TONIGHT'S FACTS (you know these, the person at the door may or may not):
-- Venue: ${venue.name} (${venue.music}, ${venue.bpm} BPM)
-- Dress code: ${venue.dressCode}
-- ${secrets.facts.headliner || 'Headliner: ' + djs.headliner}
-- ${secrets.facts.support_dj || 'Support: ' + djs.support.join(', ')}
-- ${secrets.facts.password || 'Password: Systematic Review'}
-- ${secrets.facts.owner_name || 'Owner: Viktor'}
-- ${secrets.facts.vip_table || 'VIP table: Regulaido'}
-- ${secrets.facts.bouncer_weakness || 'You respect genuine people.'}
+${venueContext}
 
 WHAT YOU SEE RIGHT NOW:
 - ${squadDesc} approaching the door
@@ -6480,22 +6525,19 @@ WHAT YOU SEE RIGHT NOW:
 ${visible.length > 0 ? visible.map(v => '- ' + v).join('\n') : '- They look sober and normal.'}
 
 YOUR TOOLS — use these on their OWN LINE after your spoken response:
-[APPROVE: +X reason] — their impression goes UP (they said something good). X = 5 to 35.
+[APPROVE: +X reason] — their impression goes UP. X = 5 to 35.
 [DISAPPROVE: -X reason] — their impression goes DOWN. X = 5 to 25.
-[INSPECT_BAG] — you decide to check their bag/pockets. The game will show you what they're carrying.
-[LET_IN] — you decide to let them in. Only use when you're genuinely convinced.
-[REJECT] — you decide not to let them in. Conversation over.
-[BAN] — they crossed a line badly. Banned from this venue tonight.
+[INSPECT_BAG] — check their bag/pockets. The game will show you what they carry.
+[LET_IN] — let them in. Use when convinced.
+[REJECT] — not tonight. Conversation over.
+[BAN] — crossed a line badly. Banned.
 
 RULES:
-- Keep spoken responses to 1-2 sentences MAX.
-- You speak first to start the conversation.
-- You can use APPROVE/DISAPPROVE multiple times across the conversation.
-- Use INSPECT_BAG only if something seems suspicious or you're curious.
-- You decide when the conversation is over — there is NO fixed number of exchanges.
-- Use LET_IN only when their total impression is good enough. Be realistic for a ${venue.policy} door policy.
-- ${venue.policy === 'Easy' ? 'You are fairly lenient tonight. Most people get in unless they are rude or clueless.' : venue.policy === 'Moderate' ? 'You are selective. They need to show they belong.' : venue.policy === 'Ruthless' ? 'You are very strict. Only people with real knowledge or connections get in.' : 'Almost nobody gets in. They need to be perfect.'}
-- Stay in character. Be tough but fair.`;
+- 1-2 sentences MAX per response.
+- You speak first.
+- You decide when the conversation ends — no fixed exchange count.
+- ${isVibeVenue ? 'This is a vibe venue. If the energy feels right, let them in quickly. Don\'t overthink it.' : isEasy ? 'You are lenient. Most people get in. Only reject if they\'re rude, wasted, or disrespectful.' : isHard ? 'You are very strict. They need specific knowledge, connections, or the password. Turn away anyone who can\'t prove they belong.' : 'Be selective. They should show they know what tonight is about.'}
+- Stay in character.`;
   },
 
   async start() {
