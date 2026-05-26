@@ -3199,6 +3199,7 @@ const SUBSTANCE_POOL = ['glitter', 'turbo', 'nosecandy'];
 
 function generateNeighbor(venueId, existingIntel) {
   const name = NEIGHBOR_NAMES[Math.floor(Math.random() * NEIGHBOR_NAMES.length)];
+  const memoryId = 'stranger_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
   const disp = weightedPick(DISPOSITIONS, DISP_WEIGHTS);
   const quirk = NEIGHBOR_QUIRKS[Math.floor(Math.random() * NEIGHBOR_QUIRKS.length)];
   const adj1 = NEIGHBOR_ADJECTIVES[Math.floor(Math.random() * NEIGHBOR_ADJECTIVES.length)];
@@ -3258,7 +3259,7 @@ function generateNeighbor(venueId, existingIntel) {
   const portrait = Portrait.generate(portraitProps, disp, []);
 
   return {
-    name, disposition: disp, color: DISP_COLORS[disp],
+    memoryId, name, disposition: disp, color: DISP_COLORS[disp],
     intel, items, wants, money, hasSubstance, quirk,
     initials: name[0], chatHistory: [],
     portraitProps, portrait,
@@ -3285,6 +3286,9 @@ neighbor.disposition === 'anxious' ? 'You are nervous about getting in. You fidg
 'You are polite but reserved. You are transactional — you trade fairly. You won\'t give something for nothing, but a fair deal makes you talkative.'}
 
 KEEP RESPONSES TO 1-2 SENTENCES. Be natural and in-character. This is a casual queue conversation, not a formal interaction.`;
+
+  const memoryContext = MemorySystem.buildPromptContextForNeighbor(neighbor);
+  if (memoryContext) prompt += `\n\n${memoryContext}`;
 
   if (neighbor.intel) {
     const intelResolved = resolveIntelText(neighbor.intel.text);
@@ -3360,6 +3364,8 @@ neighbor.disposition === 'anxious' ? 'You might ally if it makes you feel safer,
 neighbor.disposition === 'hostile' ? 'You almost never ally unless they have earned it with value.' :
 'You ally only after a fair exchange or solid rapport.'}
 
+${MemorySystem.buildRememberGuidance(neighbor)}
+
 Remember: 1-2 sentences max per reply. Stay in character. Your quirk (${neighbor.quirk}) can come up naturally in conversation.`;
   return prompt;
 }
@@ -3428,6 +3434,8 @@ const SaveSystem = {
       playerLook: null,
       djHistory: {},
       venueVisits: {},
+      contactMemories: {},
+      strangerMemories: {},
     };
   },
 
@@ -3451,6 +3459,8 @@ const SaveSystem = {
 
   applyToState() {
     const p = this.load();
+    p.contactMemories = p.contactMemories || {};
+    p.strangerMemories = p.strangerMemories || {};
     state.progress = p;
 
     // Auto-upgrade job based on reputation
@@ -3612,6 +3622,169 @@ const SaveSystem = {
 };
 
 // ============================================================
+// MEMORY SYSTEM
+// ============================================================
+
+const MemorySystem = {
+  PROFILES: {
+    friendly: { chance: 1.1, confidence: 0.9, salience: 0.05, note: 'You remember warm social moments, favors, jokes, and promises.' },
+    neutral:  { chance: 0.9, confidence: 0.8, salience: 0.0, note: 'You remember fair trades, useful facts, and unusually specific moments.' },
+    hostile:  { chance: 1.0, confidence: 0.85, salience: 0.08, note: 'You remember slights, bribes, conflicts, and people who earn your respect.' },
+    drunk:    { chance: 0.55, confidence: 0.45, salience: -0.05, note: 'You remember less often. If you do, memories are emotional, funny, and a bit unreliable.' },
+    anxious:  { chance: 1.25, confidence: 0.75, salience: 0.12, note: 'You strongly remember reassurance, stress, rejection, and people who helped you feel safe.' },
+  },
+
+  _clamp(n, min, max) {
+    const val = Number(n);
+    if (Number.isNaN(val)) return min;
+    return Math.max(min, Math.min(max, val));
+  },
+
+  _tags(raw) {
+    if (Array.isArray(raw)) return raw.map(String).slice(0, 6);
+    if (typeof raw === 'string') return raw.split(',').map(s => s.trim()).filter(Boolean).slice(0, 6);
+    return [];
+  },
+
+  _profileFor(neighbor) {
+    return this.PROFILES[neighbor?.disposition] || this.PROFILES.neutral;
+  },
+
+  rememberFromNeighbor(neighbor, args = {}) {
+    if (!neighbor || !args.text) return null;
+    const profile = this._profileFor(neighbor);
+    const memory = {
+      id: 'mem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+      source: 'queue_neighbor',
+      sourceName: neighbor.name,
+      sourceMemoryId: neighbor.memoryId,
+      sourceDisposition: neighbor.disposition,
+      sourceQuirk: neighbor.quirk,
+      venueId: state.selectedVenue,
+      gameTime: state.queue.gameTime,
+      runNumber: (state.progress?.totalRuns || 0) + 1,
+      subject: args.subject || 'self',
+      type: args.type || 'shared_event',
+      text: String(args.text).slice(0, 220),
+      valence: this._clamp(args.valence ?? 0, -1, 1),
+      salience: this._clamp((args.salience ?? 0.45) + profile.salience, 0, 1),
+      confidence: this._clamp((args.confidence ?? profile.confidence), 0.1, 1),
+      tags: this._tags(args.tags),
+    };
+    if (neighbor.linkedContactId) memory.targetContactId = neighbor.linkedContactId;
+    state.queue.nightMemories.push(memory);
+    EventLog.add(`Memory noted: ${neighbor.name} — ${memory.text}`, 'info');
+    Debug.log('memory staged', memory);
+    return memory;
+  },
+
+  buildRememberGuidance(neighbor) {
+    const profile = this._profileFor(neighbor);
+    return `MEMORY: You may use the remember tool when something feels worth recalling later: a favor, conflict, promise, inside joke, personal fact, first meeting detail, or strange queue moment.
+${profile.note}
+Use remember sparingly. Do not remember generic small talk. Set salience 0.1-0.3 for tiny funny details, 0.4-0.7 for useful or emotional moments, and 0.8-1.0 for major favors, conflicts, promises, or first-meeting details.
+If you are unsure or intoxicated, lower confidence instead of pretending certainty.`;
+  },
+
+  buildPromptContextForNeighbor(neighbor) {
+    if (!neighbor) return '';
+    const p = SaveSystem.load();
+    const permanent = neighbor.linkedContactId
+      ? (p.contactMemories?.[neighbor.linkedContactId] || [])
+      : (p.strangerMemories?.[neighbor.memoryId]?.memories || []);
+    const tonight = (state.queue.nightMemories || []).filter(m => m.sourceMemoryId === neighbor.memoryId);
+    const memories = [...permanent, ...tonight]
+      .sort((a, b) => (b.salience || 0) - (a.salience || 0))
+      .slice(0, 4);
+    if (memories.length === 0) return '';
+    return `RELEVANT MEMORIES YOU CAN NATURALLY REFERENCE:
+${memories.map(m => `- ${m.text}${m.confidence < 0.6 ? ' (you are fuzzy on the details)' : ''}`).join('\n')}`;
+  },
+
+  linkNeighborToContact(neighbor, contactId, progress, reason = 'exchanged_numbers') {
+    if (!neighbor || !contactId || !progress) return;
+    progress.contactMemories = progress.contactMemories || {};
+    progress.contactMemories[contactId] = progress.contactMemories[contactId] || [];
+    neighbor.linkedContactId = contactId;
+
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const firstMeeting = {
+      id: 'mem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+      source: 'queue_neighbor',
+      sourceName: neighbor.name,
+      sourceMemoryId: neighbor.memoryId,
+      targetContactId: contactId,
+      venueId: state.selectedVenue,
+      runNumber: (state.progress?.totalRuns || 0) + 1,
+      type: 'first_meeting',
+      subject: 'self',
+      text: `First met the player outside ${venue?.name || 'a club'} while ${neighbor.quirk}.`,
+      valence: Math.max(0, ((neighbor.affinity || 50) - 50) / 50),
+      salience: 0.95,
+      confidence: neighbor.disposition === 'drunk' ? 0.55 : 0.9,
+      tags: ['first_meeting', 'queue', reason],
+      promoted: true,
+    };
+    progress.contactMemories[contactId].push(firstMeeting);
+
+    const staged = (state.queue.nightMemories || []).filter(m => m.sourceMemoryId === neighbor.memoryId);
+    staged.forEach(m => {
+      m.targetContactId = contactId;
+      m.promoted = true;
+      progress.contactMemories[contactId].push({ ...m, promoted: true });
+    });
+    progress.contactMemories[contactId] = progress.contactMemories[contactId].slice(-30);
+  },
+
+  _promotionChance(memory) {
+    let chance = 0.1 + (memory.salience || 0) * 0.55 + Math.abs(memory.valence || 0) * 0.1 + (memory.confidence || 0.5) * 0.05;
+    if (memory.type === 'first_meeting' || memory.type === 'promise' || memory.type === 'conflict' || memory.type === 'favor') chance += 0.2;
+    if ((memory.tags || []).includes('inside_joke')) chance += 0.1;
+    if (memory.sourceDisposition === 'drunk') chance *= 0.75;
+    if (memory.sourceDisposition === 'anxious' && Math.abs(memory.valence || 0) > 0) chance += 0.1;
+    return this._clamp(chance, 0.05, 0.95);
+  },
+
+  promoteNightMemories(success, venueId) {
+    const staged = state.queue.nightMemories || [];
+    if (staged.length === 0) return [];
+    const p = SaveSystem.load();
+    p.contactMemories = p.contactMemories || {};
+    p.strangerMemories = p.strangerMemories || {};
+    const promoted = [];
+
+    staged.forEach(memory => {
+      if (memory.promoted) return;
+      const important = ['first_meeting', 'promise', 'conflict', 'favor'].includes(memory.type);
+      const chance = important ? Math.max(0.85, this._promotionChance(memory)) : this._promotionChance(memory);
+      if (Math.random() > chance) return;
+
+      const saved = { ...memory, venueId: memory.venueId || venueId, success, promoted: true };
+      if (saved.targetContactId) {
+        p.contactMemories[saved.targetContactId] = p.contactMemories[saved.targetContactId] || [];
+        p.contactMemories[saved.targetContactId].push(saved);
+        p.contactMemories[saved.targetContactId] = p.contactMemories[saved.targetContactId].slice(-30);
+      } else if (saved.sourceMemoryId) {
+        p.strangerMemories[saved.sourceMemoryId] = p.strangerMemories[saved.sourceMemoryId] || {
+          name: saved.sourceName,
+          disposition: saved.sourceDisposition,
+          quirk: saved.sourceQuirk,
+          memories: [],
+        };
+        p.strangerMemories[saved.sourceMemoryId].memories.push(saved);
+        p.strangerMemories[saved.sourceMemoryId].memories = p.strangerMemories[saved.sourceMemoryId].memories.slice(-20);
+      }
+      promoted.push(saved);
+    });
+
+    SaveSystem.save(p);
+    state.queue.nightMemories = [];
+    Debug.log('memory promoted', promoted);
+    return promoted;
+  },
+};
+
+// ============================================================
 // GAME STATE
 // ============================================================
 
@@ -3658,6 +3831,7 @@ const state = {
     activeTraits: [],
     delayedEffects: [],
     memberStats: {},
+    nightMemories: [],
     startingSquadCount: 0,
     warmthBonus: 0,
   },
@@ -5931,6 +6105,7 @@ const NEIGHBOR_TOOLS = [
   { type: 'function', function: { name: 'swap_spots', description: 'Agree to swap your queue position with the player', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you agreed' } }, required: ['reason'] } } },
   { type: 'function', function: { name: 'accept_flirt', description: 'Reciprocate the player flirting with you and let it meaningfully affect the queue interaction', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you are into it' } }, required: ['reason'] } } },
   { type: 'function', function: { name: 'form_alliance', description: 'Agree to ally with the player and vouch for them later at the bouncer', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you agree to vouch for them' } }, required: ['reason'] } } },
+  { type: 'function', function: { name: 'remember', description: 'Store a memory that this character may recall in a future conversation', parameters: { type: 'object', properties: { subject: { type: 'string', description: 'self, player, crew, or night' }, type: { type: 'string', description: 'personal_fact, shared_event, favor, conflict, promise, inside_joke, or first_meeting' }, text: { type: 'string', description: 'Specific memory in one sentence' }, valence: { type: 'number', description: '-1 negative, 0 neutral, 1 positive' }, salience: { type: 'number', description: '0.0 trivial to 1.0 unforgettable' }, confidence: { type: 'number', description: '0.0 fuzzy to 1.0 certain' }, tags: { type: 'array', items: { type: 'string' } } }, required: ['text'] } } },
 ];
 
 const BOUNCER_TOOLS = [
@@ -5958,7 +6133,7 @@ const LLM = {
       .replace(/<\|tool_call>[\s\S]*?(?:<tool_call\|>|$)/g, '')
       .replace(/<\|tool_response>[\s\S]*?(?:<tool_response\|>|$)/g, '')
       .replace(/call:\w+\{[^}]*\}/g, '')
-      .replace(/\b(?:share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\([^)]*\)/g, '')
+      .replace(/\b(?:share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\([^)]*\)/g, '')
       .replace(/\\?turn\|>|<\|turn>[^]*$/g, '')
       .replace(/<eos>|<\/s>|<bos>/g, '')
       .replace(/\[[A-Z_]+(?::.*?)?\]/g, '')
@@ -6065,17 +6240,17 @@ const LLM = {
     }
 
     // Pipeline fallback: sometimes emits function_name(...) text.
-    const fnPattern = /\b(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\(([^)]*)\)/g;
+    const fnPattern = /\b(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\(([^)]*)\)/g;
     while ((match = fnPattern.exec(text)) !== null) {
       calls.push({ function: { name: match[1], arguments: this._parseParenArgs(match[1], match[2]) } });
     }
 
     // Pipeline fallback: sometimes emits XML-ish tags.
-    const xmlPairedPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)>(.*?)<\s*\/\s*\1\s*>/gis;
+    const xmlPairedPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)>(.*?)<\s*\/\s*\1\s*>/gis;
     while ((match = xmlPairedPattern.exec(text)) !== null) {
       calls.push({ function: { name: match[1], arguments: this._parseLooseToolArgs(match[1], match[2], match[3]) } });
     }
-    const xmlSelfPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)\/?\s*>/gi;
+    const xmlSelfPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)\/?\s*>/gi;
     while ((match = xmlSelfPattern.exec(text)) !== null) {
       if (match[0].startsWith('</') || text.slice(match.index).match(/^<[^>]+>.*?<\/\s*\w+\s*>/s)) continue;
       calls.push({ function: { name: match[1], arguments: this._parseLooseToolArgs(match[1], match[2], '') } });
@@ -6123,7 +6298,7 @@ const LLM = {
     const parts = trimmed.includes('=') ? trimmed.split(',') : [trimmed];
     parts.forEach(part => {
       const [rawKey, ...rawValueParts] = part.split('=');
-      const key = rawValueParts.length > 0 ? rawKey.trim() : (name === 'change_affinity' ? 'delta' : name === 'give_money' ? 'amount' : 'reason');
+      const key = rawValueParts.length > 0 ? rawKey.trim() : (name === 'change_affinity' ? 'delta' : name === 'give_money' ? 'amount' : name === 'remember' ? 'text' : 'reason');
       let value = (rawValueParts.length > 0 ? rawValueParts.join('=') : rawKey).trim().replace(/^["']|["']$/g, '');
       if (!isNaN(value) && value !== '') value = Number(value);
       if (key) args[key] = value;
@@ -6152,6 +6327,11 @@ const LLM = {
     else if (name === 'give_money') args.amount = parseInt(cleaned) || 0;
     else if (name === 'offer_item' || name === 'want_item') args.item = cleaned;
     else if (name === 'share_intel') args.intel = cleaned;
+    else if (name === 'remember') {
+      args.text = cleaned;
+      args.type = 'shared_event';
+      args.salience = 0.35;
+    }
     else if (name === 'approve' || name === 'disapprove') {
       const amount = parseInt(cleaned);
       args.amount = Math.abs(amount) || 10;
@@ -7115,8 +7295,16 @@ const ChatSystem = {
         case 'form_alliance':
           this._handleFormAlliance(args.reason || '');
           break;
+        case 'remember':
+          this.handleRemember(args);
+          break;
       }
     }
+  },
+
+  handleRemember(args) {
+    if (!this.currentNeighbor) return;
+    MemorySystem.rememberFromNeighbor(this.currentNeighbor, args);
   },
 
   handleIntel(text) {
@@ -7170,6 +7358,7 @@ const ChatSystem = {
           p.unlockedContacts.push(newId);
           const key = ['player', newId].sort().join(':');
           p.bonds[key] = Math.max(p.bonds[key] || 0, Math.round(n.affinity * 0.3));
+          MemorySystem.linkNeighborToContact(n, newId, p, 'exchanged_numbers');
           SaveSystem.save(p);
           const c = CONTACTS.find(ct => ct.id === newId);
           this.addBubble(`${PX.i('star','#39ff14',12)} New contact unlocked: ${c?.name || 'someone new'}!`, 'system-msg');
@@ -8269,6 +8458,7 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
 
     // Progression
     SaveSystem.recordRun(success, venue?.id);
+    const promotedMemories = MemorySystem.promoteNightMemories(success, venue?.id);
     SaveSystem.applyToState();
     renderPlayerBadge();
     const prog = SaveSystem.load();
@@ -8279,6 +8469,13 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
         <div class="result-row"><span class="rl" style="color:var(--neon-green)">🆕 New contact</span><span class="rv" style="color:var(--neon-green)">${u.name} (met in ${u.where})</span></div>
       `).join('');
       $('result-stats').innerHTML += contactLines;
+    }
+
+    if (promotedMemories.length > 0) {
+      const memoryLines = promotedMemories.slice(0, 3).map(m => `
+        <div class="result-row"><span class="rl" style="color:var(--neon-cyan)">Memory saved</span><span class="rv" style="color:var(--neon-cyan)">${m.sourceName}: ${m.text}</span></div>
+      `).join('');
+      $('result-stats').innerHTML += memoryLines;
     }
 
     const nextJob = SaveSystem.JOBS.slice().reverse().find(j => prog.reputation >= j.minRep) || SaveSystem.JOBS[0];
@@ -8718,6 +8915,7 @@ async function enterQueue() {
   state.queue.activeTraits = [];
   state.queue.delayedEffects = [];
   state.queue.memberStats = {};
+  state.queue.nightMemories = [];
   state.queue.startingSquadCount = state.finalSquad.length;
   state.queue.warmthBonus = wardrobeWarmth;
   state.queue.allyData = null;
