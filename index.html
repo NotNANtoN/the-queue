@@ -2187,6 +2187,10 @@ body::before {
       <span class="action-icon" id="act-icon-intel"></span>
       <span class="action-label">Intel</span>
     </button>
+    <button class="action-btn" id="act-crew">
+      <span class="action-icon" id="act-icon-crew"></span>
+      <span class="action-label">Crew</span>
+    </button>
     <button class="action-btn" id="act-eavesdrop">
       <span class="action-icon" id="act-icon-eavesdrop"></span>
       <span class="action-label">Eavesdrop</span>
@@ -3564,6 +3568,12 @@ const SaveSystem = {
         this._pendingUnlocks.push({ name: c?.name || queueUnlock, where: 'the queue', bond: 10 });
         const key = ['player', queueUnlock].sort().join(':');
         p.bonds[key] = Math.max(p.bonds[key] || 0, 10);
+        const rememberedStranger = (state.queue.nightMemories || [])
+          .filter(m => m.sourceMemoryId)
+          .sort((a, b) => (b.salience || 0) - (a.salience || 0))[0];
+        if (rememberedStranger) {
+          MemorySystem.linkStagedStrangerToContact(rememberedStranger.sourceMemoryId, queueUnlock, p, 'queue_unlock');
+        }
       }
     }
 
@@ -3701,6 +3711,43 @@ If you are unsure or intoxicated, lower confidence instead of pretending certain
 ${memories.map(m => `- ${m.text}${m.confidence < 0.6 ? ' (you are fuzzy on the details)' : ''}`).join('\n')}`;
   },
 
+  rememberFromCrewMember(contact, args = {}, source = 'crew_chat') {
+    if (!contact || !args.text) return null;
+    const memory = {
+      id: 'mem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+      source,
+      sourceName: contact.name,
+      targetContactId: contact.id,
+      venueId: state.selectedVenue,
+      gameTime: state.queue.gameTime,
+      runNumber: (state.progress?.totalRuns || 0) + 1,
+      subject: args.subject || 'self',
+      type: args.type || 'shared_event',
+      text: String(args.text).slice(0, 220),
+      valence: this._clamp(args.valence ?? 0, -1, 1),
+      salience: this._clamp(args.salience ?? 0.5, 0, 1),
+      confidence: this._clamp(args.confidence ?? 0.85, 0.1, 1),
+      tags: this._tags(args.tags),
+    };
+    state.queue.nightMemories.push(memory);
+    EventLog.add(`Memory noted: ${contact.name} — ${memory.text}`, 'info');
+    Debug.log('crew memory staged', memory);
+    return memory;
+  },
+
+  buildPromptContextForContact(contactId) {
+    if (!contactId) return '';
+    const p = SaveSystem.load();
+    const permanent = p.contactMemories?.[contactId] || [];
+    const tonight = (state.queue.nightMemories || []).filter(m => m.targetContactId === contactId);
+    const memories = [...permanent, ...tonight]
+      .sort((a, b) => (b.salience || 0) - (a.salience || 0))
+      .slice(0, 5);
+    if (memories.length === 0) return '';
+    return `RELEVANT MEMORIES:
+${memories.map(m => `- ${m.text}${m.confidence < 0.6 ? ' (fuzzy memory)' : ''}`).join('\n')}`;
+  },
+
   linkNeighborToContact(neighbor, contactId, progress, reason = 'exchanged_numbers') {
     if (!neighbor || !contactId || !progress) return;
     progress.contactMemories = progress.contactMemories || {};
@@ -3734,6 +3781,40 @@ ${memories.map(m => `- ${m.text}${m.confidence < 0.6 ? ' (you are fuzzy on the d
       progress.contactMemories[contactId].push({ ...m, promoted: true });
     });
     progress.contactMemories[contactId] = progress.contactMemories[contactId].slice(-30);
+  },
+
+  linkStagedStrangerToContact(sourceMemoryId, contactId, progress, reason = 'joined_crew') {
+    if (!sourceMemoryId || !contactId || !progress) return 0;
+    const staged = (state.queue.nightMemories || []).filter(m => m.sourceMemoryId === sourceMemoryId);
+    if (staged.length === 0) return 0;
+    progress.contactMemories = progress.contactMemories || {};
+    progress.contactMemories[contactId] = progress.contactMemories[contactId] || [];
+
+    const first = staged[0];
+    progress.contactMemories[contactId].push({
+      id: 'mem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+      source: 'queue_neighbor',
+      sourceName: first.sourceName,
+      sourceMemoryId,
+      targetContactId: contactId,
+      venueId: first.venueId || state.selectedVenue,
+      runNumber: first.runNumber,
+      type: 'first_meeting',
+      subject: 'self',
+      text: `First met the player in the queue while ${first.sourceQuirk || 'waiting outside the club'}.`,
+      valence: 0.5,
+      salience: 0.9,
+      confidence: first.sourceDisposition === 'drunk' ? 0.5 : 0.85,
+      tags: ['first_meeting', 'queue', reason],
+      promoted: true,
+    });
+    staged.forEach(m => {
+      m.targetContactId = contactId;
+      m.promoted = true;
+      progress.contactMemories[contactId].push({ ...m, targetContactId: contactId, promoted: true });
+    });
+    progress.contactMemories[contactId] = progress.contactMemories[contactId].slice(-30);
+    return staged.length;
   },
 
   _promotionChance(memory) {
@@ -3832,6 +3913,8 @@ const state = {
     delayedEffects: [],
     memberStats: {},
     nightMemories: [],
+    crewChatHistory: [],
+    crewMemberChats: {},
     startingSquadCount: 0,
     warmthBonus: 0,
   },
@@ -4101,9 +4184,14 @@ const MemberStats = {
         ${PX.i('note','#666',10)} Likes: ${contact?.musicPref || '?'} · 
         Styles: ${contact?.styles?.join(', ') || '?'}
       </div>
+      <button class="event-choice-btn" id="talk-member-btn" style="margin-top:12px;text-align:center;">Talk to ${name}</button>
     `;
 
     $('member-detail').classList.add('open');
+    $('talk-member-btn')?.addEventListener('click', () => {
+      $('member-detail').classList.remove('open');
+      CrewChatSystem.openMember(name);
+    });
   },
 };
 
@@ -6108,6 +6196,13 @@ const NEIGHBOR_TOOLS = [
   { type: 'function', function: { name: 'remember', description: 'Store a memory that this character may recall in a future conversation', parameters: { type: 'object', properties: { subject: { type: 'string', description: 'self, player, crew, or night' }, type: { type: 'string', description: 'personal_fact, shared_event, favor, conflict, promise, inside_joke, or first_meeting' }, text: { type: 'string', description: 'Specific memory in one sentence' }, valence: { type: 'number', description: '-1 negative, 0 neutral, 1 positive' }, salience: { type: 'number', description: '0.0 trivial to 1.0 unforgettable' }, confidence: { type: 'number', description: '0.0 fuzzy to 1.0 certain' }, tags: { type: 'array', items: { type: 'string' } } }, required: ['text'] } } },
 ];
 
+const CREW_TOOLS = [
+  { type: 'function', function: { name: 'remember', description: 'Store a memory that this crew member may recall in a future conversation', parameters: { type: 'object', properties: { subject: { type: 'string' }, type: { type: 'string' }, text: { type: 'string' }, valence: { type: 'number' }, salience: { type: 'number' }, confidence: { type: 'number' }, tags: { type: 'array', items: { type: 'string' } } }, required: ['text'] } } },
+  { type: 'function', function: { name: 'reduce_anxiety', description: 'Reduce overall squad anxiety because the player reassured or grounded the crew', parameters: { type: 'object', properties: { amount: { type: 'number', description: '1 to 12' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
+  { type: 'function', function: { name: 'boost_morale', description: 'Boost one crew member morale because the player supported them', parameters: { type: 'object', properties: { member: { type: 'string' }, amount: { type: 'number', description: '1 to 20' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
+  { type: 'function', function: { name: 'boost_hope', description: 'Increase overall hope because the crew feels the night is worth it', parameters: { type: 'object', properties: { amount: { type: 'number', description: '1 to 12' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
+];
+
 const BOUNCER_TOOLS = [
   { type: 'function', function: { name: 'approve', description: 'Increase approval — they said something good', parameters: { type: 'object', properties: { amount: { type: 'number', description: '5 to 35' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
   { type: 'function', function: { name: 'disapprove', description: 'Decrease approval — they said something bad', parameters: { type: 'object', properties: { amount: { type: 'number', description: '5 to 25' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
@@ -6133,7 +6228,7 @@ const LLM = {
       .replace(/<\|tool_call>[\s\S]*?(?:<tool_call\|>|$)/g, '')
       .replace(/<\|tool_response>[\s\S]*?(?:<tool_response\|>|$)/g, '')
       .replace(/call:\w+\{[^}]*\}/g, '')
-      .replace(/\b(?:share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\([^)]*\)/g, '')
+      .replace(/\b(?:share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\([^)]*\)/g, '')
       .replace(/\\?turn\|>|<\|turn>[^]*$/g, '')
       .replace(/<eos>|<\/s>|<bos>/g, '')
       .replace(/\[[A-Z_]+(?::.*?)?\]/g, '')
@@ -6240,17 +6335,17 @@ const LLM = {
     }
 
     // Pipeline fallback: sometimes emits function_name(...) text.
-    const fnPattern = /\b(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\(([^)]*)\)/g;
+    const fnPattern = /\b(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\(([^)]*)\)/g;
     while ((match = fnPattern.exec(text)) !== null) {
       calls.push({ function: { name: match[1], arguments: this._parseParenArgs(match[1], match[2]) } });
     }
 
     // Pipeline fallback: sometimes emits XML-ish tags.
-    const xmlPairedPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)>(.*?)<\s*\/\s*\1\s*>/gis;
+    const xmlPairedPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)>(.*?)<\s*\/\s*\1\s*>/gis;
     while ((match = xmlPairedPattern.exec(text)) !== null) {
       calls.push({ function: { name: match[1], arguments: this._parseLooseToolArgs(match[1], match[2], match[3]) } });
     }
-    const xmlSelfPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)\/?\s*>/gi;
+    const xmlSelfPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)\/?\s*>/gi;
     while ((match = xmlSelfPattern.exec(text)) !== null) {
       if (match[0].startsWith('</') || text.slice(match.index).match(/^<[^>]+>.*?<\/\s*\w+\s*>/s)) continue;
       calls.push({ function: { name: match[1], arguments: this._parseLooseToolArgs(match[1], match[2], '') } });
@@ -6298,7 +6393,7 @@ const LLM = {
     const parts = trimmed.includes('=') ? trimmed.split(',') : [trimmed];
     parts.forEach(part => {
       const [rawKey, ...rawValueParts] = part.split('=');
-      const key = rawValueParts.length > 0 ? rawKey.trim() : (name === 'change_affinity' ? 'delta' : name === 'give_money' ? 'amount' : name === 'remember' ? 'text' : 'reason');
+      const key = rawValueParts.length > 0 ? rawKey.trim() : (name === 'change_affinity' ? 'delta' : ['give_money', 'reduce_anxiety', 'boost_morale', 'boost_hope'].includes(name) ? 'amount' : name === 'remember' ? 'text' : 'reason');
       let value = (rawValueParts.length > 0 ? rawValueParts.join('=') : rawKey).trim().replace(/^["']|["']$/g, '');
       if (!isNaN(value) && value !== '') value = Number(value);
       if (key) args[key] = value;
@@ -6325,6 +6420,7 @@ const LLM = {
 
     if (name === 'change_affinity') args.delta = parseInt(cleaned) || 0;
     else if (name === 'give_money') args.amount = parseInt(cleaned) || 0;
+    else if (name === 'reduce_anxiety' || name === 'boost_morale' || name === 'boost_hope') args.amount = parseInt(cleaned) || 0;
     else if (name === 'offer_item' || name === 'want_item') args.item = cleaned;
     else if (name === 'share_intel') args.intel = cleaned;
     else if (name === 'remember') {
@@ -7486,6 +7582,223 @@ const ChatSystem = {
       EventLog.add(`Formed alliance with ${neighbor.name} — they'll vouch at the door`, 'positive');
       this._refreshChatReactiveUi();
     }, 250);
+  },
+};
+
+// ============================================================
+// PHASE 1: CREW CHAT SYSTEM
+// ============================================================
+
+const CrewChatSystem = {
+  active: false,
+  mode: null,
+  memberName: null,
+  contact: null,
+  generating: false,
+
+  openGroup() {
+    if (state.finalSquad.length === 0) {
+      showToast('No crew tonight — you are solo', 1500);
+      return;
+    }
+    this.active = true;
+    this.mode = 'group';
+    this.memberName = null;
+    this.contact = null;
+    state.queue.actionLocked = true;
+
+    $('chat-name').textContent = 'Your Crew';
+    $('chat-disp').textContent = `${state.finalSquad.length} friend${state.finalSquad.length > 1 ? 's' : ''} · hope ${Math.round(state.queue.hope)} · anxiety ${Math.round(state.queue.anxiety)}`;
+    const avatar = $('chat-avatar');
+    avatar.style.background = 'rgba(123,117,255,0.12)';
+    avatar.style.border = '2px solid var(--neon-purple)';
+    avatar.innerHTML = PX.i('people', '#7b75ff', 26);
+
+    $('chat-messages').innerHTML = '';
+    this.addBubble('You pull your crew into a quick group huddle.', 'system-msg');
+    (state.queue.crewChatHistory || []).slice(-6).forEach(msg => {
+      if (msg.role === 'user') this.addBubble(msg.content, 'player');
+      if (msg.role === 'assistant') this.addBubble(msg.content, 'npc');
+    });
+    $('chat-actions').innerHTML = '<span style="font-size:10px;color:var(--text-muted);padding:4px;">Crew chat can calm anxiety, restore morale, and create memories.</span>';
+    $('chat-input').placeholder = 'Say something to the crew...';
+    $('chat-overlay').classList.add('active');
+    $('chat-input').focus();
+  },
+
+  openMember(name) {
+    const member = state.finalSquad.find(m => m.name === name);
+    const contact = CONTACTS.find(c => c.name === name);
+    if (!member || !contact) return;
+    this.active = true;
+    this.mode = 'member';
+    this.memberName = name;
+    this.contact = contact;
+    state.queue.actionLocked = true;
+
+    $('chat-name').textContent = name;
+    const stats = state.queue.memberStats[name];
+    $('chat-disp').textContent = `${contact.trait} · morale ${Math.round(stats?.morale ?? 0)} · warmth ${Math.round(stats?.warmth ?? 0)}`;
+    const portrait = contact.portraitProps ? Portrait.generate(contact.portraitProps, 'friendly', []) : '';
+    const avatar = $('chat-avatar');
+    avatar.style.background = 'none';
+    avatar.style.border = '2px solid ' + (contact.color || '#7b75ff');
+    avatar.innerHTML = portrait ? `<img src="${portrait}" alt="${name}">` : `<span>${contact.initials}</span>`;
+
+    $('chat-messages').innerHTML = '';
+    this.addBubble(`You step aside with ${name} for a quick one-on-one.`, 'system-msg');
+    const history = state.queue.crewMemberChats[name] || [];
+    history.slice(-6).forEach(msg => {
+      if (msg.role === 'user') this.addBubble(msg.content, 'player');
+      if (msg.role === 'assistant') this.addBubble(msg.content, 'npc');
+    });
+    $('chat-actions').innerHTML = '<span style="font-size:10px;color:var(--text-muted);padding:4px;">One-on-one talks are best for morale, promises, and personal memories.</span>';
+    $('chat-input').placeholder = `Say something to ${name}...`;
+    $('chat-overlay').classList.add('active');
+    $('chat-input').focus();
+  },
+
+  close() {
+    $('chat-overlay').classList.remove('active');
+    $('chat-input').placeholder = 'Say something...';
+    this.active = false;
+    this.mode = null;
+    this.memberName = null;
+    this.contact = null;
+    this.generating = false;
+    state.queue.actionLocked = false;
+    QueueEngine.updateMeters();
+    MemberStats.render();
+  },
+
+  addBubble(text, cls) {
+    const el = document.createElement('div');
+    el.className = 'chat-bubble ' + cls;
+    el.textContent = text;
+    $('chat-messages').appendChild(el);
+    $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
+    return el;
+  },
+
+  _history() {
+    if (this.mode === 'group') return state.queue.crewChatHistory;
+    state.queue.crewMemberChats[this.memberName] = state.queue.crewMemberChats[this.memberName] || [];
+    return state.queue.crewMemberChats[this.memberName];
+  },
+
+  _buildGroupPrompt() {
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const crewLines = state.finalSquad.map(m => {
+      const c = CONTACTS.find(ct => ct.name === m.name);
+      const stats = state.queue.memberStats[m.name];
+      const memory = c ? MemorySystem.buildPromptContextForContact(c.id) : '';
+      return `- ${m.name}: ${c?.trait || 'Crew member'}, likes ${c?.musicPref || 'music'}, morale ${Math.round(stats?.morale ?? 0)}, warmth ${Math.round(stats?.warmth ?? 0)}${memory ? `\n${memory}` : ''}`;
+    }).join('\n');
+    return `You are writing the crew's group-chat style response while everyone waits outside ${venue?.name || 'the club'}.
+Current meters: Hope ${Math.round(state.queue.hope)}, Anxiety ${Math.round(state.queue.anxiety)}, queue position ${state.queue.position}.
+Crew:
+${crewLines}
+
+Reply as one or more crew members in short casual lines. Keep the total response under 4 short sentences.
+Use reduce_anxiety if the player's message genuinely calms the group.
+Use boost_hope if it makes the night feel worth it again.
+Use boost_morale when a specific member feels supported.
+Use remember for promises, inside jokes, emotional moments, or funny details worth future callbacks.`;
+  },
+
+  _buildMemberPrompt() {
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const contact = this.contact;
+    const stats = state.queue.memberStats[this.memberName];
+    const memories = MemorySystem.buildPromptContextForContact(contact.id);
+    return `You are ${contact.name}, a crew member waiting with the player outside ${venue?.name || 'the club'}.
+Trait: ${contact.trait} — ${contact.traitDesc}
+Music preference: ${contact.musicPref}
+Current state: morale ${Math.round(stats?.morale ?? 0)}, warmth ${Math.round(stats?.warmth ?? 0)}, squad anxiety ${Math.round(state.queue.anxiety)}, hope ${Math.round(state.queue.hope)}.
+${memories || 'No strong memories with the player yet.'}
+
+Reply to the player in 1-2 short sentences, in character.
+If they reassure you, use reduce_anxiety and boost_morale.
+If they make a meaningful promise, share a vulnerable detail, or create an inside joke, use remember.
+If they pressure you selfishly, do not reward them.`;
+  },
+
+  async sendMessage(text) {
+    if (!text.trim() || this.generating) return;
+    this.addBubble(text, 'player');
+    $('chat-input').value = '';
+    QueueEngine.advanceTime(1);
+    await this.generateResponse(text);
+  },
+
+  async generateResponse(playerText) {
+    this.generating = true;
+    $('chat-send').disabled = true;
+    const typingEl = this.addBubble('', 'npc');
+    typingEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+
+    const history = this._history();
+    history.push({ role: 'user', content: playerText });
+    let result = null;
+    if (LLM.loaded) {
+      result = await LLM.chat([
+        { role: 'system', content: this.mode === 'group' ? this._buildGroupPrompt() : this._buildMemberPrompt() },
+        ...history.slice(-8),
+      ], CREW_TOOLS, 140);
+    }
+
+    let text = LLM._stripToolText(result?.text || '');
+    const toolCalls = result?.toolCalls || [];
+    if (!text && toolCalls.length === 0) {
+      text = this.mode === 'group'
+        ? `${state.finalSquad[0]?.name || 'Crew'}: Yeah... okay, let's keep it together.`
+        : `${this.memberName}: Yeah. I needed to hear that.`;
+    }
+
+    this._handleToolCalls(toolCalls);
+    history.push({ role: 'assistant', content: text });
+    typingEl.innerHTML = '';
+    typingEl.textContent = text;
+    this.generating = false;
+    $('chat-send').disabled = false;
+  },
+
+  _handleToolCalls(toolCalls) {
+    for (const tc of toolCalls) {
+      const fn = tc.function?.name || tc.name;
+      let args = tc.function?.arguments || tc.arguments || {};
+      if (typeof args === 'string') {
+        try { args = JSON.parse(args); } catch (e) { args = {}; }
+      }
+      if (fn === 'remember') {
+        if (this.mode === 'member' && this.contact) {
+          MemorySystem.rememberFromCrewMember(this.contact, args, 'crew_one_on_one');
+        } else {
+          state.finalSquad.forEach(m => {
+            const c = CONTACTS.find(ct => ct.name === m.name);
+            if (c) MemorySystem.rememberFromCrewMember(c, args, 'crew_group');
+          });
+        }
+      } else if (fn === 'reduce_anxiety') {
+        const amount = Math.min(12, Math.max(1, Math.abs(Number(args.amount) || 4)));
+        QueueEngine.modAnxiety(-amount);
+        this.addBubble(`Crew anxiety -${amount}: ${args.reason || 'they feel steadier'}`, 'system-msg');
+      } else if (fn === 'boost_hope') {
+        const amount = Math.min(12, Math.max(1, Math.abs(Number(args.amount) || 4)));
+        QueueEngine.modHope(amount);
+        this.addBubble(`Hope +${amount}: ${args.reason || 'the night feels worth it'}`, 'system-msg');
+      } else if (fn === 'boost_morale') {
+        const amount = Math.min(20, Math.max(1, Math.abs(Number(args.amount) || 6)));
+        const target = args.member || this.memberName;
+        if (target && state.queue.memberStats[target]) {
+          MemberStats.boostMorale(target, amount);
+          this.addBubble(`${target} morale +${amount}: ${args.reason || 'supported'}`, 'system-msg');
+        } else if (this.mode === 'group') {
+          state.finalSquad.forEach(m => MemberStats.boostMorale(m.name, Math.ceil(amount / 2)));
+          this.addBubble(`Crew morale +${Math.ceil(amount / 2)}: ${args.reason || 'group support'}`, 'system-msg');
+        }
+      }
+    }
   },
 };
 
@@ -8916,6 +9229,8 @@ async function enterQueue() {
   state.queue.delayedEffects = [];
   state.queue.memberStats = {};
   state.queue.nightMemories = [];
+  state.queue.crewChatHistory = [];
+  state.queue.crewMemberChats = {};
   state.queue.startingSquadCount = state.finalSquad.length;
   state.queue.warmthBonus = wardrobeWarmth;
   state.queue.allyData = null;
@@ -9048,6 +9363,7 @@ function init() {
   $('act-icon-kiosk').innerHTML = PX.i('beer', '#ffd86b', 22);
   $('act-icon-use').innerHTML = PX.i('pack', '#a4ff80', 22);
   $('act-icon-intel').innerHTML = PX.i('key', '#ffd86b', 22);
+  $('act-icon-crew').innerHTML = PX.i('people', '#7b75ff', 22);
   $('act-icon-eavesdrop').innerHTML = PX.i('ear', '#57f2ff', 22);
   $('act-icon-scout').innerHTML = PX.i('eye', '#39ff14', 22);
   $('log-icon').innerHTML = PX.i('scroll', '#ebe4ff', 12);
@@ -9148,12 +9464,14 @@ function init() {
 
   $('act-talk-front').addEventListener('click', () => {
     if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    if (!state.queue.neighborFront) { showToast('No one ahead to talk to', 1500); return; }
     state.queue.actionLocked = true;
     ChatSystem.open(state.queue.neighborFront, 'front');
   });
 
   $('act-talk-back').addEventListener('click', () => {
     if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    if (!state.queue.neighborBack) { showToast('No one behind you yet', 1500); return; }
     state.queue.actionLocked = true;
     ChatSystem.open(state.queue.neighborBack, 'back');
   });
@@ -9186,6 +9504,11 @@ function init() {
     }
   });
 
+  $('act-crew').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    CrewChatSystem.openGroup();
+  });
+
   // Phase 1: Social action buttons
   $('act-eavesdrop').addEventListener('click', () => {
     if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
@@ -9198,13 +9521,17 @@ function init() {
 
   // Phase 1: Chat input
   $('chat-send').addEventListener('click', () => {
-    ChatSystem.sendMessage($('chat-input').value);
+    if (CrewChatSystem.active) CrewChatSystem.sendMessage($('chat-input').value);
+    else ChatSystem.sendMessage($('chat-input').value);
   });
   $('chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') ChatSystem.sendMessage($('chat-input').value);
+    if (e.key === 'Enter') {
+      if (CrewChatSystem.active) CrewChatSystem.sendMessage($('chat-input').value);
+      else ChatSystem.sendMessage($('chat-input').value);
+    }
   });
-  $('chat-close').addEventListener('click', () => ChatSystem.close());
-  $('chat-leave').addEventListener('click', () => ChatSystem.close());
+  $('chat-close').addEventListener('click', () => CrewChatSystem.active ? CrewChatSystem.close() : ChatSystem.close());
+  $('chat-leave').addEventListener('click', () => CrewChatSystem.active ? CrewChatSystem.close() : ChatSystem.close());
 
   // Member detail close
   $('member-detail-close')?.addEventListener('click', () => {
