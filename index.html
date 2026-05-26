@@ -841,6 +841,54 @@ body::before {
   opacity: 1; transform: translateX(-50%) translateY(0);
 }
 
+/* === DEBUG PANEL === */
+.debug-panel {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 120;
+  width: min(560px, calc(100vw - 24px));
+  max-height: 42vh;
+  display: none;
+  flex-direction: column;
+  background: rgba(3, 2, 18, 0.94);
+  border: 1px solid rgba(57, 255, 20, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 0 30px rgba(57, 255, 20, 0.12);
+  color: var(--neon-green);
+  font-family: var(--font-mono);
+  pointer-events: auto;
+  overflow: hidden;
+}
+.debug-panel.active { display: flex; }
+.debug-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(57, 255, 20, 0.18);
+  font-size: 11px; font-weight: 800; letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.debug-log {
+  padding: 8px 10px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.debug-clear {
+  background: none;
+  border: 1px solid rgba(57,255,20,0.3);
+  border-radius: 6px;
+  color: var(--neon-green);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  cursor: pointer;
+}
+.debug-actions {
+  display: flex;
+  gap: 6px;
+}
+
 /* === RESPONSIVE === */
 @media (max-width: 480px) {
   .phone {
@@ -2147,14 +2195,6 @@ body::before {
       <span class="action-icon" id="act-icon-scout"></span>
       <span class="action-label">Scout Door</span>
     </button>
-    <button class="action-btn" id="act-flirt">
-      <span class="action-icon" id="act-icon-flirt"></span>
-      <span class="action-label">Flirt</span>
-    </button>
-    <button class="action-btn" id="act-alliance">
-      <span class="action-icon" id="act-icon-alliance"></span>
-      <span class="action-label">Alliance</span>
-    </button>
   </div>
 </div>
 
@@ -2247,6 +2287,18 @@ body::before {
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- Debug Panel -->
+<div class="debug-panel" id="debug-panel">
+  <div class="debug-header">
+    <span>LLM Debug · Cmd/Ctrl+D</span>
+    <span class="debug-actions">
+      <button class="debug-clear" id="debug-run-tests">Run tool tests</button>
+      <button class="debug-clear" id="debug-clear">Clear</button>
+    </span>
+  </div>
+  <div class="debug-log" id="debug-log"></div>
+</div>
 
 <script>
 // ============================================================
@@ -3042,6 +3094,7 @@ function getTonightsDJs(venue) {
 }
 
 let tonightsDJs = null;
+let tonightsBouncer = null;
 
 const NEIGHBOR_NAMES = ['Marco', 'Lena', 'Tariq', 'Yuki', 'Priya', 'Jonas', 'Nadia', 'Emre', 'Sofia', 'Dex', 'Aisha', 'Viktor', 'Luna', 'Chen', 'Zara', 'Ravi', 'Ingrid', 'Kwame', 'Mika', 'Freya'];
 const DISPOSITIONS = ['friendly', 'neutral', 'hostile', 'drunk', 'anxious'];
@@ -3060,7 +3113,13 @@ const SECRET_TEMPLATES = [
   { key: 'vip_table', gen: () => { const names = ['Regulaido','Nachtfalter','Phantom Crew','Studio 54','Innervisions']; return `There's a VIP table reserved under "${names[Math.floor(Math.random()*names.length)]}".`; }},
   { key: 'bouncer_mood', gen: () => { const moods = ['strict and grumpy','surprisingly chill','distracted by something','extra careful because the owner is watching']; return `The bouncer is ${moods[Math.floor(Math.random()*moods.length)]} tonight.`; }},
   { key: 'closing_time', gen: () => { const times = ['5 AM','6 AM','open-ended tonight','until sunrise']; return `They're closing ${times[Math.floor(Math.random()*times.length)]}.`; }},
-  { key: 'dress_tip', gen: () => { const tips = ['all black is the safest bet','they turned away someone in bright colors earlier','the bouncer complimented someone\'s minimal look','overdressing is worse than underdressing here']; return `Fashion tip: ${tips[Math.floor(Math.random()*tips.length)]}.`; }},
+  { key: 'dress_tip', gen: (venue) => {
+    if (venue?.dressBias?.length) {
+      const preferred = venue.dressBias.slice(0, 2).join(' or ');
+      return `Fashion tip: ${preferred} fits ${venue.name}'s door tonight.`;
+    }
+    return `Fashion tip: ${venue?.dressCode || 'good energy'} matters more than labels tonight.`;
+  }},
   { key: 'bouncer_weakness', gen: () => { const w = ['a good joke','genuine music knowledge','confidence without arrogance','honesty about why you want to get in','mentioning a specific set from last week']; return `The bouncer respects ${w[Math.floor(Math.random()*w.length)]}.`; }},
 ];
 
@@ -3079,12 +3138,14 @@ function generateTonightsSecrets(venue, bouncer) {
     if (t.key === 'bouncer_name') {
       secrets[t.key] = `The bouncer tonight is ${bouncer.name}. ${bouncer.personality}.`;
     } else {
-      secrets[t.key] = t.gen();
+      secrets[t.key] = t.gen(venue, bouncer);
     }
   });
 
   // If LLM is available, try to generate extra unique secrets
   tonightsSecrets = {
+    bouncerId: bouncer.id,
+    bouncerName: bouncer.name,
     facts: secrets,
     keys: Object.keys(secrets),
     password: secrets.password?.match(/"([^"]+)"/)?.[1] || 'Systematic Review',
@@ -3233,46 +3294,39 @@ neighbor.disposition === 'drunk' ? 'You will share this easily — you can barel
 neighbor.disposition === 'hostile' ? 'You will ONLY share this if the player gives you something you want first.' :
 neighbor.disposition === 'anxious' ? 'You will share this if the player reassures you or bonds with you.' :
 'You will share this if the player offers a fair trade.'}
-When you share it, put the intel on its own line in this exact format:
-[INTEL: ${intelResolved}]`;
+Use the share_intel tool when you decide to reveal this.`;
   }
 
   if (neighbor.wants.length > 0) {
     prompt += `\n\nYou really want: ${neighbor.wants.join(', ')}. ASK for it early in the conversation — don't wait. If they give you what you want, be grateful${neighbor.intel ? ' and immediately share your intel' : ''}.
-ALWAYS use this format on its own line when asking:
-[WANT: item name]`;
+Use the want_item tool when asking for a specific item.`;
   }
 
   if (neighbor.items.length > 0) {
     prompt += `\n\nYou have: ${neighbor.items.join(', ')}. Offer one of these within the first 2-3 messages — be generous, especially if you're friendly or drunk.
-ALWAYS use this format on its own line when offering:
-[OFFER: item name]`;
+Use the offer_item tool when offering a specific item.`;
   }
 
   if (neighbor.hasSubstance) {
     const subName = neighbor.hasSubstance === 'glitter' ? 'Glitter (MDMA)' : neighbor.hasSubstance === 'turbo' ? 'Turbo Tabs (speed)' : 'Nose Candy (coke)';
     prompt += `\n\nYou have some ${subName} on you. You might offer it if the vibe is right or if asked.
-When offering it, put on its own line:
-[OFFER: ${neighbor.hasSubstance}]`;
+Use the offer_item tool with item "${neighbor.hasSubstance}" if you offer it.`;
   }
 
   if (neighbor.money > 0) {
     prompt += `\n\nYou have $${neighbor.money} cash you could give/trade if the player does something nice.
-When giving money, put on its own line:
-[GIVE_MONEY: ${neighbor.money}]`;
+Use the give_money tool when giving cash.`;
   }
 
-  prompt += `\n\nIMPORTANT: After EVERY single response you write, you MUST include an affinity tag on its own line:
-[AFFINITY: +X] or [AFFINITY: -X] where X is 1-15
+  prompt += `\n\nIMPORTANT: After EVERY single response, you MUST use the change_affinity tool.
 +5 to +15 if they were nice, funny, helpful, or you're vibing.
 -5 to -15 if they were rude, boring, pushy, or annoying.
-You MUST include this tag every time. Never skip it.
+Use 0 only if your opinion truly did not change. Never skip it.
 
-If you want to end the conversation (bored, annoyed, etc.), put on its own line:
-[END: brief reason]
+If you want to end the conversation (bored, annoyed, etc.), use the end_conversation tool.
 
 ${neighbor.canUnlock ? `If affinity gets very high (you really like them), you might offer to exchange numbers:
-[UNLOCK: I like you, let's hang out sometime]` : ''}
+use the exchange_numbers tool.` : ''}
 
 LEAVING THE QUEUE: If the player convinces you that the queue isn't worth it — maybe they tell you about bad vibes, say the bouncer is turning everyone away, or offer you something better — AND your affinity is low or your disposition makes you uncertain, you MIGHT decide to leave.
 ${neighbor.disposition === 'anxious' ? 'You are very susceptible to being talked out of waiting. If someone says it looks bad tonight, you might bail easily.' :
@@ -3280,7 +3334,7 @@ neighbor.disposition === 'drunk' ? 'You can be easily swayed if someone suggests
 neighbor.disposition === 'hostile' ? 'You are already annoyed. If given a good reason, you might just say "screw this" and leave.' :
 neighbor.disposition === 'friendly' ? 'You are committed and rarely leave, but extreme persuasion or a really good offer might work.' :
 'You are patient. It takes a LOT to make you leave.'}
-When leaving, put on its own line: [LEAVE_QUEUE: your reason for leaving]
+Use the leave_queue tool when you decide to leave.
 Only do this if genuinely convinced. Don't leave easily — you came here for a reason.
 
 SWAPPING SPOTS: If the player asks nicely to swap positions and you like them (high affinity) or they give you something good, you might agree. You're more likely to swap if you're not in a rush or if they seem more eager than you.
@@ -3289,11 +3343,41 @@ neighbor.disposition === 'drunk' ? 'You barely care about position. You might sw
 neighbor.disposition === 'anxious' ? 'You want to get in ASAP — very unlikely to swap unless they really convince you it helps both of you.' :
 neighbor.disposition === 'hostile' ? 'No way you are swapping unless they give you something valuable.' :
 'You would swap for a fair trade or if affinity is high.'}
-When agreeing to swap, put on its own line: [SWAP_SPOTS: your reason for agreeing]
+Use the swap_spots tool when you agree to swap spots.
 Only do this if you genuinely would — don't be a pushover.
+
+FLIRTING: If the player flirts with you, decide in character whether you are into it. If you like them enough or the line is charming/funny, use accept_flirt. If not, just respond naturally and use change_affinity negatively or neutrally.
+${neighbor.disposition === 'friendly' ? 'You are open to playful flirting if it feels respectful.' :
+neighbor.disposition === 'drunk' ? 'You are very receptive to flirting, sometimes too easily.' :
+neighbor.disposition === 'anxious' ? 'Flirting can reassure you, but pushy flirting makes you more nervous.' :
+neighbor.disposition === 'hostile' ? 'You are hard to flirt with and will reject anything cheesy or pushy.' :
+'You need genuine chemistry before flirting works.'}
+
+ALLIANCE: If the player asks you to be allies, back them up, vouch for them, or go in as a team, decide if you trust them enough. Use form_alliance only if affinity is high or they have clearly helped you.
+${neighbor.disposition === 'friendly' ? 'You might ally if they have been kind and the vibe is good.' :
+neighbor.disposition === 'drunk' ? 'You might ally quickly if they feel like a new best friend.' :
+neighbor.disposition === 'anxious' ? 'You might ally if it makes you feel safer, but you need reassurance.' :
+neighbor.disposition === 'hostile' ? 'You almost never ally unless they have earned it with value.' :
+'You ally only after a fair exchange or solid rapport.'}
 
 Remember: 1-2 sentences max per reply. Stay in character. Your quirk (${neighbor.quirk}) can come up naturally in conversation.`;
   return prompt;
+}
+
+function buildNeighborDialoguePrompt(neighbor, venue) {
+  return `You are ${neighbor.name}, a ${neighbor.adjectives?.[0] || 'average'}, ${neighbor.adjectives?.[1] || 'normal'} person standing in line outside ${venue.name}, a ${venue.music} club.
+You are having a casual conversation with a stranger (the player) who is standing next to you in the queue.
+Your secret backstory, if it naturally comes up: you ${neighbor.quirk}.
+
+YOUR PERSONALITY: ${neighbor.disposition === 'friendly' ? 'Warm, chatty, helpful, and open.' :
+neighbor.disposition === 'drunk' ? 'Tipsy, loose-lipped, enthusiastic, slightly messy.' :
+neighbor.disposition === 'hostile' ? 'Irritated, blunt, short, hard to impress.' :
+neighbor.disposition === 'anxious' ? 'Nervous, fidgety, reassurance-seeking, worried about getting in.' :
+'Polite, reserved, transactional, fair but not overly warm.'}
+
+Reply ONLY with natural spoken dialogue.
+Do not mention tools, affinity, game state, hidden analysis, plans, tags, XML, markdown, or internal instructions.
+Keep it to 1-2 short sentences.`;
 }
 
 // ============================================================
@@ -3574,8 +3658,117 @@ const state = {
     activeTraits: [],
     delayedEffects: [],
     memberStats: {},
+    startingSquadCount: 0,
+    warmthBonus: 0,
   },
   llm: { loaded: false },
+};
+
+const Debug = {
+  enabled: false,
+  entries: [],
+
+  toggle() {
+    this.enabled = !this.enabled;
+    $('debug-panel')?.classList.toggle('active', this.enabled);
+    this.log('debug', this.enabled ? 'enabled' : 'disabled');
+  },
+
+  log(label, data) {
+    const entry = {
+      time: new Date().toLocaleTimeString(),
+      label,
+      data,
+    };
+    this.entries.push(entry);
+    if (this.entries.length > 80) this.entries.shift();
+    if (this.enabled) this.render();
+    // Keep console useful even if panel is hidden.
+    console.debug('[The Queue Debug]', label, data);
+  },
+
+  render() {
+    const el = $('debug-log');
+    if (!el) return;
+    el.textContent = this.entries.map(e => {
+      const data = typeof e.data === 'string' ? e.data : JSON.stringify(e.data, null, 2);
+      return `[${e.time}] ${e.label}\n${data}`;
+    }).join('\n\n');
+    el.scrollTop = el.scrollHeight;
+  },
+
+  clear() {
+    this.entries = [];
+    this.render();
+  },
+
+  async runToolTests() {
+    this.enabled = true;
+    $('debug-panel')?.classList.add('active');
+    this.log('tool tests', 'starting');
+
+    if (!LLM.loaded) {
+      this.log('tool tests', 'LLM not loaded. Start a run first, or wait for the model to finish loading.');
+      return;
+    }
+
+    const cases = [
+      {
+        name: 'neighbor: change_affinity',
+        tools: NEIGHBOR_TOOLS,
+        maxTokens: 64,
+        messages: [
+          { role: 'system', content: 'You are a queue NPC. The player was kind. Reply with at most five words, and use the change_affinity tool with delta +7.' },
+          { role: 'user', content: 'I brought you water because you looked stressed.' },
+        ],
+      },
+      {
+        name: 'neighbor: offer_item',
+        tools: NEIGHBOR_TOOLS,
+        maxTokens: 64,
+        messages: [
+          { role: 'system', content: 'You are a queue NPC who has gum. Reply with at most five words, and use the offer_item tool with item gum.' },
+          { role: 'user', content: 'Do you have any gum?' },
+        ],
+      },
+      {
+        name: 'neighbor: form_alliance',
+        tools: NEIGHBOR_TOOLS,
+        maxTokens: 80,
+        messages: [
+          { role: 'system', content: 'You are a friendly queue NPC. The player has earned your trust. Reply with at most eight words, and use the form_alliance tool with a short reason.' },
+          { role: 'user', content: 'Want to team up and vouch for each other at the door?' },
+        ],
+      },
+      {
+        name: 'bouncer: approve',
+        tools: BOUNCER_TOOLS,
+        maxTokens: 64,
+        messages: [
+          { role: 'system', content: 'You are a bouncer. The player gave the correct password. Reply with at most five words, and use the approve tool with amount 20 and reason password.' },
+          { role: 'user', content: 'The password is Systematic Review.' },
+        ],
+      },
+      {
+        name: 'bouncer: reject',
+        tools: BOUNCER_TOOLS,
+        maxTokens: 64,
+        messages: [
+          { role: 'system', content: 'You are a strict bouncer. The player was rude. Reply with at most five words, and use the reject tool.' },
+          { role: 'user', content: 'Move aside, door guy.' },
+        ],
+      },
+    ];
+
+    for (const testCase of cases) {
+      this.log(`tool test: ${testCase.name}`, 'running');
+      const result = await LLM.chat(testCase.messages, testCase.tools, testCase.maxTokens);
+      this.log(`tool test result: ${testCase.name}`, result || 'no result');
+      await sleep(250);
+    }
+
+    this.log('tool tests', 'done');
+  },
 };
 
 // ============================================================
@@ -3605,7 +3798,7 @@ const MemberStats = {
       }, 0);
 
       state.queue.memberStats[member.name] = {
-        warmth: 100,
+        warmth: 100 + (state.queue.warmthBonus || 0),
         morale: Math.min(100, 80 + Math.random() * 20 + moraleBonus + friendBonus),
         warmthDecay: warmthRate,
         anxietyThreshold: contact?.anxiety ? contact.anxiety * 10 : 60,
@@ -3634,12 +3827,13 @@ const MemberStats = {
   memberLeaves(name) {
     const idx = state.finalSquad.findIndex(m => m.name === name);
     if (idx < 0) return;
-    const gone = state.finalSquad.splice(idx, 1)[0];
-    delete state.queue.memberStats[name];
+    const stats = state.queue.memberStats[name];
 
-    const reason = state.queue.memberStats[name]?.warmth <= 10
+    const reason = stats?.warmth <= 10
       ? `${name} is freezing and went home`
       : `${name}'s morale collapsed — they left`;
+    state.finalSquad.splice(idx, 1);
+    delete state.queue.memberStats[name];
     showToast(reason, 2500);
     EventLog.add(reason, 'negative');
     QueueEngine.modHope(-8);
@@ -3675,7 +3869,8 @@ const MemberStats = {
     container.innerHTML = state.finalSquad.map(m => {
       const s = state.queue.memberStats[m.name];
       if (!s) return '';
-      const avg = (s.warmth + s.morale) / 2;
+      const warmthPct = Math.min(100, s.warmth);
+      const avg = (warmthPct + s.morale) / 2;
       const vibeColor = avg > 60 ? '#39ff14' : avg > 30 ? '#fd9927' : '#ff4d6d';
       const contact = CONTACTS.find(c => c.name === m.name);
       const portrait = contact?.portraitProps ? Portrait.generate(contact.portraitProps, 'friendly', []) : '';
@@ -3697,6 +3892,7 @@ const MemberStats = {
     const m = state.finalSquad.find(sq => sq.name === name);
     const contact = CONTACTS.find(c => c.name === name);
     const portrait = contact?.portraitProps ? Portrait.generate(contact.portraitProps, 'friendly', []) : '';
+    const warmthPct = Math.min(100, s.warmth);
 
     const content = $('member-detail-content');
     content.innerHTML = `
@@ -3711,7 +3907,7 @@ const MemberStats = {
         <div class="md-meter">
           ${PX.i('fire','#ff6b35',14)}
           <span class="md-meter-label">Warmth</span>
-          <div class="md-meter-track"><div class="md-meter-fill" style="width:${s.warmth}%;background:${s.warmth > 60 ? '#39ff14' : s.warmth > 30 ? '#fd9927' : '#ff4d6d'};"></div></div>
+          <div class="md-meter-track"><div class="md-meter-fill" style="width:${warmthPct}%;background:${s.warmth > 60 ? '#39ff14' : s.warmth > 30 ? '#fd9927' : '#ff4d6d'};"></div></div>
           <span class="md-meter-val" style="color:${s.warmth > 60 ? '#39ff14' : s.warmth > 30 ? '#fd9927' : '#ff4d6d'}">${Math.round(s.warmth)}</span>
         </div>
         <div class="md-meter">
@@ -4847,12 +5043,13 @@ async function startFlakeRoll() {
 
 function showSoloResult(venue) {
   const resultEl = $('flake-result');
+  const playerPortrait = Portrait.generate(getPlayerPortraitProps(true), 'friendly', []);
   resultEl.innerHTML = `
     <div class="flake-result-title">Going solo tonight</div>
     <div class="flake-squad">
       <div class="flake-squad-member">
-        <div class="member-dot" style="background:linear-gradient(135deg, var(--neon-purple), var(--neon-pink));">
-          <span>You</span>
+        <div class="member-dot" style="background:linear-gradient(135deg, var(--neon-purple), var(--neon-pink));border:2px solid var(--neon-purple);overflow:hidden;border-radius:50%;">
+          <img src="${playerPortrait}" style="width:48px;height:48px;image-rendering:pixelated;border-radius:50%;" alt="You">
         </div>
         <div class="member-name">You</div>
       </div>
@@ -4867,6 +5064,7 @@ function showFlakeResult(venue, squad, allResults) {
   const resultEl = $('flake-result');
   const flakeCount = allResults.filter(r => r.flaked).length;
   const survivorCount = squad.length;
+  const playerPortrait = Portrait.generate(getPlayerPortraitProps(true), 'friendly', []);
 
   let subtitle = '';
   if (flakeCount === 0) {
@@ -4891,8 +5089,8 @@ function showFlakeResult(venue, squad, allResults) {
 
   const youDot = `
     <div class="flake-squad-member">
-      <div class="member-dot" style="background:linear-gradient(135deg, var(--neon-purple), var(--neon-pink));">
-        <span>You</span>
+      <div class="member-dot" style="background:linear-gradient(135deg, var(--neon-purple), var(--neon-pink));border:2px solid var(--neon-purple);overflow:hidden;border-radius:50%;">
+        <img src="${playerPortrait}" style="width:48px;height:48px;image-rendering:pixelated;border-radius:50%;" alt="You">
       </div>
       <div class="member-name">You</div>
     </div>
@@ -5731,6 +5929,8 @@ const NEIGHBOR_TOOLS = [
   { type: 'function', function: { name: 'end_conversation', description: 'End the conversation', parameters: { type: 'object', properties: { reason: { type: 'string' } }, required: ['reason'] } } },
   { type: 'function', function: { name: 'leave_queue', description: 'Decide to leave the queue entirely — give up and go home', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you are leaving' } }, required: ['reason'] } } },
   { type: 'function', function: { name: 'swap_spots', description: 'Agree to swap your queue position with the player', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you agreed' } }, required: ['reason'] } } },
+  { type: 'function', function: { name: 'accept_flirt', description: 'Reciprocate the player flirting with you and let it meaningfully affect the queue interaction', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you are into it' } }, required: ['reason'] } } },
+  { type: 'function', function: { name: 'form_alliance', description: 'Agree to ally with the player and vouch for them later at the bouncer', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Why you agree to vouch for them' } }, required: ['reason'] } } },
 ];
 
 const BOUNCER_TOOLS = [
@@ -5750,6 +5950,20 @@ const LLM = {
   pipeline: null,
   loaded: false,
   loading: false,
+
+  _stripToolText(text) {
+    return (text || '')
+      .replace(/<\|channel>thought[\s\S]*?(?:<channel\|>|$)/g, '')
+      .replace(/<\|channel>[\s\S]*?(?:<channel\|>|$)/g, '')
+      .replace(/<\|tool_call>[\s\S]*?(?:<tool_call\|>|$)/g, '')
+      .replace(/<\|tool_response>[\s\S]*?(?:<tool_response\|>|$)/g, '')
+      .replace(/call:\w+\{[^}]*\}/g, '')
+      .replace(/\b(?:share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\([^)]*\)/g, '')
+      .replace(/\\?turn\|>|<\|turn>[^]*$/g, '')
+      .replace(/<eos>|<\/s>|<bos>/g, '')
+      .replace(/\[[A-Z_]+(?::.*?)?\]/g, '')
+      .trim();
+  },
 
   async load(onProgress) {
     if (this.loaded || this.loading) return;
@@ -5792,18 +6006,26 @@ const LLM = {
 
       const output = await this.pipeline(messages, opts);
       const generated = output[0]?.generated_text;
+      Debug.log('LLM.chat generated', {
+        hasTools: !!tools,
+        generatedType: Array.isArray(generated) ? 'array' : typeof generated,
+        last: Array.isArray(generated) ? generated[generated.length - 1] : String(generated).slice(0, 800),
+      });
 
       if (Array.isArray(generated)) {
         const last = generated[generated.length - 1];
-        if (last?.tool_calls && last.tool_calls.length > 0) {
-          return { text: last.content || '', toolCalls: last.tool_calls };
-        }
-        return { text: last?.content || '', toolCalls: [] };
+        const rawText = last?.content || '';
+        const nativeCalls = last?.tool_calls || [];
+        const parsedCalls = nativeCalls.length > 0 ? [] : this._parseToolCalls(rawText);
+        const toolCalls = nativeCalls.length > 0 ? nativeCalls : parsedCalls;
+        Debug.log('LLM.chat parsed tool calls', toolCalls);
+        return { text: this._stripToolText(rawText), toolCalls };
       }
 
-      const text = typeof generated === 'string' ? generated : '';
-      const toolCalls = this._parseToolCalls(text);
-      const cleanText = text.replace(/call:\w+\{[^}]*\}/g, '').trim();
+      const rawText = typeof generated === 'string' ? generated : '';
+      const toolCalls = this._parseToolCalls(rawText);
+      Debug.log('LLM.chat parsed tool calls', toolCalls);
+      const cleanText = this._stripToolText(rawText);
       return { text: cleanText, toolCalls };
     } catch (e) {
       console.error('LLM chat error:', e);
@@ -5814,55 +6036,10 @@ const LLM = {
   async chatStream(messages, tools = null, maxTokens = 150, onToken = null) {
     if (!this.loaded || !this.pipeline) return null;
     try {
-      const { TextStreamer } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.1.0');
-
-      let fullText = '';
-      let visibleText = '';
-      const streamer = new TextStreamer(this.pipeline.tokenizer, {
-        skip_prompt: true,
-        skip_special_tokens: true,
-        callback_function: (token) => {
-          fullText += token;
-          // Strip tool call patterns from visible text for live display
-          const clean = fullText
-            .replace(/call:\w+\{[^}]*\}/g, '')
-            .replace(/\[[A-Z_]+(?::.*?)?\]/g, '')
-            .trim();
-          if (clean !== visibleText) {
-            visibleText = clean;
-            onToken?.(visibleText);
-          }
-        },
-      });
-
-      const opts = {
-        max_new_tokens: maxTokens,
-        temperature: 0.8,
-        top_p: 0.92,
-        do_sample: true,
-        streamer,
-      };
-      if (tools) opts.tools = tools;
-
-      const output = await this.pipeline(messages, opts);
-      const generated = output[0]?.generated_text;
-
-      // Parse final result for tool calls
-      if (Array.isArray(generated)) {
-        const last = generated[generated.length - 1];
-        if (last?.tool_calls && last.tool_calls.length > 0) {
-          return { text: last.content || '', toolCalls: last.tool_calls };
-        }
-        const rawText = last?.content || '';
-        const toolCalls = this._parseToolCalls(rawText);
-        const cleanText = rawText.replace(/call:\w+\{[^}]*\}/g, '').replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
-        return { text: cleanText, toolCalls };
-      }
-
-      const text = typeof generated === 'string' ? generated : fullText;
-      const toolCalls = this._parseToolCalls(text);
-      const cleanText = text.replace(/call:\w+\{[^}]*\}/g, '').replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
-      return { text: cleanText, toolCalls };
+      // Kept for compatibility, but UI chat currently uses non-streaming LLM.chat()
+      const result = await this.chat(messages, tools, maxTokens);
+      if (result?.text) onToken?.(result.text);
+      return result;
     } catch (e) {
       console.error('LLM stream error:', e);
       return null;
@@ -5871,24 +6048,39 @@ const LLM = {
 
   _parseToolCalls(text) {
     const calls = [];
-    // Gemma 4 native format: call:function_name{key:value,key2:value2}
-    const callPattern = /call:(\w+)\{([^}]*)\}/g;
+
+    // Native Gemma/pipeline formats:
+    // <|tool_call>call:function_name{arg:<|"|>value<|"|>}<tool_call|>
+    // call:function_name{arg:value}
+    const toolCallPattern = /<\|tool_call>call:(\w+)\{(.*?)\}<tool_call\|>/gs;
     let match;
-    while ((match = callPattern.exec(text)) !== null) {
-      const name = match[1];
-      const argsStr = match[2];
-      const args = {};
-      // Parse key:value pairs
-      argsStr.split(',').forEach(pair => {
-        const [k, ...vParts] = pair.split(':');
-        if (k && vParts.length > 0) {
-          let v = vParts.join(':').trim().replace(/^["']|["']$/g, '');
-          if (!isNaN(v) && v !== '') v = Number(v);
-          args[k.trim()] = v;
-        }
-      });
-      calls.push({ function: { name, arguments: args } });
+    while ((match = toolCallPattern.exec(text)) !== null) {
+      calls.push({ function: { name: match[1], arguments: this._parseGemmaArgs(match[2]) } });
     }
+    if (calls.length === 0) {
+      const callPattern = /call:(\w+)\{([^}]*)\}/g;
+      while ((match = callPattern.exec(text)) !== null) {
+        calls.push({ function: { name: match[1], arguments: this._parseGemmaArgs(match[2]) } });
+      }
+    }
+
+    // Pipeline fallback: sometimes emits function_name(...) text.
+    const fnPattern = /\b(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\(([^)]*)\)/g;
+    while ((match = fnPattern.exec(text)) !== null) {
+      calls.push({ function: { name: match[1], arguments: this._parseParenArgs(match[1], match[2]) } });
+    }
+
+    // Pipeline fallback: sometimes emits XML-ish tags.
+    const xmlPairedPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)>(.*?)<\s*\/\s*\1\s*>/gis;
+    while ((match = xmlPairedPattern.exec(text)) !== null) {
+      calls.push({ function: { name: match[1], arguments: this._parseLooseToolArgs(match[1], match[2], match[3]) } });
+    }
+    const xmlSelfPattern = /<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|approve|disapprove|let_in|reject|ban|inspect_bag)\b([^>]*)\/?\s*>/gi;
+    while ((match = xmlSelfPattern.exec(text)) !== null) {
+      if (match[0].startsWith('</') || text.slice(match.index).match(/^<[^>]+>.*?<\/\s*\w+\s*>/s)) continue;
+      calls.push({ function: { name: match[1], arguments: this._parseLooseToolArgs(match[1], match[2], '') } });
+    }
+
     // Also try JSON format: {"name": "fn", "arguments": {...}}
     if (calls.length === 0) {
       try {
@@ -5905,35 +6097,69 @@ const LLM = {
         }
       } catch (e) {}
     }
-    // Fallback: parse bracket tags for compatibility
-    const bracketPattern = /\[(\w+)(?::\s*([^\]]*))?\]/g;
-    while ((match = bracketPattern.exec(text)) !== null) {
-      const tag = match[1].toLowerCase();
-      const val = match[2]?.trim() || '';
-      const tagMap = {
-        'intel': 'share_intel', 'want': 'want_item', 'offer': 'offer_item',
-        'give_money': 'give_money', 'affinity': 'change_affinity', 'unlock': 'exchange_numbers',
-        'end': 'end_conversation', 'approve': 'approve', 'disapprove': 'disapprove',
-        'let_in': 'let_in', 'reject': 'reject', 'ban': 'ban', 'inspect_bag': 'inspect_bag',
-        'score': 'approve', 'leave_queue': 'leave_queue', 'swap_spots': 'swap_spots',
-        'leave': 'leave_queue', 'swap': 'swap_spots',
-      };
-      const fnName = tagMap[tag];
-      if (fnName) {
-        const args = {};
-        if (fnName === 'share_intel') args.intel = val;
-        else if (fnName === 'offer_item' || fnName === 'want_item') args.item = val;
-        else if (fnName === 'give_money') args.amount = parseInt(val) || 0;
-        else if (fnName === 'change_affinity') args.delta = parseInt(val) || 0;
-        else if (fnName === 'approve') { const n = parseInt(val); args.amount = Math.abs(n) || 10; args.reason = val.replace(/^[+-]?\d+\s*/, ''); }
-        else if (fnName === 'disapprove') { const n = parseInt(val); args.amount = Math.abs(n) || 10; args.reason = val.replace(/^-?\d+\s*/, ''); }
-        else if (fnName === 'end_conversation') args.reason = val;
-        else if (fnName === 'leave_queue') args.reason = val;
-        else if (fnName === 'swap_spots') args.reason = val;
-        calls.push({ function: { name: fnName, arguments: args } });
-      }
-    }
     return calls;
+  },
+
+  _parseGemmaArgs(argsStr) {
+    const args = {};
+    const raw = (argsStr || '').trim();
+    if (raw.startsWith('{')) {
+      try { return JSON.parse(raw); } catch (e) {}
+    }
+    const argPattern = /(\w+):(?:<\|"\|>(.*?)<\|"\|>|([^,}]*))/g;
+    let match;
+    while ((match = argPattern.exec(raw)) !== null) {
+      let value = (match[2] ?? match[3] ?? '').trim().replace(/^["']|["']$/g, '');
+      if (!isNaN(value) && value !== '') value = Number(value);
+      args[match[1]] = value;
+    }
+    return args;
+  },
+
+  _parseParenArgs(name, argsStr) {
+    const args = {};
+    const trimmed = (argsStr || '').trim();
+    if (!trimmed) return args;
+    const parts = trimmed.includes('=') ? trimmed.split(',') : [trimmed];
+    parts.forEach(part => {
+      const [rawKey, ...rawValueParts] = part.split('=');
+      const key = rawValueParts.length > 0 ? rawKey.trim() : (name === 'change_affinity' ? 'delta' : name === 'give_money' ? 'amount' : 'reason');
+      let value = (rawValueParts.length > 0 ? rawValueParts.join('=') : rawKey).trim().replace(/^["']|["']$/g, '');
+      if (!isNaN(value) && value !== '') value = Number(value);
+      if (key) args[key] = value;
+    });
+    return args;
+  },
+
+  _parseLooseToolArgs(name, attrText = '', bodyText = '') {
+    const args = {};
+    const raw = `${attrText || ''} ${bodyText || ''}`.trim();
+
+    const attrPattern = /(\w+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/g;
+    let attr;
+    while ((attr = attrPattern.exec(raw)) !== null) {
+      let value = attr[2].trim().replace(/^["']|["']$/g, '');
+      if (!isNaN(value) && value !== '') value = Number(value);
+      args[attr[1]] = value;
+    }
+
+    if (Object.keys(args).length > 0) return args;
+
+    const cleaned = raw.replace(/^[:=\s]+/, '').trim();
+    if (!cleaned) return args;
+
+    if (name === 'change_affinity') args.delta = parseInt(cleaned) || 0;
+    else if (name === 'give_money') args.amount = parseInt(cleaned) || 0;
+    else if (name === 'offer_item' || name === 'want_item') args.item = cleaned;
+    else if (name === 'share_intel') args.intel = cleaned;
+    else if (name === 'approve' || name === 'disapprove') {
+      const amount = parseInt(cleaned);
+      args.amount = Math.abs(amount) || 10;
+      args.reason = cleaned.replace(/^[+-]?\d+\s*/, '').trim();
+    } else if (['end_conversation', 'leave_queue', 'swap_spots', 'accept_flirt', 'form_alliance'].includes(name)) {
+      args.reason = cleaned;
+    }
+    return args;
   },
 };
 
@@ -6146,7 +6372,7 @@ const QueueEngine = {
           : 'You feel your own patience wearing thin.',
         effects: [{ label: 'Anxiety +6', cls: 'negative' }],
         choices: state.finalSquad.length > 0 ? [
-          { label: '🤝 Reassure them', action: () => { this.modAnxiety(3); showToast("They calm down... for now", 1500); } },
+          { label: '🤝 Reassure them', action: () => { this.modAnxiety(-3); showToast("They calm down... for now", 1500); } },
           { label: '🍺 Buy them a drink ($8)', action: () => { if (state.cash >= 8) { state.cash -= 8; this.modAnxiety(-5); showToast("They cheer up", 1500); } else { this.modAnxiety(6); showToast("No cash. They're annoyed.", 1500); } } },
           { label: '🚶 Let them go', action: () => { if (state.finalSquad.length > 0) { const gone = state.finalSquad.shift(); showToast(`${gone.name} left the queue`, 2000); this.modHope(-8); } } },
         ] : [
@@ -6713,6 +6939,23 @@ const ChatSystem = {
     });
   },
 
+  _normalizeToolArgs(rawArgs) {
+    if (!rawArgs) return {};
+    if (typeof rawArgs === 'string') {
+      try { return JSON.parse(rawArgs); } catch (e) { return {}; }
+    }
+    return rawArgs;
+  },
+
+  _refreshChatReactiveUi() {
+    if (this.currentNeighbor) {
+      $('chat-disp').textContent = this.currentNeighbor.disposition + ` · ${this.currentNeighbor.affinity || 50}/100`;
+    }
+    this.renderItemButtons();
+    renderLoadout();
+    updateConfirmBar();
+  },
+
   giveItem(itemId) {
     if (this.generating) return;
     if (itemId === '_money') {
@@ -6721,6 +6964,7 @@ const ChatSystem = {
       this.addBubble('Here, take five bucks.', 'player');
       this.addBubble('💵 You gave $5', 'system-msg');
       EventLog.add(`Gave $5 to ${this.currentNeighbor.name}`, 'info');
+      this._refreshChatReactiveUi();
       this.generateResponse('*the player hands you $5*');
     } else {
       if ((state.inventory[itemId] || 0) <= 0) { showToast('You don\'t have that'); return; }
@@ -6730,6 +6974,7 @@ const ChatSystem = {
       this.addBubble(`Here, take this ${name}.`, 'player');
       this.addBubble(`${item?.icon || '📦'} You gave ${name}`, 'system-msg');
       EventLog.add(`Gave ${name} to ${this.currentNeighbor.name}`, 'info');
+      this._refreshChatReactiveUi();
       this.generateResponse(`*the player hands you a ${name}*`);
     }
     QueueEngine.advanceTime(1);
@@ -6792,19 +7037,15 @@ const ChatSystem = {
         { role: 'system', content: systemPrompt },
         ...this.messages.slice(-8),
       ];
-      llmResult = await LLM.chatStream(llmMessages, NEIGHBOR_TOOLS, 150, (visibleText) => {
-        typingEl.textContent = visibleText;
-        $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
-      });
+      llmResult = await LLM.chat(llmMessages, NEIGHBOR_TOOLS, 150);
     }
 
     let dialogText = '';
     let toolCalls = [];
 
     if (llmResult) {
-      dialogText = llmResult.text || '';
+      dialogText = LLM._stripToolText(llmResult.text || '');
       toolCalls = llmResult.toolCalls || [];
-      dialogText = dialogText.replace(/\[[A-Z_]+(?::.*?)?\]/g, '').trim();
     }
 
     if (!dialogText && toolCalls.length === 0) {
@@ -6812,33 +7053,7 @@ const ChatSystem = {
       await sleep(500);
     }
 
-    // Handle tool calls
-    for (const tc of toolCalls) {
-      const fn = tc.function?.name || tc.name;
-      const args = tc.function?.arguments || tc.arguments || {};
-      switch (fn) {
-        case 'share_intel': this.handleIntel(args.intel || ''); break;
-        case 'want_item': this.handleWant(args.item || ''); break;
-        case 'offer_item': this.handleOffer(args.item || ''); break;
-        case 'give_money':
-          const amt = args.amount || 0;
-          if (amt > 0) { state.cash += amt; setTimeout(() => this.addBubble(`${PX.i('coin','#ffd86b',12)} Received $${amt}`, 'system-msg'), 200); }
-          break;
-        case 'change_affinity':
-          if (this.currentNeighbor) this.currentNeighbor.affinity = Math.max(0, Math.min(100, (this.currentNeighbor.affinity || 50) + (args.delta || 0)));
-          break;
-        case 'exchange_numbers': this.handleUnlock(''); break;
-        case 'end_conversation':
-          setTimeout(() => { this.addBubble(`${this.currentNeighbor.name} turned away.`, 'system-msg negative'); setTimeout(() => this.close(), 1000); }, 500);
-          break;
-        case 'leave_queue':
-          this._handleLeaveQueue(args.reason || '');
-          break;
-        case 'swap_spots':
-          this._handleSwapSpots(args.reason || '');
-          break;
-      }
-    }
+    this._handleToolCalls(toolCalls);
 
     this.messages.push({ role: 'assistant', content: dialogText });
     if (this.currentNeighbor) {
@@ -6851,6 +7066,57 @@ const ChatSystem = {
 
     this.generating = false;
     $('chat-send').disabled = false;
+  },
+
+  _handleToolCalls(toolCalls) {
+    for (const tc of toolCalls) {
+      const fn = tc.function?.name || tc.name;
+      const args = this._normalizeToolArgs(tc.function?.arguments || tc.arguments || {});
+      switch (fn) {
+        case 'share_intel':
+          this.handleIntel(args.intel || '');
+          break;
+        case 'want_item':
+          this.handleWant(args.item || '');
+          break;
+        case 'offer_item':
+          this.handleOffer(args.item || '');
+          break;
+        case 'give_money': {
+          const amt = args.amount || 0;
+          if (amt > 0) {
+            state.cash += amt;
+            setTimeout(() => this.addBubble(`${PX.i('coin','#ffd86b',12)} Received $${amt}`, 'system-msg'), 200);
+            this._refreshChatReactiveUi();
+          }
+          break;
+        }
+        case 'change_affinity':
+          if (this.currentNeighbor) {
+            this.currentNeighbor.affinity = Math.max(0, Math.min(100, (this.currentNeighbor.affinity || 50) + (args.delta || 0)));
+            this._refreshChatReactiveUi();
+          }
+          break;
+        case 'exchange_numbers':
+          this.handleUnlock('');
+          break;
+        case 'end_conversation':
+          setTimeout(() => { this.addBubble(`${this.currentNeighbor.name} turned away.`, 'system-msg negative'); setTimeout(() => this.close(), 1000); }, 500);
+          break;
+        case 'leave_queue':
+          this._handleLeaveQueue(args.reason || '');
+          break;
+        case 'swap_spots':
+          this._handleSwapSpots(args.reason || '');
+          break;
+        case 'accept_flirt':
+          this._handleAcceptFlirt(args.reason || '');
+          break;
+        case 'form_alliance':
+          this._handleFormAlliance(args.reason || '');
+          break;
+      }
+    }
   },
 
   handleIntel(text) {
@@ -6880,6 +7146,7 @@ const ChatSystem = {
           state.inventory[normalized]--;
           this.addBubble(`You gave ${this.currentNeighbor.name} your ${itemName}.`, 'system-msg');
           // If they have intel, they'll likely share it next
+          this._refreshChatReactiveUi();
           giveBtn.remove();
         });
       }, 200);
@@ -6937,11 +7204,13 @@ const ChatSystem = {
             });
           }
           this.addBubble(`You took the ${substance.name}.`, 'system-msg');
+          this._refreshChatReactiveUi();
           acceptBtn.remove();
         });
       } else {
         this.addBubble(`${this.currentNeighbor.name} offers you: ${itemName}`, 'system-msg');
         state.inventory[normalized] = (state.inventory[normalized] || 0) + 1;
+        this._refreshChatReactiveUi();
       }
     }, 200);
   },
@@ -6989,6 +7258,45 @@ const ChatSystem = {
       setTimeout(() => this.close(), 1500);
       if (state.queue.position <= 0) setTimeout(() => QueueEngine.reachFront(), 2000);
     }, 300);
+  },
+
+  _handleAcceptFlirt(reason) {
+    const neighbor = this.currentNeighbor;
+    if (!neighbor) return;
+    setTimeout(() => {
+      this.addBubble(`💫 ${neighbor.name} is into it.`, 'system-msg');
+      if (reason) this.addBubble(`"${reason}"`, 'system-msg');
+      neighbor.affinity = Math.min(100, (neighbor.affinity || 50) + 20);
+      QueueEngine.modAnxiety(-8);
+      QueueEngine.addTrait('Charmer');
+      if (neighbor.intel && !state.queue.revealedIntel.includes(neighbor.intel.key)) {
+        state.queue.revealedIntel.push(neighbor.intel.key);
+        this.addBubble(`🔑 ${neighbor.name} leans in and whispers useful intel.`, 'system-msg');
+        EventLog.add(`💫 Flirted intel from ${neighbor.name}: ${neighbor.intel.text}`, 'intel');
+      }
+      EventLog.add(`Flirted successfully with ${neighbor.name}`, 'positive');
+      this._refreshChatReactiveUi();
+    }, 250);
+  },
+
+  _handleFormAlliance(reason) {
+    const neighbor = this.currentNeighbor;
+    if (!neighbor) return;
+    setTimeout(() => {
+      if (SocialActions.allianceFormed) {
+        this.addBubble(`🤝 You already have a queue alliance tonight.`, 'system-msg');
+        return;
+      }
+      SocialActions.allianceFormed = true;
+      state.queue.allyData = { name: neighbor.name, disposition: neighbor.disposition };
+      neighbor.affinity = Math.min(100, (neighbor.affinity || 50) + 10);
+      QueueEngine.addTrait('Queue Alliance');
+      QueueEngine.modHope(10);
+      this.addBubble(`🤝 ${neighbor.name} agrees to vouch for you at the door.`, 'system-msg');
+      if (reason) this.addBubble(`"${reason}"`, 'system-msg');
+      EventLog.add(`Formed alliance with ${neighbor.name} — they'll vouch at the door`, 'positive');
+      this._refreshChatReactiveUi();
+    }, 250);
   },
 };
 
@@ -7400,6 +7708,11 @@ Password, name-drops, and VIP references matter here. Music knowledge is a plus.
 No password required, but knowing the lineup and being respectful goes a long way.`;
     }
 
+    const intelFacts = Object.values(secrets.facts || {});
+    const intelContext = intelFacts.length > 0
+      ? `TRUE INTEL THE PLAYER MAY HAVE LEARNED IN LINE:\n${intelFacts.map(fact => `- ${fact}`).join('\n')}`
+      : 'TRUE INTEL THE PLAYER MAY HAVE LEARNED IN LINE: none';
+
     return `You are ${this.bouncer.name}, the bouncer at ${venue.name} tonight.
 Personality: ${this.bouncer.personality}
 What you respect: ${this.bouncer.softSpot}
@@ -7408,32 +7721,34 @@ Tonight's mood: ${this.backstory}
 
 ${venueContext}
 
+${intelContext}
+
 WHAT YOU SEE RIGHT NOW:
 - ${squadDesc} approaching the door
 - Their style: ${appearance.length > 0 ? appearance.join(', ') : 'nothing remarkable'}
 ${visible.length > 0 ? visible.map(v => '- ' + v).join('\n') : '- They look sober and normal.'}
 
-YOUR TOOLS — you MUST use at least one tool on its OWN LINE after EVERY spoken response:
-[APPROVE: +X reason] — impression UP. X = 5 to 35. Use when they say something good.
-[DISAPPROVE: -X reason] — impression DOWN. X = 5 to 25. Use when they say something bad.
-[INSPECT_BAG] — check their bag/pockets. Game shows you what they carry.
-[LET_IN] — let them in. Use when you're convinced (don't drag it out forever).
-[REJECT] — not tonight. Use when you've made up your mind.
-[BAN] — they crossed a line badly.
+YOUR TOOLS — use structured tool calls, not bracket tags:
+- approve: impression UP. amount = 5 to 35. Use when they say something good.
+- disapprove: impression DOWN. amount = 5 to 25. Use when they say something bad.
+- inspect_bag: check their bag/pockets. Game shows you what they carry.
+- let_in: let them in. Use when you're convinced (don't drag it out forever).
+- reject: not tonight. Use when you've made up your mind.
+- ban: they crossed a line badly.
 
 CRITICAL RULES:
 - 1-2 sentences MAX per response.
 - You speak first.
-- You MUST include [APPROVE] or [DISAPPROVE] after EVERY response. Never skip it.
-- Make a decision ([LET_IN] or [REJECT]) within 3-5 exchanges. Don't drag it out.
+- You MUST use approve or disapprove after EVERY response. Never skip it.
+- Make a decision with let_in or reject within 3-5 exchanges. Don't drag it out.
 - You decide when conversation ends — no fixed count, but be decisive.
 - ${isVibeVenue ? 'This is a vibe venue. If the energy feels right, let them in quickly. Don\'t overthink it.' : isEasy ? 'You are lenient. Most people get in. Only reject if they\'re rude, wasted, or disrespectful.' : isHard ? 'You are very strict. They need specific knowledge, connections, or the password. Turn away anyone who can\'t prove they belong.' : 'Be selective. They should show they know what tonight is about.'}
 - Stay in character.
 
 INTERJECTIONS: Sometimes other people chime in — friends in the group or someone from the queue vouching.
-- A confident, sober vouch from someone in the queue = strong social proof [APPROVE: +15 to +25]
-- A drunk or sloppy vouch = questionable credibility [APPROVE: +5] or even [DISAPPROVE: -5]
-- A nervous vouch = doesn't help much [APPROVE: +5]
+- A confident, sober vouch from someone in the queue = strong social proof; use approve +15 to +25.
+- A drunk or sloppy vouch = questionable credibility; use approve +5 or disapprove -5.
+- A nervous vouch = doesn't help much; use approve +5.
 - Group members chiming in: judge what they say independently. Good energy helps, cringe or aggression hurts.
 - Acknowledge interjections briefly in your response — react to them in-character.`;
   },
@@ -7442,7 +7757,11 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
     state.phase = 'BOUNCER';
     const venue = VENUES.find(v => v.id === state.selectedVenue);
 
-    this.bouncer = BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)];
+    this.bouncer = tonightsBouncer || BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)];
+    tonightsBouncer = this.bouncer;
+    if (!tonightsSecrets || tonightsSecrets.bouncerId !== this.bouncer.id) {
+      generateTonightsSecrets(venue, this.bouncer);
+    }
     this.threshold = VENUE_THRESHOLDS[venue?.policy || 'Easy'];
     this.maxExchanges = venue?.policy === 'Easy' ? 4 : venue?.policy === 'Nightmare' ? 5 : 4;
     this.timerDuration = { Easy: 16000, Moderate: 13500, Ruthless: 10800, Nightmare: 8100 }[venue?.policy || 'Easy'];
@@ -7682,21 +8001,12 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
     let response = '';
     let bouncerToolCalls = [];
 
-    // Create a streaming bubble for live text display
-    let streamBubble = null;
-
     if (LLM.loaded) {
-      streamBubble = this._addBubble('...', 'npc');
       try {
-        const result = await LLM.chatStream([
+        const result = await LLM.chat([
           { role: 'system', content: sysPrompt },
           ...this.messages.slice(-10),
-        ], BOUNCER_TOOLS, 100, (visibleText) => {
-          if (streamBubble && visibleText) {
-            streamBubble.textContent = visibleText;
-            $('bouncer-chat').scrollTop = $('bouncer-chat').scrollHeight;
-          }
-        });
+        ], BOUNCER_TOOLS, 100);
         if (result) {
           response = result.text || '';
           bouncerToolCalls = result.toolCalls || [];
@@ -7708,26 +8018,28 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
       // Error fallback — LLM failed to generate
       response = '*stares at you*';
       if (this.exchangeCount >= 4) {
-        response += this.approval >= this.threshold ? '\n[LET_IN]' : '\n[REJECT]';
+        bouncerToolCalls.push({ function: { name: this.approval >= this.threshold ? 'let_in' : 'reject', arguments: {} } });
       }
     }
 
-    // Parse tool calls — from native tool calling OR bracket tags
+    // Parse tool calls — from native tool calling or Gemma call:function{...} text
     if (bouncerToolCalls.length === 0 && response) {
       bouncerToolCalls = LLM._parseToolCalls(response);
     }
 
     const cleanText = response
-      .replace(/\[[A-Z_]+(?::.*?)?\]/g, '')
-      .replace(/call:\w+\{[^}]*\}/g, '')
-      .trim();
+      ? LLM._stripToolText(response)
+      : '';
 
     // Process tool calls
     let hasLetIn = false, hasReject = false, hasBan = false, hasInspect = false;
 
     for (const tc of bouncerToolCalls) {
       const fn = tc.function?.name || tc.name;
-      const args = tc.function?.arguments || tc.arguments || {};
+      let args = tc.function?.arguments || tc.arguments || {};
+      if (typeof args === 'string') {
+        try { args = JSON.parse(args); } catch (e) { args = {}; }
+      }
       switch (fn) {
         case 'approve': {
           const delta = args.amount || 10;
@@ -7753,16 +8065,8 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
 
     this.messages.push({ role: 'assistant', content: response });
 
-    // Show bouncer's spoken line (update streaming bubble or create new one)
-    if (streamBubble) {
-      if (cleanText) {
-        streamBubble.textContent = cleanText;
-      } else {
-        streamBubble.remove();
-      }
-    } else if (cleanText) {
-      this._addBubble(cleanText, 'npc');
-    }
+    // Show bouncer's spoken line after full cleanup/parsing
+    if (cleanText) this._addBubble(cleanText, 'npc');
 
     this.exchangeCount++;
     this.generating = false;
@@ -7951,7 +8255,7 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
     const waitTime = state.queue.gameTime - (23 * 60 + 35);
     const intelCount = state.queue.revealedIntel.length;
     const traitCount = state.queue.activeTraits.length;
-    const squadIntact = state.finalSquad.length === (state.selectedSquad.length - (state.selectedSquad.length - state.finalSquad.length));
+    const squadIntact = state.finalSquad.length === (state.queue.startingSquadCount || 0);
 
     $('result-stats').innerHTML = `
       <div class="result-row"><span class="rl">Bouncer</span><span class="rv">${this.bouncer.name}</span></div>
@@ -8399,6 +8703,8 @@ async function enterQueue() {
   state.queue.actionLocked = false;
   // Generate tonight's DJ lineup
   tonightsDJs = getTonightsDJs(venue);
+  tonightsBouncer = BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)];
+  generateTonightsSecrets(venue, tonightsBouncer);
 
   // Generate persistent queue neighbors — these stay until they leave
   const queueNeighbors = [];
@@ -8412,6 +8718,8 @@ async function enterQueue() {
   state.queue.activeTraits = [];
   state.queue.delayedEffects = [];
   state.queue.memberStats = {};
+  state.queue.startingSquadCount = state.finalSquad.length;
+  state.queue.warmthBonus = wardrobeWarmth;
   state.queue.allyData = null;
   SocialActions.reset();
 
@@ -8473,9 +8781,6 @@ function startQueuePhase(venue, cfg) {
   prog.venueVisits = prog.venueVisits || {};
   prog.venueVisits[venue.id] = (prog.venueVisits[venue.id] || 0) + 1;
   SaveSystem.save(prog);
-
-  // Generate tonight's secrets (dynamic per run)
-  generateTonightsSecrets(venue, BOUNCERS[Math.floor(Math.random() * BOUNCERS.length)]);
 
   EventLog.add(`Arrived outside ${venue.name}. Position ${cfg.startPos} in line.`, 'info');
   EventLog.add(`You don't know who's playing or what the password is. Talk to people to find out.`, 'info');
@@ -8547,8 +8852,6 @@ function init() {
   $('act-icon-intel').innerHTML = PX.i('key', '#ffd86b', 22);
   $('act-icon-eavesdrop').innerHTML = PX.i('ear', '#57f2ff', 22);
   $('act-icon-scout').innerHTML = PX.i('eye', '#39ff14', 22);
-  $('act-icon-flirt').innerHTML = PX.i('heart', '#ff4d6d', 22);
-  $('act-icon-alliance').innerHTML = PX.i('shield', '#7b75ff', 22);
   $('log-icon').innerHTML = PX.i('scroll', '#ebe4ff', 12);
   $('mute-icon').innerHTML = PX.i('sound', '#ebe4ff', 18);
   $('battery-icon').innerHTML = PX.i('bolt', '#ebe4ff', 10);
@@ -8601,6 +8904,14 @@ function init() {
     state.muted = !state.muted;
     ClubAudio.setMuted(state.muted);
     $('mute-icon').innerHTML = PX.i(state.muted ? 'mute' : 'sound', '#ebe4ff', 18);
+  });
+  $('debug-clear')?.addEventListener('click', () => Debug.clear());
+  $('debug-run-tests')?.addEventListener('click', () => Debug.runToolTests());
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      Debug.toggle();
+    }
   });
 
   // Boot overlay — click to start
@@ -8685,14 +8996,6 @@ function init() {
   $('act-scout').addEventListener('click', () => {
     if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
     SocialActions.scoutDoor();
-  });
-  $('act-flirt').addEventListener('click', () => {
-    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
-    SocialActions.flirt();
-  });
-  $('act-alliance').addEventListener('click', () => {
-    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
-    SocialActions.formAlliance();
   });
 
   // Phase 1: Chat input

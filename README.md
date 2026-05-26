@@ -1,97 +1,71 @@
-# The Queue: Access Granted (MVP Plan)
+# The Queue: Access Granted
 
-A tactical social-engineering and resource-management roguelite simulator about standing in line, gathering intel, managing squad vibes, and facing the ultimate gatekeeper: the bouncer.
+A single-file browser roguelite about surviving the social physics of a club queue. Pick a venue, build a squad, gather intel from strangers, manage anxiety and hope, then talk your way past the bouncer.
 
----
+Live repo: <https://github.com/NotNANtoN/the-queue>
 
-## 🛠️ MVP Game Loop
+## Run
 
-```
-+-----------------------------------------------------+
-|                      PHASE 0                        |
-|   Select Venue (Music/Rules) & Assemble Crew        |
-+-----------------------------------------------------+
-                          |
-                          v
-+-----------------------------------------------------+
-|                      PHASE 1                        |
-|     Stand in the Queue (Hope & Despair Cycles)      |
-|  - Talk to front/back  - Gather Intel  - Manage Anxiety|
-+-----------------------------------------------------+
-                          |
-                          v
-+-----------------------------------------------------+
-|                      PHASE 2                        |
-|                  Face the Bouncer                   |
-|  - Dialogue choices  - Apply Intel  - Gatekeeper Test|
-+-----------------------------------------------------+
-                          |
-            +-------------+-------------+
-            |                           |
-            v                           v
-+-----------------------+   +-----------------------+
-|        SUCCESS        |   |        FAILURE        |
-|  "Doors slide open!"  |   |    "Not tonight."     |
-|   [LEVEL COMPLETE]    |   |     [GAME OVER]       |
-+-----------------------+   +-----------------------+
+No build step, no dependencies.
+
+Open `index.html` in a browser, or serve the folder locally:
+
+```sh
+python3 -m http.server 8000
 ```
 
----
+Then open <http://localhost:8000>.
 
-## 📅 Step-by-Step MVP Milestones
+The game uses an on-device Hugging Face Transformers model for NPC and bouncer conversations. First load can take a while because the model is downloaded and cached by the browser.
 
-### Milestone 1: Phase 0 — Squad & Club Setup
-*   **The Mobile Phone Lobby UI**: A sleek, vertical smartphone interface where you plan your Friday night.
-*   **Club Registry (Venues)**:
-    1.  *Mainframe Basement* (Mellow deep house, lenient door policy, bouncer values comfort).
-    2.  *The Compliance Vault* (Relentless techno, strict dark-apparel dress code, bouncer values attitude).
-    3.  *The Boardroom Penthouse* (Posh tech-house, ultra-exclusive, bouncer values social-status indicators).
-*   **The Contact Roster (Squad Building)**:
-    *   Select up to 3 crew members from your phone contacts.
-    *   Each member has:
-        *   **Style**: (Casual, Sleek, Formal, Eccentric).
-        *   **Anxiety Threshold**: (How long they can stand waiting).
-        *   **Music Preference**: Matching or mismatching the club's genre.
-        *   **Traits**:
-            *   *The Hype-man*: Boosts queue speed, but increases squad anxiety.
-            *   *The Promoter*: Lowers bouncer restrictiveness, but has a high weekend *Flake Rating* (might drop out right before you arrive).
-            *   *The Chill Coder*: Low profile, highly resilient to waiting, carries lighters/gum.
+## Game Loop
 
-### Milestone 2: Phase 1 — The Hope & Despair Engine (Standing in Line)
-*   **The Waiting Screen**: A stylized, top-down or isometric 2D queue line. People slowly sway, the club bass thumps from behind the doors (lowpass-filtered audio).
-*   **The Hope & Despair Cycle**:
-    *   A dynamic queue progress bar that represents the line movement.
-    *   *The Cycle*: The queue moves forward (Hope rises) -> The queue stalls for a long period (Anxiety rises, Hope decays) -> A VIP passes the line (Despair spike).
-    *   If any squad member's Anxiety peaks or squad Hope hits 0, they bail, ruining your group presence.
-*   **Micro-Interactions (The Grid Neighbors)**:
-    *   You can click on the passenger directly in front or behind you.
-    *   **The Barter System**: Give them items (Gum, Water, Lighter, Cash) to buy information.
-    *   **Intel Acquisition**: Learn bouncer traits or secret entry conditions (*"I heard Florian is running the door tonight. He hates white sneakers, but if you mention the promoter 'DJ Synthax', he lets you in instantly."*).
-*   **Queue Events**:
-    *   *The Line-Cutter*: A flashy, arrogant group pushes in front. Do you:
-        *   Confront them (increases squad vibe, but risks bouncer attention).
-        *   Bribe them (costs cash).
-        *   Ignore them (decreases squad Hope).
+1. **Plan the night**: choose a venue, assemble up to 3 squad members, buy items, equip outfits, and customize your own avatar.
+2. **Survive the queue**: wait through stalls and bursts, talk to people in front/behind you, barter for intel, eavesdrop, scout the door, flirt, and form alliances.
+3. **Face the bouncer**: answer in free text under pressure. Intel gathered in line is useful when you naturally mention the right names, lineup details, password, door mood, style cues, or connections.
+4. **Progress**: success and failure both move the meta-loop forward via reputation, jobs, venue unlocks, contacts, outfits, and saved player appearance.
 
-### Milestone 3: Phase 2 — Confronting the Bouncer
-*   **The Gatekeeper Interaction**:
-    *   The lowpass filter on the music partially lifts. The camera zooms in on the bouncer’s dark silhouette standing under a glowing neon archway.
-    *   The bouncer inspects your squad and makes an observation or asks a sharp question.
-*   **The Dialogue Duel**:
-    *   A timed conversation tree appears.
-    *   Use the **Intel** you gathered in line to choose your answers correctly.
-    *   The bouncer evaluates your squad's total Style match, Music preference alignment, and your dialogue choices.
-*   **Outcomes**:
-    *   *Success*: The doors slide open, the music explodes into high-fidelity sound, and you get the level complete stats screen.
-    *   *Failure*: *"Not tonight."* The screen fades to black, and your squad is sent home.
+## Current Features
 
----
+- Single `index.html` implementation with HTML, CSS, Canvas 2D, Web Audio, and browser `localStorage`.
+- Phone-style planning UI with venues, squad selection, loadout, wardrobe, and player appearance editing.
+- Editable player avatar: skin, hair, hair style, shirt, eye color, face width/height, eye spacing, nose, and ears.
+- Persistent player badge outside the phone UI showing avatar and current job.
+- Procedural queue visualization with player, squad, neighbors, line movement, and mood meters.
+- Hope and anxiety engine with queue stalls, movement bursts, squad bailouts, and random events.
+- LLM-driven neighbor chats with tool calls for intel, item offers, money, affinity changes, contact unlocks, leaving the queue, and swapping spots.
+- Queue actions: wait, talk front/back, kiosk, use item, view intel, eavesdrop, scout the door, flirt, and form alliance.
+- LLM-driven free-text bouncer dialogue with approval/disapproval tool calls.
+- Bouncer interjections: squad members can chime in and queue allies can vouch for you.
+- Wardrobe items affect both style scoring and the player’s visible appearance/accent.
+- Web Audio club bass that opens up when access is granted.
 
-## 🎨 Visual & Audio Theme
+## Key Controls
 
-*   **Color Palette**: Regulaido deep lavenders, cyber greens (`#39ff14`), hot pinks, and glassmorphic translucent panels.
-*   **Soundscape (Web Audio API)**:
-    *   Procedural synth-loop engine running a rhythmic four-on-the-floor kick.
-    *   *In Line*: Lowpass filter at 300Hz with reverb (gives the "muffled club bass through thick walls" feeling).
-    *   *Line Progress*: Every step closer to the door increases the cutoff frequency slightly.
-    *   *Access Granted*: Cutoff slides to 20000Hz (full stereo high-fidelity blast).
+- In planning, use the bottom phone tabs to switch between venue, squad, loadout, and look.
+- In the queue, use action buttons at the bottom to wait, talk, scout, eavesdrop, or manage resources.
+- In conversations, type naturally. NPCs can react to persuasion attempts, trades, jokes, flirting, and pressure.
+- At the bouncer, answer quickly and work gathered intel into your replies naturally.
+
+## Deployment
+
+This repo is GitHub Pages-ready because `index.html` sits at the repo root.
+
+In GitHub:
+
+1. Go to **Settings → Pages**.
+2. Set **Source** to `Deploy from a branch`.
+3. Set **Branch** to `main`.
+4. Set **Folder** to `/ (root)`.
+5. Save.
+
+The page should become available at:
+
+<https://notnanton.github.io/the-queue/>
+
+## Design Notes
+
+- The queue should feel psychologically real: long stalls, sudden hope, strange strangers, and fragile group morale.
+- Intel gathered in line gives you concrete facts to mention during the free-text bouncer conversation.
+- LLM tool calls drive game state, while the visible text stays conversational.
+- The Regulaido visual style is deep lavender, cyber green, hot pink, glass panels, and neon club haze.
