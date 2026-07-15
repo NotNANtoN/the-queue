@@ -7,7 +7,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "node --test tests/tool-parser.test.mjs"
+    "test": "node --test tests/tool-parser.test.mjs",
+    "bench": "node tests/model-bench.mjs"
   },
   "repository": {
     "type": "git",
@@ -23,5 +24,8 @@
   "homepage": "https://github.com/NotNANtoN/the-queue#readme",
   "dependencies": {
     "@huggingface/transformers": "^4.2.0"
+  },
+  "overrides": {
+    "onnxruntime-node": "1.26.0"
   }
 }

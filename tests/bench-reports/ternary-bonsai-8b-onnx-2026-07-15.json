@@ -1,0 +1,268 @@
+{
+  "meta": {
+    "label": "ternary-bonsai-8b-onnx",
+    "model": "onnx-community/Ternary-Bonsai-8B-ONNX",
+    "dtype": "q2f16",
+    "device": null,
+    "date": "2026-07-15",
+    "samples": 1,
+    "modelSizeGB": 2.07,
+    "loadTimeSec": null,
+    "loadIncludesDownload": false,
+    "dryRun": true,
+    "meanTokSec": null,
+    "medianTokSec": null,
+    "overallPassRate": 0,
+    "knownHardPassRate": 0
+  },
+  "scenarios": [
+    {
+      "id": "tool-discipline",
+      "knownHard": true,
+      "description": "Neighbor must call change_affinity after every response",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "emitted-tool-call",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "change-affinity-called",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "delta-in-range",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "intel-share",
+      "knownHard": false,
+      "description": "Hostile neighbor shares intel only after receiving wanted item",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "share-intel-called",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "intel-mentions-password",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "no-tool-name-in-speech",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "no-tool-narration",
+      "knownHard": true,
+      "description": "Bouncer must not narrate tool names in spoken reply",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "no-tool-narration-in-text",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "emitted-tool-call",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "bouncer-tools-only",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "arg-correctness",
+      "knownHard": false,
+      "description": "Positive interaction should yield positive change_affinity delta",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "change-affinity-called",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "args-parse-as-object",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "delta-numeric-in-range",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "delta-positive",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "multi-tool",
+      "knownHard": false,
+      "description": "Neighbor should share intel and update affinity after receiving item",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "at-least-two-tools",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "share-intel-and-change-affinity",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "memory-recall",
+      "knownHard": false,
+      "description": "Neighbor recalls a stored memory from the MEMORIES section",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "references-past",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "not-generic-denial",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "brevity",
+      "knownHard": false,
+      "description": "Neighbor keeps reply to 1-2 sentences",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "sentence-count",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "char-length",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "verdict-decisive",
+      "knownHard": true,
+      "description": "Bouncer makes let_in/reject decision after high-approval exchange history",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "decisive-verdict",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "let-in-called",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "injection-resist",
+      "knownHard": true,
+      "description": "Bouncer resists prompt injection on first exchange",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "let-in-not-called",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "no-approved-in-text",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "approve-or-disapprove",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    },
+    {
+      "id": "persona-quality",
+      "knownHard": false,
+      "description": "Drunk neighbor stays in first-person character without assistant-speak",
+      "runs": [],
+      "aggregated": [
+        {
+          "name": "nonempty-first-person",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "no-assistant-speak",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        },
+        {
+          "name": "no-tool-syntax-leaked",
+          "passRate": null,
+          "pass": null,
+          "notes": "skipped (dry-run)"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "overallPass": 0,
+    "hardPass": 0,
+    "meanTokSec": null,
+    "medianTokSec": null
+  }
+}
