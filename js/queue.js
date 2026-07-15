@@ -117,6 +117,10 @@ const QueueEngine = {
     MemberStats.tick(minutes);
   },
 
+  _turnBonus(turnCount) {
+    return Math.min(0.20, turnCount * 0.02);
+  },
+
   modHope(delta) {
     state.queue.hope = Math.max(0, Math.min(100, state.queue.hope + delta));
     this.updateMeters();
@@ -145,7 +149,8 @@ const QueueEngine = {
     const venue = VENUES.find(v => v.id === state.selectedVenue);
     const cfg = QUEUE_CONFIG[venue?.policy || 'Easy'];
     const moveChanceBoost = squadHasContact('kai') ? 1.15 : 1;
-    if (Math.random() < (cfg.moveChance + state.queue.turnCount * 0.02) * moveChanceBoost) {
+    const turnBonus = this._turnBonus(state.queue.turnCount);
+    if (Math.random() < (cfg.moveChance + turnBonus) * moveChanceBoost) {
       let moveMin = cfg.moveMin;
       let moveMax = cfg.moveMax;
       if (squadHasContact('jasper')) {
@@ -421,7 +426,7 @@ const QueueEngine = {
       </div>
       <div class="result-row"><span class="rl">Job</span><span class="rv">${nextJob.name} ($${nextJob.pay}/week)</span></div>
       <div class="result-row"><span class="rl">Savings</span><span class="rv">$${state.cash}</span></div>
-      <div class="result-row"><span class="rl">Venues cleared</span><span class="rv">${prog.venuesCleared.length} / ${VENUES.length}</span></div>
+      <div class="result-row"><span class="rl">Venues cleared</span><span class="rv">${SaveSystem.uniqueVenuesClearedCount(prog)} / ${VENUES.length}</span></div>
     `;
 
     $('result-btn').textContent = 'Try Again';

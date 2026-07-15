@@ -250,6 +250,15 @@ body::before {
   letter-spacing: 1px;
   min-height: 16px;
 }
+.ai-load-indicator {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+}
+.ai-load-indicator.hidden { display: none; }
 .confirm-btn {
   width: 100%;
   padding: 14px 24px;
@@ -1827,6 +1836,22 @@ body::before {
   opacity: 0;
   animation: fadeIn 2s 1s ease forwards;
 }
+.skip-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  margin-top: 12px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+.club-screen .skip-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  z-index: 2;
+}
 
 /* === PARTICLES === */
 .particle-container {
@@ -2160,6 +2185,7 @@ body::before {
 
     <!-- Confirm Bar -->
     <div class="confirm-bar">
+      <div class="ai-load-indicator hidden" id="ai-load-indicator">AI loading… 0%</div>
       <div class="confirm-summary" id="confirm-summary">Select a venue to get started</div>
       <button class="confirm-btn" id="confirm-btn" disabled>Head Out</button>
     </div>
@@ -2337,6 +2363,7 @@ body::before {
   </div>
   <div class="club-visual"><canvas id="club-canvas"></canvas></div>
   <div class="club-feed" id="club-feed"></div>
+  <div class="skip-hint" id="club-skip-hint">tap to skip</div>
   <button class="club-done-btn" id="club-done" style="display:none">Leave at Sunrise →</button>
 </div>
 
@@ -2350,6 +2377,7 @@ body::before {
 <div class="shame-overlay" id="shame-overlay">
   <canvas id="shame-canvas" width="200" height="100"></canvas>
   <div class="shame-text" id="shame-text"></div>
+  <div class="skip-hint" id="shame-skip-hint">tap to skip</div>
 </div>
 
 <!-- Result Overlay -->

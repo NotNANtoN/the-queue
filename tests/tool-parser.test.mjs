@@ -1,18 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import vm from 'node:vm';
+import { loadGameModule } from './helpers/load-game-module.mjs';
 
-function loadLlmParser() {
-  const source = readFileSync(new URL('../js/llm.js', import.meta.url), 'utf8')
-    .replace('const LLM =', 'var LLM =');
-  const context = { console };
-  vm.createContext(context);
-  vm.runInContext(`${source}\nLLM;`, context);
-  return context.LLM;
-}
-
-const LLM = loadLlmParser();
+const { LLM } = loadGameModule('js/llm.js');
 
 function plain(value) {
   return JSON.parse(JSON.stringify(value));

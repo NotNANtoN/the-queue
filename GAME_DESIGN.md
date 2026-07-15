@@ -282,8 +282,8 @@ You type: "Berlin vintage boots — bit bold for tonight, but we know the passwo
 - Later venues have: shorter timers, more bouncer exchanges, stricter Style requirements, rarer Intel availability in line, and higher flake rates on good contacts.
 - The queue itself gets longer and has more negative events at higher tiers.
 
-### Win Condition (MVP)
-Successfully enter all 8 venues at least once. The final venue ("The Audit Chamber") is the ultimate challenge — a gauntlet that requires a strong crew, solid intel, and a convincing door conversation.
+### Win Condition
+Successfully enter all 8 venues at least once. The first time you clear the final venue, a one-time **Scene Legend** victory screen appears (`progress.wonAt` is saved) — every door in the city is open. You can keep playing Fridays after that; there is no hard game over. The final venue ("The Audit Chamber") remains the ultimate challenge — a gauntlet that requires a strong crew, solid intel, and a convincing door conversation.
 
 ---
 

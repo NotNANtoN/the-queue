@@ -188,6 +188,125 @@ const BouncerSystem = {
   _convo: null,
   _pendingPlayerText: null,
 
+  _SCRIPTED_OPENERS: {
+    florian: 'Name. Guest list or move along.',
+    marko: 'How many of you? Keep it short.',
+    kai: "You know who's playing tonight?",
+    silent: '*stares without speaking*',
+    mira: 'ID and guest list name, please.',
+  },
+
+  _SCRIPTED_REPLIES: [
+    'And?',
+    'Keep talking.',
+    'Not convinced yet.',
+    'Hmm.',
+    'Go on.',
+  ],
+
+  _SCRIPTED_POLITE: ['please', 'thank', 'respect', 'excuse', 'sorry', 'appreciate', 'honored', 'would love', 'good evening', 'hello'],
+  _SCRIPTED_INSULTS: ['let me in', 'come on', 'idiot', 'stupid', 'hate', 'suck', 'asshole', 'desperate', 'please please', 'beg', 'dick', 'loser'],
+
+  _scoreScriptedMessage(text) {
+    const lower = (text || '').toLowerCase();
+    const secrets = tonightsSecrets?.facts || {};
+    const password = tonightsSecrets?.password;
+    let delta = 0;
+
+    const haystacks = [...Object.values(secrets), password].filter(Boolean);
+    for (const fact of haystacks) {
+      const factLower = String(fact).toLowerCase();
+      const words = factLower.split(/\s+/).filter(w => w.length > 4);
+      if (lower.includes(factLower) || words.some(w => lower.includes(w))) {
+        delta += 20;
+        break;
+      }
+    }
+
+    if (this._SCRIPTED_POLITE.some(w => lower.includes(w))) delta += 8;
+    if (this._SCRIPTED_INSULTS.some(w => lower.includes(w))) delta -= 10;
+    return delta;
+  },
+
+  async _scriptedBouncerSpeak(context, options = {}) {
+    const internal = options.internal;
+    if (!internal && this.generating) return;
+    if (!internal) {
+      this.generating = true;
+      $('bouncer-send').disabled = true;
+    }
+
+    try {
+      this.messages.push({ role: 'user', content: context });
+
+      let cleanText = '';
+      const bouncerToolCalls = [];
+      const isOpening = context.includes('approaches the door');
+
+      if (isOpening) {
+        cleanText = this._SCRIPTED_OPENERS[this.bouncer?.id] || 'State your business.';
+      } else {
+        const delta = this._scoreScriptedMessage(context);
+        if (delta !== 0) {
+          if (delta > 0) {
+            this.approval = Math.min(120, this.approval + delta);
+            EventLog.add(`${PX.i('heart','#39ff14',10)} +${delta}: they said something useful`, 'positive');
+          } else {
+            this.approval = Math.max(0, this.approval + delta);
+            EventLog.add(`${PX.i('skull','#ff4d6d',10)} ${delta}: rubbed you the wrong way`, 'negative');
+          }
+        }
+        cleanText = this._SCRIPTED_REPLIES[this.exchangeCount % this._SCRIPTED_REPLIES.length];
+      }
+
+      $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
+      $('approval-score').textContent = this.approval;
+
+      this.messages.push({ role: 'assistant', content: cleanText });
+      if (cleanText) this._addBubble(cleanText, 'npc');
+      this.exchangeCount++;
+
+      if (this.exchangeCount >= 4) {
+        const success = this.approval >= this.threshold;
+        bouncerToolCalls.push({ function: { name: success ? 'let_in' : 'reject', arguments: {} } });
+      }
+
+      let hasLetIn = false, hasReject = false;
+      for (const tc of bouncerToolCalls) {
+        const fn = tc.function?.name || tc.name;
+        if (fn === 'let_in') hasLetIn = true;
+        if (fn === 'reject') hasReject = true;
+      }
+
+      if (hasLetIn) {
+        this.finished = true;
+        await sleep(1000);
+        await this._handleVerdict(true);
+        return;
+      }
+      if (hasReject) {
+        this.finished = true;
+        await sleep(1000);
+        await this._handleVerdict(false);
+        return;
+      }
+
+      this._startTimer();
+      $('bouncer-input').focus();
+    } catch (e) {
+      console.error('Scripted bouncer speak failed:', e);
+      EventLog.add('Bouncer response failed — try again', 'negative');
+    } finally {
+      if (!internal) {
+        this.generating = false;
+        $('bouncer-send').disabled = false;
+        const pending = this._pendingPlayerText;
+        this._pendingPlayerText = null;
+        if (pending && !this.finished) this.sendMessage(pending);
+      }
+    }
+  },
+
   _getConvo() {
     if (!this._convo) {
       this._convo = Conversation.create({
@@ -202,16 +321,15 @@ const BouncerSystem = {
   get generating() { return this._getConvo().generating; },
   set generating(v) { this._getConvo().generating = v; },
 
-  _buildSystemPrompt(venue) {
-    const djs = tonightsDJs || { headliner: 'Koze', support: ['DJ Synthax'] };
-    const secrets = tonightsSecrets || { facts: {}, password: null, ownerName: 'Viktor', vipName: 'Regulaido' };
+  _squadDesc() {
     const ghostPresent = squadHasContact('ghost');
     const visibleGroupSize = Math.max(1, state.finalSquad.length + 1 - (ghostPresent ? 1 : 0));
-    const squadDesc = visibleGroupSize <= 1
+    return visibleGroupSize <= 1
       ? 'one person, alone'
       : `a group of ${visibleGroupSize} people`;
+  },
 
-    // Build appearance description
+  _appearanceDesc() {
     const appearance = [];
     const prog = SaveSystem.load();
     prog.equippedOutfits.forEach(id => {
@@ -222,7 +340,10 @@ const BouncerSystem = {
       const c = CONTACTS.find(ct => ct.name === s.name);
       if (c?.styles) appearance.push(...c.styles.slice(0, 2));
     });
+    return appearance;
+  },
 
+  _visibleTells() {
     const visible = [];
     if (state.queue.activeTraits.includes('Dead Eyes')) visible.push('One of them has glazed, unfocused eyes — clearly on something heavy.');
     if (state.queue.activeTraits.includes('The Vibe')) visible.push('One of them has noticeably dilated pupils and a wide grin.');
@@ -236,8 +357,10 @@ const BouncerSystem = {
     if (state.queue.activeTraits.includes('Street Cred')) visible.push('They carry themselves like someone the regulars recognize — social proof in the line.');
     if (state.queue.activeTraits.includes('Insider Info')) visible.push('They drop specific details about tonight like they already know the door.');
     if ((state.inventory.vip || 0) > 0) visible.push('The lead person wears a VIP wristband — it might be real, or an obvious fake.');
+    return visible;
+  },
 
-    // Build inventory description for INSPECT_BAG
+  _bagContents() {
     const bagContents = [];
     Object.entries(state.inventory).forEach(([id, qty]) => {
       if (qty > 0) {
@@ -245,32 +368,35 @@ const BouncerSystem = {
         bagContents.push(`${qty}x ${item?.name || id}`);
       }
     });
+    return bagContents;
+  },
 
-    // Venue-specific bouncer knowledge and requirements
+  _venueContext(venue, djs, secrets) {
     const queueLen = state.queue.allNeighbors?.length || 15;
     const isVibeVenue = venue.vibeCheck;
     const isEasy = venue.policy === 'Easy';
     const isHard = venue.policy === 'Ruthless' || venue.policy === 'Nightmare';
 
-    let venueContext;
     if (isVibeVenue) {
-      venueContext = `VENUE TYPE: Vibe-check venue. No password, no guest list. You judge based on ENERGY and GROUP VIBE.
+      return `VENUE TYPE: Vibe-check venue. No password, no guest list. You judge based on ENERGY and GROUP VIBE.
 What matters: Are they genuinely here for the music? Do they seem fun and respectful? Is the group energy good?
 What doesn't matter: What they're wearing, who they know, VIP tables.
 There is NO password tonight. Don't ask for one.
 - The headliner tonight is ${djs.headliner}. Support: ${djs.support.join(', ')}.
 - The queue is ${queueLen} people long right now.
 - ${secrets.facts.bouncer_weakness || 'You respect genuine vibes.'}`;
-    } else if (isEasy) {
-      venueContext = `VENUE TYPE: Relaxed door. You let most people in unless they're being rude or obviously wasted.
+    }
+    if (isEasy) {
+      return `VENUE TYPE: Relaxed door. You let most people in unless they're being rude or obviously wasted.
 - ${secrets.facts.headliner || 'Headliner: ' + djs.headliner}
 - ${secrets.facts.support_dj || 'Support: ' + djs.support.join(', ')}
 - The queue is ${queueLen} people long right now.
 - Dress code: ${venue.dressCode} (but you're flexible)
 - ${secrets.facts.bouncer_weakness || 'You respect people who are polite.'}
 There is NO password tonight. Just be cool and you're in.`;
-    } else if (isHard) {
-      venueContext = `VENUE TYPE: Exclusive door. You are highly selective.
+    }
+    if (isHard) {
+      return `VENUE TYPE: Exclusive door. You are highly selective.
 - ${secrets.facts.headliner || 'Headliner: ' + djs.headliner}
 - ${secrets.facts.support_dj || 'Support: ' + djs.support.join(', ')}
 - ${secrets.facts.password || 'Password tonight: Systematic Review'}
@@ -280,37 +406,29 @@ There is NO password tonight. Just be cool and you're in.`;
 - The queue is ${queueLen} people long. You've already turned away many tonight.
 - ${secrets.facts.bouncer_weakness || 'You respect genuine connections.'}
 Password, name-drops, and VIP references matter here. Music knowledge is a plus.`;
-    } else {
-      venueContext = `VENUE TYPE: Standard door. Selective but not impossible.
+    }
+    return `VENUE TYPE: Standard door. Selective but not impossible.
 - ${secrets.facts.headliner || 'Headliner: ' + djs.headliner}
 - ${secrets.facts.support_dj || 'Support: ' + djs.support.join(', ')}
 - Dress code: ${venue.dressCode}
 - The queue is ${queueLen} people long right now.
 - ${secrets.facts.bouncer_weakness || 'You respect people who know why they\'re here.'}
 No password required, but knowing the lineup and being respectful goes a long way.`;
-    }
+  },
 
+  _intelContext(secrets) {
     const intelFacts = Object.values(secrets.facts || {});
-    const intelContext = intelFacts.length > 0
+    return intelFacts.length > 0
       ? `TRUE INTEL THE PLAYER MAY HAVE LEARNED IN LINE:\n${intelFacts.map(fact => `- ${fact}`).join('\n')}`
       : 'TRUE INTEL THE PLAYER MAY HAVE LEARNED IN LINE: none';
+  },
 
-    let prompt = `You are ${this.bouncer.name}, the bouncer at ${venue.name} tonight.
-Personality: ${this.bouncer.personality}
-What you respect: ${this.bouncer.softSpot}
-What you hate: ${this.bouncer.trigger}
-Tonight's mood: ${this.backstory}
+  _promptRules(venue) {
+    const isVibeVenue = venue.vibeCheck;
+    const isEasy = venue.policy === 'Easy';
+    const isHard = venue.policy === 'Ruthless' || venue.policy === 'Nightmare';
 
-${venueContext}
-
-${intelContext}
-
-WHAT YOU SEE RIGHT NOW:
-- ${squadDesc} approaching the door
-- Their style: ${appearance.length > 0 ? appearance.join(', ') : 'nothing remarkable'}
-${visible.length > 0 ? visible.map(v => '- ' + v).join('\n') : '- They look sober and normal.'}
-
-YOUR TOOLS — use structured tool calls, not bracket tags:
+    return `YOUR TOOLS — use structured tool calls, not bracket tags:
 - approve: impression UP. amount = 5 to 35. Use when they say something good.
 - disapprove: impression DOWN. amount = 5 to 25. Use when they say something bad.
 - inspect_bag: check their bag/pockets. Game shows you what they carry.
@@ -334,11 +452,42 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
 - A nervous vouch = doesn't help much; use approve +5.
 - Group members chiming in: judge what they say independently. Good energy helps, cringe or aggression hurts.
 - Acknowledge interjections briefly in your response — react to them in-character.`;
-    if ((state.inventory.vip || 0) > 0) {
-      prompt += `
+  },
+
+  _vipWristbandBlock() {
+    if ((state.inventory.vip || 0) <= 0) return '';
+    return `
 
 VIP WRISTBAND: The lead person is wearing a VIP wristband. It MIGHT be fake — on Ruthless/Nightmare doors you may call the bluff and reject hard if they lean on it without proof; on easier doors you might let a convincing story slide. If they flash it, judge whether it matches tonight's real VIP setup.`;
-    }
+  },
+
+  _buildSystemPrompt(venue) {
+    const djs = tonightsDJs || { headliner: 'Koze', support: ['DJ Synthax'] };
+    const secrets = tonightsSecrets || { facts: {}, password: null, ownerName: 'Viktor', vipName: 'Regulaido' };
+    const squadDesc = this._squadDesc();
+    const appearance = this._appearanceDesc();
+    const visible = this._visibleTells();
+    this._bagContents();
+    const venueContext = this._venueContext(venue, djs, secrets);
+    const intelContext = this._intelContext(secrets);
+
+    let prompt = `You are ${this.bouncer.name}, the bouncer at ${venue.name} tonight.
+Personality: ${this.bouncer.personality}
+What you respect: ${this.bouncer.softSpot}
+What you hate: ${this.bouncer.trigger}
+Tonight's mood: ${this.backstory}
+
+${venueContext}
+
+${intelContext}
+
+WHAT YOU SEE RIGHT NOW:
+- ${squadDesc} approaching the door
+- Their style: ${appearance.length > 0 ? appearance.join(', ') : 'nothing remarkable'}
+${visible.length > 0 ? visible.map(v => '- ' + v).join('\n') : '- They look sober and normal.'}
+
+${this._promptRules(venue)}`;
+    prompt += this._vipWristbandBlock();
     return prompt;
   },
 
@@ -608,6 +757,8 @@ VIP WRISTBAND: The lead person is wearing a VIP wristband. It MIGHT be fake — 
           response = result.text || '';
           bouncerToolCalls = result.toolCalls || [];
         }
+      } else {
+        return this._scriptedBouncerSpeak(context, options);
       }
 
       if (!response) {
@@ -866,11 +1017,29 @@ VIP WRISTBAND: The lead person is wearing a VIP wristband. It MIGHT be fake — 
     const overlay = $('result-overlay');
     overlay.className = 'result-overlay active ' + (success ? 'success' : 'failure');
 
+    const progBefore = SaveSystem.load();
+    const hadWon = !!progBefore.wonAt;
+
+    // Progression
+    SaveSystem.recordRun(success, venue?.id);
+    const promotedMemories = MemorySystem.promoteNightMemories(success, venue?.id);
+    SaveSystem.applyToState();
+    renderPlayerBadge();
+    const progAfter = SaveSystem.load();
+    const justWon = success && progAfter.wonAt && !hadWon;
+    const newContacts = SaveSystem.getPendingUnlocks();
+
     $('result-title').className = 'result-title ' + (success ? 'win' : 'lose');
-    $('result-title').textContent = success ? 'Access Granted' : 'Not Tonight';
-    $('result-subtitle').textContent = success
-      ? 'The doors open. The bass hits. You\'re in.'
-      : `${this.bouncer.name} shakes their head. Your squad disperses into the night.`;
+    if (success && justWon) {
+      $('result-title').textContent = 'Scene Legend';
+      $('result-subtitle').textContent = 'Every door in the city is open. You made it.';
+      notify('Scene Legend — you cleared every venue in the city', { toastMs: 5000, logType: 'positive' });
+    } else {
+      $('result-title').textContent = success ? 'Access Granted' : 'Not Tonight';
+      $('result-subtitle').textContent = success
+        ? 'The doors open. The bass hits. You\'re in.'
+        : `${this.bouncer.name} shakes their head. Your squad disperses into the night.`;
+    }
 
     const waitTime = state.queue.gameTime - (23 * 60 + 35);
     const intelCount = state.queue.revealedIntel.length;
@@ -887,14 +1056,6 @@ VIP WRISTBAND: The lead person is wearing a VIP wristband. It MIGHT be fake — 
       <div class="result-row"><span class="rl">Cash remaining</span><span class="rv">$${state.cash}</span></div>
     `;
 
-    // Progression
-    SaveSystem.recordRun(success, venue?.id);
-    const promotedMemories = MemorySystem.promoteNightMemories(success, venue?.id);
-    SaveSystem.applyToState();
-    renderPlayerBadge();
-    const prog = SaveSystem.load();
-    const newContacts = SaveSystem.getPendingUnlocks();
-
     if (newContacts.length > 0) {
       const contactLines = newContacts.map(u => `
         <div class="result-row"><span class="rl" style="color:var(--neon-green)">🆕 New contact</span><span class="rv" style="color:var(--neon-green)">${u.name} (met in ${u.where})</span></div>
@@ -909,14 +1070,14 @@ VIP WRISTBAND: The lead person is wearing a VIP wristband. It MIGHT be fake — 
       $('result-stats').innerHTML += memoryLines;
     }
 
-    const nextJob = SaveSystem.JOBS.slice().reverse().find(j => prog.reputation >= j.minRep) || SaveSystem.JOBS[0];
+    const nextJob = SaveSystem.JOBS.slice().reverse().find(j => progAfter.reputation >= j.minRep) || SaveSystem.JOBS[0];
     $('result-stats').innerHTML += `
       <div class="result-row" style="border-top:1px solid rgba(255,255,255,0.06);margin-top:4px;padding-top:8px;">
-        <span class="rl">Reputation</span><span class="rv" style="color:var(--neon-gold);">★ ${prog.reputation}</span>
+        <span class="rl">Reputation</span><span class="rv" style="color:var(--neon-gold);">★ ${progAfter.reputation}</span>
       </div>
       <div class="result-row"><span class="rl">Job</span><span class="rv">${nextJob.name} ($${nextJob.pay}/week)</span></div>
       <div class="result-row"><span class="rl">Savings</span><span class="rv">$${state.cash}</span></div>
-      <div class="result-row"><span class="rl">Venues cleared</span><span class="rv">${prog.venuesCleared.length} / ${VENUES.length}</span></div>
+      <div class="result-row"><span class="rl">Venues cleared</span><span class="rv">${SaveSystem.uniqueVenuesClearedCount(progAfter)} / ${VENUES.length}</span></div>
     `;
 
     // Particles!
@@ -952,22 +1113,41 @@ const WalkOfShame = {
     '"The bass fades behind you. Someone else\'s night now."',
   ],
 
+  _finished: false,
+  _resolve: null,
+  _animId: null,
+  _timeoutId: null,
+
+  _finish() {
+    if (this._finished) return;
+    this._finished = true;
+    if (this._animId) cancelAnimationFrame(this._animId);
+    if (this._timeoutId) clearTimeout(this._timeoutId);
+    $('shame-overlay').classList.remove('active');
+    $('shame-overlay').onclick = null;
+    this._resolve?.();
+    this._resolve = null;
+  },
+
   async play(customText) {
     const overlay = $('shame-overlay');
     const canvas = $('shame-canvas');
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
+    this._finished = false;
     $('shame-text').textContent = customText || this.QUOTES[Math.floor(Math.random() * this.QUOTES.length)];
     overlay.classList.add('active');
+    overlay.onclick = () => this._finish();
 
     const W = 200, H = 100;
     const squadCount = 1 + state.finalSquad.length;
     let frame = 0;
 
     const draw = () => {
+      if (this._finished) return;
       if (frame > 180) {
-        overlay.classList.remove('active');
+        this._finish();
         return;
       }
       frame++;
@@ -1006,22 +1186,21 @@ const WalkOfShame = {
         const bob = Math.abs(Math.sin(frame * 0.1 + i * 2)) * 2;
 
         ctx.fillStyle = '#1a1730';
-        // Head (tilted down)
         ctx.fillRect(x, y - 8 + bob, 4, 4);
-        // Body
         ctx.fillRect(x - 1, y - 4 + bob, 6, 8);
-        // Legs (walking)
         const legPhase = Math.sin(frame * 0.15 + i);
         ctx.fillRect(x + (legPhase > 0 ? 0 : 2), y + 4 + bob, 2, 6);
         ctx.fillRect(x + (legPhase > 0 ? 2 : 0), y + 4 + bob, 2, 6);
       }
 
-      requestAnimationFrame(draw);
+      this._animId = requestAnimationFrame(draw);
     };
     draw();
 
-    await sleep(6000);
-    overlay.classList.remove('active');
+    return new Promise((resolve) => {
+      this._resolve = resolve;
+      this._timeoutId = setTimeout(() => this._finish(), 6000);
+    });
   },
 };
 
@@ -1050,11 +1229,25 @@ const ClubScene = {
   eventIndex: 0,
   events: [],
   timer: null,
+  _venue: null,
+  _finished: false,
+
+  _finish() {
+    if (this._finished) return;
+    this._finished = true;
+    clearTimeout(this.timer);
+    $('club-screen').classList.remove('active');
+    $('club-screen').onclick = null;
+    BouncerSystem.showResult(true, this._venue);
+  },
 
   async start(venue) {
     state.phase = 'CLUB';
+    this._venue = venue;
+    this._finished = false;
     $('bouncer-screen').classList.remove('active');
     $('club-screen').classList.add('active');
+    $('club-screen').onclick = () => this._finish();
     $('club-name').textContent = venue.name;
     $('club-sub').textContent = `${venue.music} · ${venue.bpm} BPM · The night unfolds...`;
     $('club-feed').innerHTML = '';
@@ -1079,6 +1272,7 @@ const ClubScene = {
   },
 
   async nextEvent() {
+    if (this._finished) return;
     if (this.eventIndex >= this.events.length) {
       $('club-done').style.display = 'block';
       return;
@@ -1128,31 +1322,28 @@ const ClubScene = {
     if (evt.hope) state.queue.hope = Math.min(100, state.queue.hope + evt.hope);
     if (evt.anxiety) state.queue.anxiety = Math.max(0, state.queue.anxiety + evt.anxiety);
 
-    if (evt.contactChance) {
+    if (evt.contactChance && !state.contactUnlockedThisRun) {
       const p = SaveSystem.load();
-      const allIds = CONTACTS.map(c => c.id);
-      const locked = allIds.filter(id => !p.unlockedContacts.includes(id));
-      if (locked.length > 0 && Math.random() < 0.5) {
-        const newId = locked[Math.floor(Math.random() * locked.length)];
-        p.unlockedContacts.push(newId);
-        const key = ['player', newId].sort().join(':');
-        p.bonds[key] = Math.max(p.bonds[key] || 0, 25);
-        SaveSystem.save(p);
-        const c = CONTACTS.find(ct => ct.id === newId);
-        const unlockEl = document.createElement('div');
-        unlockEl.className = 'club-event';
-        unlockEl.innerHTML = `<span class="ce-icon">${PX.i('hand','#39ff14',20)}</span><div><div class="ce-text" style="color:var(--neon-green)">You exchanged numbers with ${c?.name || 'someone new'}! New contact unlocked.</div></div>`;
-        await sleep(800);
-        feed.appendChild(unlockEl);
-        feed.scrollTop = feed.scrollHeight;
+      if (Math.random() < 0.5) {
+        const newId = SaveSystem.pickLockedContact(p, this._venue);
+        const contact = newId ? SaveSystem.tryUnlockContact(p, newId, { where: 'inside the club', bond: 25 }) : null;
+        if (contact) {
+          SaveSystem.save(p);
+          const unlockEl = document.createElement('div');
+          unlockEl.className = 'club-event';
+          unlockEl.innerHTML = `<span class="ce-icon">${PX.i('hand','#39ff14',20)}</span><div><div class="ce-text" style="color:var(--neon-green)">You exchanged numbers with ${contact.name}! New contact unlocked.</div></div>`;
+          await sleep(800);
+          feed.appendChild(unlockEl);
+          feed.scrollTop = feed.scrollHeight;
+        }
       }
     }
 
     this.eventIndex++;
 
+    if (this._finished) return;
     if (!evt.final) {
-      await sleep(2500 + Math.random() * 1500);
-      this.nextEvent();
+      this.timer = setTimeout(() => this.nextEvent(), 2500 + Math.random() * 1500);
     } else {
       $('club-done').style.display = 'block';
     }

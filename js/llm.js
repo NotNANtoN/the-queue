@@ -48,6 +48,8 @@ const LLM = {
   DynamicCache: null,
   loaded: false,
   loading: false,
+  _loadPromise: null,
+  _progressListeners: [],
   cacheSessions: {},
   _toolNameAlternation: null,
   _toolStripRegexes: null,
@@ -106,55 +108,71 @@ const LLM = {
       .trim();
   },
 
-  async load(onProgress) {
-    if (this.loaded || this.loading) return;
-    this.loading = true;
-    try {
-      const { pipeline, env, DynamicCache } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
-      env.allowLocalModels = false;
-      this.DynamicCache = DynamicCache || null;
+  _notifyProgress(pct, info) {
+    this._progressListeners.forEach(fn => {
+      try { fn(pct, info); } catch (e) { console.warn('LLM progress listener error:', e); }
+    });
+  },
 
-      // Aggregate download progress across all model files so the bar and
-      // time estimate move predictably instead of jumping per file.
-      const files = {};
-      const startedAt = Date.now();
-      const report = () => {
-        const entries = Object.values(files);
-        const totalBytes = entries.reduce((s, f) => s + f.total, 0);
-        const loadedBytes = entries.reduce((s, f) => s + f.loaded, 0);
-        if (!totalBytes) return;
-        const pct = Math.round((loadedBytes / totalBytes) * 100);
-        const elapsedMs = Date.now() - startedAt;
-        const rate = loadedBytes / Math.max(elapsedMs, 1); // bytes per ms
-        const remainingMs = rate > 0 ? (totalBytes - loadedBytes) / rate : null;
-        onProgress?.(pct, { loadedBytes, totalBytes, elapsedMs, remainingMs });
-      };
-      // Gemma 4 E4B chosen via tests/model-bench.mjs: far stronger tool-calling than
-      // Ternary Bonsai 8B ONNX (see tests/bench-reports/), which is also ~14x slower in ONNX.
-      this.pipeline = await pipeline('text-generation', 'onnx-community/gemma-4-E4B-it-ONNX', {
-        device: 'webgpu',
-        dtype: 'q4f16',
-        progress_callback: (p) => {
-          if ((p.status === 'progress' || p.status === 'done') && p.file) {
-            const total = p.total || files[p.file]?.total || 0;
-            files[p.file] = {
-              total,
-              loaded: p.status === 'done' ? total : (p.loaded || 0),
-            };
-            report();
-          } else if (p.status === 'ready') {
-            onProgress?.(100, null);
-          }
-        },
-      });
-      this.loaded = true;
-      this.loading = false;
-      Debug.log('LLM cache support', this.DynamicCache ? 'DynamicCache available' : 'DynamicCache unavailable');
-    } catch (e) {
-      console.error('LLM load failed:', e);
-      this.loading = false;
-      throw e;
+  async load(onProgress) {
+    if (this.loaded) {
+      onProgress?.(100, null);
+      return Promise.resolve();
     }
+    if (onProgress) this._progressListeners.push(onProgress);
+    if (this._loadPromise) return this._loadPromise;
+
+    this.loading = true;
+    this._loadPromise = (async () => {
+      try {
+        const { pipeline, env, DynamicCache } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
+        env.allowLocalModels = false;
+        this.DynamicCache = DynamicCache || null;
+
+        // Aggregate download progress across all model files so the bar and
+        // time estimate move predictably instead of jumping per file.
+        const files = {};
+        const startedAt = Date.now();
+        const report = () => {
+          const entries = Object.values(files);
+          const totalBytes = entries.reduce((s, f) => s + f.total, 0);
+          const loadedBytes = entries.reduce((s, f) => s + f.loaded, 0);
+          if (!totalBytes) return;
+          const pct = Math.round((loadedBytes / totalBytes) * 100);
+          const elapsedMs = Date.now() - startedAt;
+          const rate = loadedBytes / Math.max(elapsedMs, 1); // bytes per ms
+          const remainingMs = rate > 0 ? (totalBytes - loadedBytes) / rate : null;
+          this._notifyProgress(pct, { loadedBytes, totalBytes, elapsedMs, remainingMs });
+        };
+        // Gemma 4 E4B chosen via tests/model-bench.mjs: far stronger tool-calling than
+        // Ternary Bonsai 8B ONNX (see tests/bench-reports/), which is also ~14x slower in ONNX.
+        this.pipeline = await pipeline('text-generation', 'onnx-community/gemma-4-E4B-it-ONNX', {
+          device: 'webgpu',
+          dtype: 'q4f16',
+          progress_callback: (p) => {
+            if ((p.status === 'progress' || p.status === 'done') && p.file) {
+              const total = p.total || files[p.file]?.total || 0;
+              files[p.file] = {
+                total,
+                loaded: p.status === 'done' ? total : (p.loaded || 0),
+              };
+              report();
+            } else if (p.status === 'ready') {
+              this._notifyProgress(100, null);
+            }
+          },
+        });
+        this.loaded = true;
+        this.loading = false;
+        Debug.log('LLM cache support', this.DynamicCache ? 'DynamicCache available' : 'DynamicCache unavailable');
+      } catch (e) {
+        console.error('LLM load failed:', e);
+        this.loading = false;
+        this._loadPromise = null;
+        throw e;
+      }
+    })();
+    return this._loadPromise;
   },
 
   _messageComparable(message) {

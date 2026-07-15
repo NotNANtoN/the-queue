@@ -605,6 +605,42 @@ function updateConfirmBar() {
 // FLAKE ROLL
 // ============================================================
 
+function computeEffectiveFlake(contact, venue, {
+  playerBond = 0,
+  otherSquadBonds = [],
+  selectedSquadCount = 1,
+  equippedOutfits = [],
+  loyalty = 50,
+} = {}) {
+  let effectiveFlake = contact.flakeRate;
+
+  if (venue && contact.musicPref) {
+    if (contact.musicPref === venue.music) effectiveFlake -= 15;
+    else effectiveFlake += 10;
+  }
+
+  if (venue?.entryPrice >= 25) effectiveFlake += 10;
+  else if (venue?.entryPrice >= 15) effectiveFlake += 3;
+
+  effectiveFlake -= Math.floor(playerBond / 20) * 5;
+
+  otherSquadBonds.forEach(bond => {
+    if (bond >= 30) effectiveFlake -= 5;
+  });
+
+  if (selectedSquadCount >= 3) effectiveFlake -= 8;
+  else if (selectedSquadCount >= 2) effectiveFlake -= 3;
+
+  equippedOutfits.forEach(id => {
+    const w = WARDROBE.find(i => i.id === id);
+    if (w?.luckBonus) effectiveFlake -= w.luckBonus;
+  });
+
+  effectiveFlake -= (loyalty - 50) * 0.1;
+
+  return Math.max(2, Math.min(90, effectiveFlake));
+}
+
 async function startFlakeRoll() {
   state.phase = 'FLAKE_ROLL';
   const venue = VENUES.find(v => v.id === state.selectedVenue);
@@ -647,47 +683,16 @@ async function startFlakeRoll() {
 
     await sleep(1200 + Math.random() * 1200);
 
-    // Flake rate modifiers
-    const venue = VENUES.find(v => v.id === state.selectedVenue);
-    let effectiveFlake = contact.flakeRate;
-
-    // Music affinity: matching genre → -15% flake, mismatch → +10%
-    if (venue && contact.musicPref) {
-      if (contact.musicPref === venue.music) effectiveFlake -= 15;
-      else effectiveFlake += 10;
-    }
-
-    // Expensive venues → higher flake (not everyone wants to pay $30+)
-    if (venue?.entryPrice >= 25) effectiveFlake += 10;
-    else if (venue?.entryPrice >= 15) effectiveFlake += 3;
-
-    // Bond with player: every 20 bond points → -5% flake
-    const playerBond = SaveSystem.getBond('player', contact.id);
-    effectiveFlake -= Math.floor(playerBond / 20) * 5;
-
-    // Bonds with other selected squad: if friends are coming, less likely to flake
     const otherSelected = state.selectedSquad.filter(id => id !== contact.id);
-    otherSelected.forEach(otherId => {
-      const bond = SaveSystem.getBond(contact.id, otherId);
-      if (bond >= 30) effectiveFlake -= 5;
-    });
-
-    // Group size bonus: more people → lower flake (social pressure)
-    if (state.selectedSquad.length >= 3) effectiveFlake -= 8;
-    else if (state.selectedSquad.length >= 2) effectiveFlake -= 3;
-
-    // Lucky Charm: −5% flake per equipped charm
+    const otherSquadBonds = otherSelected.map(otherId => SaveSystem.getBond(contact.id, otherId));
     const prog = SaveSystem.load();
-    prog.equippedOutfits.forEach(id => {
-      const w = WARDROBE.find(i => i.id === id);
-      if (w?.luckBonus) effectiveFlake -= w.luckBonus;
+    const effectiveFlake = computeEffectiveFlake(contact, venue, {
+      playerBond: SaveSystem.getBond('player', contact.id),
+      otherSquadBonds,
+      selectedSquadCount: state.selectedSquad.length,
+      equippedOutfits: prog.equippedOutfits,
+      loyalty: SaveSystem.getContactStat(contact.id).loyalty,
     });
-
-    // Loyalty: subtle flake reduction above/below neutral 50
-    const contactStats = SaveSystem.getContactStat(contact.id);
-    effectiveFlake -= (contactStats.loyalty - 50) * 0.1;
-
-    effectiveFlake = Math.max(2, Math.min(90, effectiveFlake));
 
     const roll = Math.random() * 100;
     const flaked = roll < effectiveFlake;

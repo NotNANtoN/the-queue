@@ -52,6 +52,7 @@ const state = {
     earplugsActive: false,
   },
   llm: { loaded: false, loadFailed: false },
+  contactUnlockedThisRun: false,
 };
 
 // Squad helpers — match by contact id (preferred) or trait name on CONTACTS entry

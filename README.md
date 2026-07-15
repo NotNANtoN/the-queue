@@ -26,6 +26,8 @@ The game uses an on-device Hugging Face Transformers model for NPC and bouncer c
 
 Compare on-device LLM candidates with `npm run bench -- --model <id> --dtype <dtype> [--device webgpu]`. For an OpenAI-compatible server (e.g. local llama-server): `npm run bench -- --endpoint http://localhost:8080/v1 --api-model <id> --dry-run`. Use `--dry-run` to validate scenarios and model size without loading weights. Reports land in `tests/bench-reports/`.
 
+Run unit tests with `npm test` (Node's built-in test runner over `tests/*.test.mjs`).
+
 ## Game Loop
 
 1. **Plan the night**: choose a venue, assemble up to 3 squad members, buy items, equip outfits, and customize your own avatar.

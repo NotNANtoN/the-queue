@@ -19,6 +19,7 @@ const SaveSystem = {
       savings: 0,
       job: 'barista',
       venuesCleared: [],
+      wonAt: null,
       unlockedContacts: ['kai', 'rissal', 'mona'],
       totalRuns: 0,
       totalSuccesses: 0,
@@ -37,9 +38,57 @@ const SaveSystem = {
   load() {
     try {
       const raw = localStorage.getItem(this.KEY);
-      if (raw) return { ...this.defaultProgress(), ...JSON.parse(raw) };
+      if (raw) {
+        const p = { ...this.defaultProgress(), ...JSON.parse(raw) };
+        this.dedupeVenuesCleared(p);
+        return p;
+      }
     } catch (e) {}
     return this.defaultProgress();
+  },
+
+  dedupeVenuesCleared(progress) {
+    if (!progress?.venuesCleared) return;
+    progress.venuesCleared = [...new Set(progress.venuesCleared)];
+  },
+
+  uniqueVenuesClearedCount(progress) {
+    this.dedupeVenuesCleared(progress);
+    return progress.venuesCleared.length;
+  },
+
+  allVenuesCleared(progress) {
+    this.dedupeVenuesCleared(progress);
+    const allIds = VENUES.map(v => v.id);
+    return allIds.every(id => progress.venuesCleared.includes(id));
+  },
+
+  pickLockedContact(progress, venue) {
+    const locked = CONTACTS.map(c => c.id).filter(id => !progress.unlockedContacts.includes(id));
+    if (locked.length === 0) return null;
+    const music = (venue?.music || '').toLowerCase();
+    const matched = locked.filter(id => {
+      const pref = (CONTACTS.find(c => c.id === id)?.musicPref || '').toLowerCase();
+      if (!pref || !music) return false;
+      const prefRoot = pref.split(/[\s&]+/)[0];
+      return pref === music || music.includes(prefRoot) || pref.includes(music.split(/[\s&]+/)[0]);
+    });
+    const pool = matched.length > 0 ? matched : locked;
+    return pool[Math.floor(Math.random() * pool.length)];
+  },
+
+  tryUnlockContact(progress, contactId, { where, bond = 20, neighbor = null } = {}) {
+    if (state.contactUnlockedThisRun) return null;
+    if (!contactId || progress.unlockedContacts.includes(contactId)) return null;
+    progress.unlockedContacts.push(contactId);
+    state.contactUnlockedThisRun = true;
+    const c = CONTACTS.find(ct => ct.id === contactId);
+    const key = ['player', contactId].sort().join(':');
+    progress.bonds[key] = Math.max(progress.bonds[key] || 0, bond);
+    this._pendingUnlocks = this._pendingUnlocks || [];
+    this._pendingUnlocks.push({ name: c?.name || contactId, where, bond });
+    if (neighbor) MemorySystem.linkNeighborToContact(neighbor, contactId, progress, 'exchanged_numbers');
+    return c;
   },
 
   save(progress) {
@@ -67,12 +116,13 @@ const SaveSystem = {
     const pay = bestJob.pay;
     state.cash = pay + (p.savings || 0);
 
-    // Unlock venues based on clears
+    // Unlock venues based on unique clears
+    const clearedCount = this.uniqueVenuesClearedCount(p);
     VENUES.forEach(v => {
       if (!v.locked) return;
-      if (v.id === 'boardroom' && p.venuesCleared.length >= 2) v.locked = false;
-      if (v.id === 'florians' && p.venuesCleared.length >= 3) v.locked = false;
-      if (v.id === 'audit' && p.venuesCleared.length >= 5) v.locked = false;
+      if (v.id === 'boardroom' && clearedCount >= 2) v.locked = false;
+      if (v.id === 'florians' && clearedCount >= 3) v.locked = false;
+      if (v.id === 'audit' && clearedCount >= 5) v.locked = false;
     });
 
     // Unlock contacts based on conditions
@@ -100,7 +150,8 @@ const SaveSystem = {
     p.reputation += repGain;
     if (success) {
       p.totalSuccesses++;
-      if (!p.venuesCleared.includes(venueId)) {
+      this.dedupeVenuesCleared(p);
+      if (venueId && !p.venuesCleared.includes(venueId)) {
         p.venuesCleared.push(venueId);
       }
       // Increase bonds between all squad members who succeeded together
@@ -139,32 +190,24 @@ const SaveSystem = {
         p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + Math.round(3 * failBondMult));
       });
     }
-    // Unlock new contacts based on milestones
-    const allContactIds = CONTACTS.map(c => c.id);
-    const locked = allContactIds.filter(id => !p.unlockedContacts.includes(id));
+    // Unlock new contacts based on milestones — at most one per run
+    const venue = VENUES.find(v => v.id === venueId);
 
-    if (success && locked.length > 0) {
-      // Success: meet someone inside the club — unlock a random locked contact
-      const newContact = locked[Math.floor(Math.random() * locked.length)];
-      p.unlockedContacts.push(newContact);
-      const c = CONTACTS.find(ct => ct.id === newContact);
-      this._pendingUnlocks = this._pendingUnlocks || [];
-      this._pendingUnlocks.push({ name: c?.name || newContact, where: 'inside the club', bond: 20 });
-      // Strong bond from meeting inside
-      const key = ['player', newContact].sort().join(':');
-      p.bonds[key] = Math.max(p.bonds[key] || 0, 20);
+    if (success && !state.contactUnlockedThisRun) {
+      const locked = CONTACTS.map(c => c.id).filter(id => !p.unlockedContacts.includes(id));
+      if (locked.length > 0 && Math.random() < 0.6) {
+        const newContact = this.pickLockedContact(p, venue);
+        if (newContact) {
+          this.tryUnlockContact(p, newContact, { where: 'inside the club', bond: 20 });
+        }
+      }
     }
 
-    // Queue neighbors can become contacts (if you gathered intel from them)
-    if (state.queue.revealedIntel.length >= 2 && locked.length > 0) {
-      const queueUnlock = locked.filter(id => !p.unlockedContacts.includes(id))[0];
-      if (queueUnlock && Math.random() < 0.4) {
-        p.unlockedContacts.push(queueUnlock);
-        const c = CONTACTS.find(ct => ct.id === queueUnlock);
-        this._pendingUnlocks = this._pendingUnlocks || [];
-        this._pendingUnlocks.push({ name: c?.name || queueUnlock, where: 'the queue', bond: 10 });
-        const key = ['player', queueUnlock].sort().join(':');
-        p.bonds[key] = Math.max(p.bonds[key] || 0, 10);
+    if (!state.contactUnlockedThisRun && state.queue.revealedIntel.length >= 2) {
+      const locked = CONTACTS.map(c => c.id).filter(id => !p.unlockedContacts.includes(id));
+      if (locked.length > 0 && Math.random() < 0.4) {
+        const queueUnlock = this.pickLockedContact(p, venue) || locked[0];
+        this.tryUnlockContact(p, queueUnlock, { where: 'the queue', bond: 10 });
         const rememberedStranger = (state.queue.nightMemories || [])
           .filter(m => m.sourceMemoryId)
           .sort((a, b) => (b.salience || 0) - (a.salience || 0))[0];
@@ -172,6 +215,11 @@ const SaveSystem = {
           MemorySystem.linkStagedStrangerToContact(rememberedStranger.sourceMemoryId, queueUnlock, p, 'queue_unlock');
         }
       }
+    }
+
+    // One-time win state when every venue has been cleared
+    if (success && this.allVenuesCleared(p) && !p.wonAt) {
+      p.wonAt = Date.now();
     }
 
     // Save remaining cash as savings for next week

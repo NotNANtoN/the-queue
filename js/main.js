@@ -28,6 +28,7 @@ function resetRunState() {
   state.queue.behindNeighbors = [];
   state.queue.allyData = null;
   state.queue.earplugsActive = false;
+  state.contactUnlockedThisRun = false;
 
   SocialActions.reset();
   LLM.disposeAllCaches();
@@ -44,6 +45,44 @@ function resetRunState() {
     CrewChatSystem._convo._pendingPlayerText = null;
   }
   [...state.finalSquad, ...state.selectedSquad].forEach(m => { if (m) m._chimedIn = false; });
+}
+
+// ============================================================
+// LLM PRELOAD (planning-phase background download)
+// ============================================================
+
+function updatePlanningAiIndicator(pct, status) {
+  const el = $('ai-load-indicator');
+  if (!el) return;
+  if (LLM.loaded || status === 'ready') {
+    el.classList.add('hidden');
+    return;
+  }
+  if (status === 'failed') {
+    el.textContent = 'AI unavailable — simple dialogue';
+    el.classList.remove('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  el.textContent = pct >= 100 ? 'AI warming up…' : `AI loading… ${pct}%`;
+}
+
+function startLlmPreload() {
+  if (LLM.loaded) {
+    updatePlanningAiIndicator(100, 'ready');
+    return;
+  }
+  updatePlanningAiIndicator(0, 'loading');
+  LLM.load((pct) => updatePlanningAiIndicator(pct, 'loading'))
+    .then(() => {
+      state.llm.loaded = true;
+      updatePlanningAiIndicator(100, 'ready');
+    })
+    .catch((e) => {
+      console.warn('LLM preload failed:', e);
+      state.llm.loadFailed = true;
+      updatePlanningAiIndicator(0, 'failed');
+    });
 }
 
 async function enterQueue() {
@@ -135,7 +174,7 @@ async function enterQueue() {
   $('loading-status').textContent = 'Initializing AI...';
   renderLoadingQueue(0);
 
-  // Load LLM
+  // Load LLM — await in-flight preload or show full overlay progress
   state.llm.loadFailed = false;
   if (!LLM.loaded) {
     try {
@@ -150,7 +189,6 @@ async function enterQueue() {
           $('loading-status').textContent = pct >= 100 ? 'Ready!' : 'Warming up...';
           return;
         }
-        // ETA stabilizes once a few seconds of throughput data exist
         const eta = info.elapsedMs > 3000 && info.remainingMs != null
           ? ` · ~${fmtDuration(info.remainingMs)} left`
           : '';
@@ -159,12 +197,16 @@ async function enterQueue() {
       });
       state.llm.loaded = true;
       renderLoadingQueue(100);
+      updatePlanningAiIndicator(100, 'ready');
     } catch (e) {
       console.warn('LLM failed to load:', e);
       state.llm.loadFailed = true;
       $('loading-status').textContent = 'AI model failed to load — retrying next time';
+      updatePlanningAiIndicator(0, 'failed');
       await sleep(1500);
     }
+  } else {
+    updatePlanningAiIndicator(100, 'ready');
   }
 
   startQueuePhase(venue, cfg);
@@ -226,7 +268,7 @@ function startQueuePhase(venue, cfg) {
 
   EventLog.add(`Arrived outside ${venue.name}. Position ${cfg.startPos} in line.`, 'info');
   if (state.llm.loadFailed) {
-    notify('AI model could not load — NPC dialogue will be limited', {
+    notify('AI model could not load — NPCs will use simple dialogue', {
       toastMs: 4500,
       logType: 'negative',
       logMsg: 'AI model failed to load. Neighbor and bouncer chat will use fallbacks.',
@@ -385,6 +427,8 @@ function init() {
       state.audioStarted = true;
       ClubAudio.init();
     }
+
+    startLlmPreload();
   });
 
   // Resume audio context on any subsequent click (mobile Safari workaround)
@@ -505,9 +549,7 @@ function init() {
 
   // Club scene: leave at sunrise
   $('club-done').addEventListener('click', () => {
-    $('club-screen').classList.remove('active');
-    const venue = VENUES.find(v => v.id === state.selectedVenue);
-    BouncerSystem.showResult(true, venue);
+    ClubScene._finish();
   });
 }
 

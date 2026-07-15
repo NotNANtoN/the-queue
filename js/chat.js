@@ -122,6 +122,67 @@ const ChatSystem = {
   messages: [],
   _convo: null,
 
+  _SCRIPTED_LINES: {
+    friendly: [
+      'Yeah, long night. You here for the music too?',
+      'Ha, same. I heard the headliner is worth the wait.',
+      'Honestly? The vibe in line is half the fun.',
+      'You seem cool — hope we both get in.',
+    ],
+    drunk: [
+      'Brooo this line is INFINITE but I LOVE everyone here.',
+      "Wait wait — do you know who's DJing? I forgot.",
+      'I might tell you a secret if you keep talking to me.',
+      'Best night ever and we are not even inside yet!',
+    ],
+    hostile: [
+      'What do you want?',
+      "Don't bother me. I'm not in the mood.",
+      "Talk fast or don't talk at all.",
+      'Hmm.',
+    ],
+    anxious: [
+      "Do you think we'll actually get in?",
+      "I've been checking the door every five minutes.",
+      'My heart is racing. Is the line even moving?',
+      'Please tell me you heard good things about tonight.',
+    ],
+    reserved: [
+      'Evening.',
+      'Fair trade only — what do you need?',
+      "I don't chat much, but I'm listening.",
+      "We'll see if this wait is worth it.",
+    ],
+  },
+
+  _scriptedDispositionKey(neighbor) {
+    if (neighbor?.disposition === 'neutral') return 'reserved';
+    return neighbor?.disposition || 'reserved';
+  },
+
+  _getScriptedLine(neighbor) {
+    const key = this._scriptedDispositionKey(neighbor);
+    const pool = this._SCRIPTED_LINES[key] || this._SCRIPTED_LINES.reserved;
+    neighbor._scriptedLineIdx = (neighbor._scriptedLineIdx || 0) % pool.length;
+    const line = pool[neighbor._scriptedLineIdx];
+    neighbor._scriptedLineIdx++;
+    neighbor._scriptedExchanges = (neighbor._scriptedExchanges || 0) + 1;
+    return line;
+  },
+
+  _maybeScriptedIntel(neighbor) {
+    if (!neighbor?.intel) return;
+    if (state.queue.revealedIntel.includes(neighbor.intel.key)) return;
+    const exchanges = neighbor._scriptedExchanges || 0;
+    const affinity = neighbor.affinity || 50;
+    const disp = neighbor.disposition;
+    let shouldShare = false;
+    if ((disp === 'friendly' || disp === 'drunk') && exchanges >= 3) shouldShare = true;
+    else if (disp === 'anxious' && affinity >= 50 && exchanges >= 3) shouldShare = true;
+    else if (disp === 'neutral' && affinity >= 60 && exchanges >= 4) shouldShare = true;
+    if (shouldShare) this.handleIntel(neighbor.intel.text);
+  },
+
   _getConvo() {
     if (!this._convo) {
       this._convo = Conversation.create({
@@ -307,11 +368,13 @@ const ChatSystem = {
       maxTokens: 150,
       cacheKey: neighbor ? `neighbor:${neighbor.memoryId}` : null,
       onToolCalls: (toolCalls) => this._handleToolCalls(toolCalls),
+      fallback: !LLM.loaded ? () => this._getScriptedLine(neighbor) : '...',
       onSuccess: ({ dialogText, llmResult }) => {
         this.messages.push({ role: 'assistant', content: llmResult?.rawText || dialogText });
         if (this.currentNeighbor) {
           this.currentNeighbor.chatHistory = [...this.messages];
         }
+        if (!LLM.loaded) this._maybeScriptedIntel(neighbor);
       },
     });
   },
@@ -419,6 +482,12 @@ const ChatSystem = {
   handleUnlock(reason) {
     if (!this.currentNeighbor) return;
     const n = this.currentNeighbor;
+    if (state.contactUnlockedThisRun) {
+      setTimeout(() => {
+        this.addBubble(`${n.name} wants to stay in touch, but you already met someone new tonight.`, 'system-msg');
+      }, 300);
+      return;
+    }
     setTimeout(() => {
       this.addBubble(`${PX.i('heart','#ff69b4',12)} ${n.name} wants to exchange numbers!`, 'system-msg');
       const acceptBtn = this.addBubble('Add to contacts?', 'system-msg');
@@ -426,20 +495,28 @@ const ChatSystem = {
       acceptBtn.style.textDecoration = 'underline';
       acceptBtn.addEventListener('click', () => {
         const p = SaveSystem.load();
-        const allIds = CONTACTS.map(c => c.id);
-        const locked = allIds.filter(id => !p.unlockedContacts.includes(id));
-        if (locked.length > 0) {
-          const newId = locked[Math.floor(Math.random() * locked.length)];
-          p.unlockedContacts.push(newId);
-          const key = ['player', newId].sort().join(':');
-          p.bonds[key] = Math.max(p.bonds[key] || 0, Math.round(n.affinity * 0.3));
-          MemorySystem.linkNeighborToContact(n, newId, p, 'exchanged_numbers');
-          SaveSystem.save(p);
-          const c = CONTACTS.find(ct => ct.id === newId);
-          this.addBubble(`${PX.i('star','#39ff14',12)} New contact unlocked: ${c?.name || 'someone new'}!`, 'system-msg');
-          EventLog.add(`New contact: ${c?.name} (met ${n.name} in queue, affinity ${n.affinity})`, 'positive');
-        } else {
+        const venue = VENUES.find(v => v.id === state.selectedVenue);
+        const newId = SaveSystem.pickLockedContact(p, venue);
+        if (!newId) {
           this.addBubble('You already know everyone!', 'system-msg');
+          acceptBtn.remove();
+          return;
+        }
+        const contact = SaveSystem.tryUnlockContact(p, newId, {
+          where: `introduced by ${n.name}`,
+          bond: Math.round(n.affinity * 0.3),
+          neighbor: n,
+        });
+        if (contact) {
+          SaveSystem.save(p);
+          this.addBubble(
+            `${PX.i('star','#39ff14',12)} ${n.name} gave you their number — turns out they know ${contact.name}, who's now in your contacts.`,
+            'system-msg'
+          );
+          notify(`${n.name} introduced you to ${contact.name}`, { toastMs: 3000, logType: 'positive' });
+          EventLog.add(`${n.name} introduced you to ${contact.name} (affinity ${n.affinity})`, 'positive');
+        } else {
+          this.addBubble('You already met someone new tonight.', 'system-msg');
         }
         acceptBtn.remove();
       });
