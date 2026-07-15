@@ -1,0 +1,27 @@
+{
+  "name": "the-queue",
+  "version": "1.0.0",
+  "description": "A single-file browser roguelite about surviving the social physics of a club queue. Pick a venue, build a squad, gather intel from strangers, manage anxiety and hope, then talk your way past the bouncer.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node --test tests/tool-parser.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NotNANtoN/the-queue.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/NotNANtoN/the-queue/issues"
+  },
+  "homepage": "https://github.com/NotNANtoN/the-queue#readme",
+  "dependencies": {
+    "@huggingface/transformers": "^4.2.0"
+  }
+}

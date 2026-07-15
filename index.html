@@ -946,26 +946,92 @@ body::before {
 .loading-subtitle {
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 32px;
+  margin-bottom: 24px;
   line-height: 1.5;
 }
-.loading-bar-track {
-  width: 100%; height: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
+.loading-queue-scene {
+  position: relative;
+  height: 96px;
+  margin: 0 0 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 16% 50%, rgba(123,117,255,0.18), transparent 38%),
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015));
   overflow: hidden;
-  margin-bottom: 12px;
 }
-.loading-bar-fill {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--neon-purple), var(--neon-pink));
-  border-radius: 3px;
-  transition: width 0.3s ease;
+.loading-queue-ground {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 26px;
+  background: rgba(10, 9, 24, 0.85);
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.loading-club-door {
+  position: absolute;
+  left: 16px; bottom: 18px;
+  width: 36px; height: 58px;
+  border-radius: 18px 18px 4px 4px;
+  background: linear-gradient(180deg, rgba(123,117,255,0.25), rgba(0,0,0,0.75));
+  border: 2px solid rgba(123,117,255,0.7);
+  box-shadow: 0 0 22px rgba(123,117,255,0.45), inset 0 0 18px rgba(255,77,109,0.12);
+}
+.loading-club-door::after {
+  content: "AI";
+  position: absolute;
+  top: 12px; left: 0; right: 0;
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 900;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 8px var(--neon-cyan);
+}
+.loading-line {
+  position: absolute;
+  left: 62px; right: 12px; bottom: 20px;
+  height: 54px;
+}
+.loading-person {
+  position: absolute;
+  bottom: 0;
+  left: var(--person-x, 0px);
+  width: 8px;
+  height: var(--person-height, 30px);
+  transform: translateY(var(--person-bob, 0)) scale(var(--person-scale, 1));
+  opacity: var(--person-opacity, 1);
+  transition: left 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s ease, transform 0.6s ease;
+}
+.loading-person::before {
+  content: "";
+  position: absolute;
+  left: 1px; top: 0;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--person-skin, #dba270);
+}
+.loading-person::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 8px;
+  height: calc(var(--person-height, 30px) - 7px);
+  border-radius: 4px 4px 2px 2px;
+  background: var(--person-shirt, #7b75ff);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--person-shirt, #7b75ff) 50%, transparent);
+}
+.loading-queue-label {
+  position: absolute;
+  left: 62px; right: 12px; top: 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 .loading-status {
   font-size: 11px;
   color: var(--text-muted);
   font-family: var(--font-mono);
+  min-height: 16px;
 }
 
 /* === QUEUE SCREEN === */
@@ -2123,9 +2189,14 @@ body::before {
 <!-- Model Loading Screen -->
 <div class="loading-overlay" id="loading-overlay">
   <div class="loading-content">
-    <div class="loading-title">Downloading tonight's guest list...</div>
-    <div class="loading-subtitle">Loading on-device AI for your queue neighbors.<br>First time takes a minute — cached after that.</div>
-    <div class="loading-bar-track"><div class="loading-bar-fill" id="loading-fill"></div></div>
+    <div class="loading-title">Downloading the queue's brain...</div>
+    <div class="loading-subtitle">Every neighbor, crew member and bouncer is powered by an AI model (~2 GB) running on your device.<br>This first download is slow — after tonight it loads instantly, unless you clear your browser's cookies &amp; site data.</div>
+    <div class="loading-queue-scene" aria-hidden="true">
+      <div class="loading-queue-label" id="loading-queue-label">Queue outside the model: 24 ahead</div>
+      <div class="loading-club-door"></div>
+      <div class="loading-line" id="loading-line"></div>
+      <div class="loading-queue-ground"></div>
+    </div>
     <div class="loading-status" id="loading-status">Initializing...</div>
   </div>
 </div>
@@ -2198,6 +2269,14 @@ body::before {
     <button class="action-btn" id="act-scout">
       <span class="action-icon" id="act-icon-scout"></span>
       <span class="action-label">Scout Door</span>
+    </button>
+    <button class="action-btn" id="act-flirt">
+      <span class="action-icon" id="act-icon-flirt"></span>
+      <span class="action-label">Flirt</span>
+    </button>
+    <button class="action-btn" id="act-alliance">
+      <span class="action-icon" id="act-icon-alliance"></span>
+      <span class="action-label">Alliance</span>
     </button>
   </div>
 </div>
@@ -3152,7 +3231,7 @@ function generateTonightsSecrets(venue, bouncer) {
     bouncerName: bouncer.name,
     facts: secrets,
     keys: Object.keys(secrets),
-    password: secrets.password?.match(/"([^"]+)"/)?.[1] || 'Systematic Review',
+    password: secrets.password?.match(/"([^"]+)"/)?.[1] ?? null,
     ownerName: secrets.owner_name?.match(/is (\w+)/)?.[1] || 'Viktor',
     vipName: secrets.vip_table?.match(/"([^"]+)"/)?.[1] || 'Regulaido',
   };
@@ -3918,7 +3997,7 @@ const state = {
     startingSquadCount: 0,
     warmthBonus: 0,
   },
-  llm: { loaded: false },
+  llm: { loaded: false, loadFailed: false },
 };
 
 const Debug = {
@@ -4645,6 +4724,40 @@ function updateStatusBar() {
   $('status-time').textContent = `${h}:${m}`;
   const battery = 8 + Math.floor(Math.random() * 12);
   $('status-battery').textContent = `${battery}%`;
+}
+
+function renderLoadingQueue(progress = 0) {
+  const line = $('loading-line');
+  const label = $('loading-queue-label');
+  if (!line || !label) return;
+  const pct = Math.max(0, Math.min(100, Number(progress) || 0));
+  const maxPeople = 24;
+  const count = Math.max(pct >= 100 ? 0 : 1, Math.ceil(maxPeople * (1 - pct / 100)));
+  const colors = ['#7b75ff', '#ff4d6d', '#39ff14', '#57f2ff', '#fd9927', '#ffd86b', '#ebe4ff'];
+  const skins = ['#f5d0a9', '#e8b88a', '#c68642', '#8d5524', '#6b3e26', '#dba270'];
+  if (line.children.length !== maxPeople) {
+    line.innerHTML = Array.from({ length: maxPeople }, (_, i) => '<span class="loading-person" data-person="' + i + '"></span>').join('');
+  }
+  const lineWidth = Math.max(1, line.clientWidth || 260);
+  Array.from(line.children).forEach((el, i) => {
+    const height = 24 + ((i * 7) % 18);
+    const bob = Math.sin((Date.now() / 480) + i) * 1.5;
+    const shirt = colors[i % colors.length];
+    const skin = skins[i % skins.length];
+    const visible = i < count;
+    const activeIndex = Math.min(i, Math.max(0, count - 1));
+    const spacing = count > 1 ? Math.min(12, lineWidth / Math.max(count, 1)) : 0;
+    const visibleX = Math.max(0, lineWidth - (count - activeIndex) * spacing);
+    const exitX = -54 - i * 3;
+    el.style.setProperty('--person-height', height + 'px');
+    el.style.setProperty('--person-bob', bob.toFixed(1) + 'px');
+    el.style.setProperty('--person-shirt', shirt);
+    el.style.setProperty('--person-skin', skin);
+    el.style.setProperty('--person-x', (visible ? visibleX : exitX).toFixed(1) + 'px');
+    el.style.setProperty('--person-opacity', visible ? (0.45 + Math.min(0.5, (count - i) / maxPeople)).toFixed(2) : '0');
+    el.style.setProperty('--person-scale', visible ? '1' : '0.82');
+  });
+  label.textContent = count === 0 ? 'Model door is open' : `Queue outside the model: ${count} ahead`;
 }
 
 function switchTab(idx) {
@@ -5440,7 +5553,10 @@ const QueueCanvas = {
     this.ctx = this.canvas.getContext('2d');
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.resize();
-    window.addEventListener('resize', () => this.resize());
+    if (!this._resizeBound) {
+      window.addEventListener('resize', () => this.resize());
+      this._resizeBound = true;
+    }
   },
 
   resize() {
@@ -6178,7 +6294,7 @@ const QueueCanvas = {
 // ============================================================
 
 // ============================================================
-// NATIVE TOOL DEFINITIONS (OpenAI format for Gemma 4)
+// NATIVE TOOL DEFINITIONS (OpenAI format for Ternary Bonsai)
 // ============================================================
 
 const NEIGHBOR_TOOLS = [
@@ -6218,16 +6334,23 @@ const BOUNCER_TOOLS = [
 
 const LLM = {
   pipeline: null,
+  DynamicCache: null,
   loaded: false,
   loading: false,
+  cacheSessions: {},
 
   _stripToolText(text) {
     return (text || '')
+      .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
+      .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
       .replace(/<\|channel>thought[\s\S]*?(?:<channel\|>|$)/g, '')
       .replace(/<\|channel>[\s\S]*?(?:<channel\|>|$)/g, '')
       .replace(/<\|tool_call>[\s\S]*?(?:<tool_call\|>|$)/g, '')
       .replace(/<\|tool_response>[\s\S]*?(?:<tool_response\|>|$)/g, '')
+      .replace(/<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+      .replace(/<\s*(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\b[^>]*\/?\s*>/gi, '')
       .replace(/call:\w+\{[^}]*\}/g, '')
+      .replace(/\b(?:share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\{[^}]*\}/g, '')
       .replace(/\b(?:share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\([^)]*\)/g, '')
       .replace(/\\?turn\|>|<\|turn>[^]*$/g, '')
       .replace(/<eos>|<\/s>|<bos>/g, '')
@@ -6239,23 +6362,44 @@ const LLM = {
     if (this.loaded || this.loading) return;
     this.loading = true;
     try {
-      const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.1.0');
+      const { pipeline, env, DynamicCache } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
       env.allowLocalModels = false;
+      this.DynamicCache = DynamicCache || null;
 
-      this.pipeline = await pipeline('text-generation', 'onnx-community/gemma-4-E4B-it-ONNX', {
+      // Aggregate download progress across all model files so the bar and
+      // time estimate move predictably instead of jumping per file.
+      const files = {};
+      const startedAt = Date.now();
+      const report = () => {
+        const entries = Object.values(files);
+        const totalBytes = entries.reduce((s, f) => s + f.total, 0);
+        const loadedBytes = entries.reduce((s, f) => s + f.loaded, 0);
+        if (!totalBytes) return;
+        const pct = Math.round((loadedBytes / totalBytes) * 100);
+        const elapsedMs = Date.now() - startedAt;
+        const rate = loadedBytes / Math.max(elapsedMs, 1); // bytes per ms
+        const remainingMs = rate > 0 ? (totalBytes - loadedBytes) / rate : null;
+        onProgress?.(pct, { loadedBytes, totalBytes, elapsedMs, remainingMs });
+      };
+      this.pipeline = await pipeline('text-generation', 'onnx-community/Ternary-Bonsai-8B-ONNX', {
         device: 'webgpu',
-        dtype: 'q4f16',
+        dtype: 'q2f16',
         progress_callback: (p) => {
-          if (p.status === 'progress' && p.total) {
-            const pct = Math.round((p.loaded / p.total) * 100);
-            onProgress?.(pct, p.file || '');
+          if ((p.status === 'progress' || p.status === 'done') && p.file) {
+            const total = p.total || files[p.file]?.total || 0;
+            files[p.file] = {
+              total,
+              loaded: p.status === 'done' ? total : (p.loaded || 0),
+            };
+            report();
           } else if (p.status === 'ready') {
-            onProgress?.(100, 'Ready');
+            onProgress?.(100, null);
           }
         },
       });
       this.loaded = true;
       this.loading = false;
+      Debug.log('LLM cache support', this.DynamicCache ? 'DynamicCache available' : 'DynamicCache unavailable');
     } catch (e) {
       console.error('LLM load failed:', e);
       this.loading = false;
@@ -6263,7 +6407,61 @@ const LLM = {
     }
   },
 
-  async chat(messages, tools = null, maxTokens = 150) {
+  _messageComparable(message) {
+    return {
+      role: message.role,
+      content: message.content || '',
+      tool_calls: message.tool_calls || null,
+      tool_responses: message.tool_responses || null,
+    };
+  },
+
+  _sameMessage(a, b) {
+    return JSON.stringify(this._messageComparable(a)) === JSON.stringify(this._messageComparable(b));
+  },
+
+  _isPrefix(prefix, full) {
+    if (!prefix || prefix.length > full.length) return false;
+    for (let i = 0; i < prefix.length; i++) {
+      if (!this._sameMessage(prefix[i], full[i])) return false;
+    }
+    return true;
+  },
+
+  _cloneMessages(messages) {
+    return messages.map(m => ({ ...m, tool_calls: m.tool_calls ? JSON.parse(JSON.stringify(m.tool_calls)) : undefined, tool_responses: m.tool_responses ? JSON.parse(JSON.stringify(m.tool_responses)) : undefined }));
+  },
+
+  _getCacheSession(cacheKey, messages) {
+    if (!cacheKey || !this.DynamicCache) return null;
+    let session = this.cacheSessions[cacheKey];
+    if (session?.messages && !this._isPrefix(session.messages, messages)) {
+      this.disposeCache(cacheKey);
+      session = null;
+    }
+    if (!session) {
+      session = { cache: new this.DynamicCache(), messages: null };
+      this.cacheSessions[cacheKey] = session;
+    }
+    return session;
+  },
+
+  disposeCache(cacheKey) {
+    const session = this.cacheSessions[cacheKey];
+    if (!session) return;
+    try {
+      session.cache?.dispose?.();
+    } catch (e) {
+      console.warn('Failed to dispose KV cache:', e);
+    }
+    delete this.cacheSessions[cacheKey];
+  },
+
+  disposeAllCaches() {
+    Object.keys(this.cacheSessions).forEach(k => this.disposeCache(k));
+  },
+
+  async chat(messages, tools = null, maxTokens = 150, cacheKey = null) {
     if (!this.loaded || !this.pipeline) return null;
     try {
       const opts = {
@@ -6273,6 +6471,8 @@ const LLM = {
         do_sample: true,
       };
       if (tools) opts.tools = tools;
+      const cacheSession = this._getCacheSession(cacheKey, messages);
+      if (cacheSession) opts.past_key_values = cacheSession.cache;
 
       const output = await this.pipeline(messages, opts);
       const generated = output[0]?.generated_text;
@@ -6289,14 +6489,22 @@ const LLM = {
         const parsedCalls = nativeCalls.length > 0 ? [] : this._parseToolCalls(rawText);
         const toolCalls = nativeCalls.length > 0 ? nativeCalls : parsedCalls;
         Debug.log('LLM.chat parsed tool calls', toolCalls);
-        return { text: this._stripToolText(rawText), toolCalls };
+        if (cacheSession) {
+          cacheSession.messages = this._cloneMessages(generated);
+          Debug.log('LLM KV cache', { cacheKey, seqLength: cacheSession.cache?.get_seq_length?.() });
+        }
+        return { text: this._stripToolText(rawText), rawText, toolCalls, assistantMessage: last };
       }
 
       const rawText = typeof generated === 'string' ? generated : '';
       const toolCalls = this._parseToolCalls(rawText);
       Debug.log('LLM.chat parsed tool calls', toolCalls);
       const cleanText = this._stripToolText(rawText);
-      return { text: cleanText, toolCalls };
+      if (cacheSession) {
+        cacheSession.messages = this._cloneMessages([...messages, { role: 'assistant', content: rawText }]);
+        Debug.log('LLM KV cache', { cacheKey, seqLength: cacheSession.cache?.get_seq_length?.() });
+      }
+      return { text: cleanText, rawText, toolCalls, assistantMessage: { role: 'assistant', content: rawText } };
     } catch (e) {
       console.error('LLM chat error:', e);
       return null;
@@ -6319,18 +6527,35 @@ const LLM = {
   _parseToolCalls(text) {
     const calls = [];
 
-    // Native Gemma/pipeline formats:
+    // Qwen3 / Ternary Bonsai XML tool calls: <tool_call>{"name":"fn","arguments":{...}}</tool_call>
+    const qwenToolPattern = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/gi;
+    let match;
+    while ((match = qwenToolPattern.exec(text)) !== null) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (parsed.name) calls.push({ function: { name: parsed.name, arguments: parsed.arguments || {} } });
+      } catch (e) {}
+    }
+    if (calls.length > 0) return calls;
+
+    // Legacy pipeline formats:
     // <|tool_call>call:function_name{arg:<|"|>value<|"|>}<tool_call|>
     // call:function_name{arg:value}
     const toolCallPattern = /<\|tool_call>call:(\w+)\{(.*?)\}<tool_call\|>/gs;
-    let match;
     while ((match = toolCallPattern.exec(text)) !== null) {
-      calls.push({ function: { name: match[1], arguments: this._parseGemmaArgs(match[2]) } });
+      calls.push({ function: { name: match[1], arguments: this._parseLegacyArgs(match[2]) } });
     }
     if (calls.length === 0) {
       const callPattern = /call:(\w+)\{([^}]*)\}/g;
       while ((match = callPattern.exec(text)) !== null) {
-        calls.push({ function: { name: match[1], arguments: this._parseGemmaArgs(match[2]) } });
+        calls.push({ function: { name: match[1], arguments: this._parseLegacyArgs(match[2]) } });
+      }
+    }
+    if (calls.length === 0) {
+      // Bare function_name{arg:value} without the call: prefix.
+      const bareCallPattern = /\b(share_intel|offer_item|give_money|want_item|change_affinity|exchange_numbers|end_conversation|leave_queue|swap_spots|accept_flirt|form_alliance|remember|reduce_anxiety|boost_morale|boost_hope|approve|disapprove|let_in|reject|ban|inspect_bag)\s*\{([^}]*)\}/g;
+      while ((match = bareCallPattern.exec(text)) !== null) {
+        calls.push({ function: { name: match[1], arguments: this._parseLegacyArgs(match[2]) } });
       }
     }
 
@@ -6370,7 +6595,7 @@ const LLM = {
     return calls;
   },
 
-  _parseGemmaArgs(argsStr) {
+  _parseLegacyArgs(argsStr) {
     const args = {};
     const raw = (argsStr || '').trim();
     if (raw.startsWith('{')) {
@@ -6739,12 +6964,28 @@ const QueueEngine = {
   },
 
   squadMemberBails() {
-    if (state.finalSquad.length > 0) {
-      const gone = state.finalSquad.pop();
-      showToast(`${gone.name} couldn't take it anymore and left`, 3000);
-      state.queue.anxiety = Math.max(state.queue.anxiety - 20, 30);
-      this.modHope(-10);
+    if (state.finalSquad.length === 0) return;
+    const stats = state.queue.memberStats;
+    let gone = null;
+    if (stats && Object.keys(stats).length > 0) {
+      let lowestMorale = Infinity;
+      let lowestName = null;
+      for (const member of state.finalSquad) {
+        const morale = stats[member.name]?.morale ?? Infinity;
+        if (morale < lowestMorale) {
+          lowestMorale = morale;
+          lowestName = member.name;
+        }
+      }
+      if (lowestName) {
+        const idx = state.finalSquad.findIndex(m => m.name === lowestName);
+        if (idx >= 0) gone = state.finalSquad.splice(idx, 1)[0];
+      }
     }
+    if (!gone) gone = state.finalSquad.pop();
+    showToast(`${gone.name} couldn't take it anymore and left`, 3000);
+    state.queue.anxiety = Math.max(state.queue.anxiety - 20, 30);
+    this.modHope(-10);
   },
 
   squadBailsAll() {
@@ -7131,6 +7372,7 @@ const ChatSystem = {
   currentNeighbor: null,
   messages: [],
   generating: false,
+  _pendingPlayerText: null,
 
   open(neighbor, direction) {
     this.currentNeighbor = neighbor;
@@ -7165,7 +7407,7 @@ const ChatSystem = {
       for (const msg of lastFew) {
         if (msg.role === 'user') this.addBubble(msg.content, 'player');
         else if (msg.role === 'assistant') {
-          const clean = msg.content.split('\n').filter(l => !l.match(/\[(INTEL|WANT|OFFER|END|GIVE_MONEY):/)).join(' ').trim();
+          const clean = LLM._stripToolText(msg.content).split('\n').filter(l => !l.match(/\[(INTEL|WANT|OFFER|END|GIVE_MONEY):/)).join(' ').trim();
           if (clean) this.addBubble(clean, 'npc');
         }
       }
@@ -7179,7 +7421,10 @@ const ChatSystem = {
 
     // Initial greeting only on first conversation
     if (neighbor.chatHistory.length === 0) {
-      this.generateResponse('*you make eye contact*');
+      this.generateResponse('*you make eye contact*').catch(e => {
+        console.error('Chat generation failed:', e);
+        EventLog.add('Neighbor chat failed — try again', 'negative');
+      });
     }
   },
 
@@ -7241,7 +7486,10 @@ const ChatSystem = {
       this.addBubble('💵 You gave $5', 'system-msg');
       EventLog.add(`Gave $5 to ${this.currentNeighbor.name}`, 'info');
       this._refreshChatReactiveUi();
-      this.generateResponse('*the player hands you $5*');
+      this.generateResponse('*the player hands you $5*').catch(e => {
+        console.error('Chat generation failed:', e);
+        EventLog.add('Neighbor chat failed — try again', 'negative');
+      });
     } else {
       if ((state.inventory[itemId] || 0) <= 0) { showToast('You don\'t have that'); return; }
       state.inventory[itemId]--;
@@ -7251,7 +7499,10 @@ const ChatSystem = {
       this.addBubble(`${item?.icon || '📦'} You gave ${name}`, 'system-msg');
       EventLog.add(`Gave ${name} to ${this.currentNeighbor.name}`, 'info');
       this._refreshChatReactiveUi();
-      this.generateResponse(`*the player hands you a ${name}*`);
+      this.generateResponse(`*the player hands you a ${name}*`).catch(e => {
+        console.error('Chat generation failed:', e);
+        EventLog.add('Neighbor chat failed — try again', 'negative');
+      });
     }
     QueueEngine.advanceTime(1);
     this.renderItemButtons();
@@ -7264,6 +7515,7 @@ const ChatSystem = {
       showToast(`${this.currentNeighbor.name}: ${label} (${aff}/100)`, 2000);
     }
     $('chat-overlay').classList.remove('active');
+    if (this.currentNeighbor?.memoryId) LLM.disposeCache(`neighbor:${this.currentNeighbor.memoryId}`);
     this.currentNeighbor = null;
     state.queue.actionLocked = false;
     QueueEngine.updateMeters();
@@ -7294,6 +7546,10 @@ const ChatSystem = {
   },
 
   async generateResponse(playerText) {
+    if (this.generating) {
+      this._pendingPlayerText = playerText;
+      return;
+    }
     this.generating = true;
     $('chat-send').disabled = true;
 
@@ -7301,47 +7557,62 @@ const ChatSystem = {
     const typingEl = this.addBubble('', 'npc');
     typingEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
 
-    // Build conversation for LLM
-    const venue = VENUES.find(v => v.id === state.selectedVenue);
-    const systemPrompt = buildNeighborSystemPrompt(this.currentNeighbor, venue);
+    try {
+      // Build conversation for LLM
+      const venue = VENUES.find(v => v.id === state.selectedVenue);
+      const systemPrompt = buildNeighborSystemPrompt(this.currentNeighbor, venue);
 
-    this.messages.push({ role: 'user', content: playerText });
+      this.messages.push({ role: 'user', content: playerText });
 
-    let llmResult = null;
-    if (LLM.loaded) {
-      const llmMessages = [
-        { role: 'system', content: systemPrompt },
-        ...this.messages.slice(-8),
-      ];
-      llmResult = await LLM.chat(llmMessages, NEIGHBOR_TOOLS, 150);
+      let llmResult = null;
+      if (LLM.loaded) {
+        const llmMessages = [
+          { role: 'system', content: systemPrompt },
+          ...this.messages.slice(-8),
+        ];
+        llmResult = await LLM.chat(llmMessages, NEIGHBOR_TOOLS, 150, `neighbor:${this.currentNeighbor.memoryId}`);
+      }
+
+      let dialogText = '';
+      let toolCalls = [];
+
+      if (llmResult) {
+        dialogText = LLM._stripToolText(llmResult.text || '');
+        toolCalls = llmResult.toolCalls || [];
+      }
+
+      if (!dialogText && toolCalls.length === 0) {
+        dialogText = '...';
+        await sleep(500);
+      }
+
+      this._handleToolCalls(toolCalls);
+
+      this.messages.push({ role: 'assistant', content: llmResult?.rawText || dialogText });
+      if (this.currentNeighbor) {
+        this.currentNeighbor.chatHistory = [...this.messages];
+      }
+
+      // Replace typing with actual response
+      typingEl.innerHTML = '';
+      typingEl.textContent = dialogText || '...';
+    } catch (e) {
+      console.error('Chat generation failed:', e);
+      EventLog.add('Neighbor chat failed — try again', 'negative');
+      typingEl.innerHTML = '';
+      typingEl.textContent = '...';
+    } finally {
+      this.generating = false;
+      $('chat-send').disabled = false;
+      const pending = this._pendingPlayerText;
+      this._pendingPlayerText = null;
+      if (pending) {
+        this.generateResponse(pending).catch(err => {
+          console.error('Queued chat generation failed:', err);
+          EventLog.add('Neighbor chat failed — try again', 'negative');
+        });
+      }
     }
-
-    let dialogText = '';
-    let toolCalls = [];
-
-    if (llmResult) {
-      dialogText = LLM._stripToolText(llmResult.text || '');
-      toolCalls = llmResult.toolCalls || [];
-    }
-
-    if (!dialogText && toolCalls.length === 0) {
-      dialogText = '...';
-      await sleep(500);
-    }
-
-    this._handleToolCalls(toolCalls);
-
-    this.messages.push({ role: 'assistant', content: dialogText });
-    if (this.currentNeighbor) {
-      this.currentNeighbor.chatHistory = [...this.messages];
-    }
-
-    // Replace typing with actual response
-    typingEl.innerHTML = '';
-    typingEl.textContent = dialogText || '...';
-
-    this.generating = false;
-    $('chat-send').disabled = false;
   },
 
   _handleToolCalls(toolCalls) {
@@ -7429,9 +7700,16 @@ const ChatSystem = {
         giveBtn.addEventListener('click', () => {
           state.inventory[normalized]--;
           this.addBubble(`You gave ${this.currentNeighbor.name} your ${itemName}.`, 'system-msg');
-          // If they have intel, they'll likely share it next
           this._refreshChatReactiveUi();
           giveBtn.remove();
+          const intelText = this.currentNeighbor?.intel?.text || '';
+          const nudge = intelText
+            ? `*the player gave you the ${itemName} you wanted* Now share the intel you promised. Your intel: ${intelText}`
+            : `*the player gave you the ${itemName} you wanted* Now share the intel you promised.`;
+          this.generateResponse(nudge).catch(e => {
+            console.error('Chat generation failed:', e);
+            EventLog.add('Neighbor chat failed — try again', 'negative');
+          });
         });
       }, 200);
     }
@@ -7618,7 +7896,7 @@ const CrewChatSystem = {
     this.addBubble('You pull your crew into a quick group huddle.', 'system-msg');
     (state.queue.crewChatHistory || []).slice(-6).forEach(msg => {
       if (msg.role === 'user') this.addBubble(msg.content, 'player');
-      if (msg.role === 'assistant') this.addBubble(msg.content, 'npc');
+      if (msg.role === 'assistant') this.addBubble(LLM._stripToolText(msg.content), 'npc');
     });
     $('chat-actions').innerHTML = '<span style="font-size:10px;color:var(--text-muted);padding:4px;">Crew chat can calm anxiety, restore morale, and create memories.</span>';
     $('chat-input').placeholder = 'Say something to the crew...';
@@ -7650,7 +7928,7 @@ const CrewChatSystem = {
     const history = state.queue.crewMemberChats[name] || [];
     history.slice(-6).forEach(msg => {
       if (msg.role === 'user') this.addBubble(msg.content, 'player');
-      if (msg.role === 'assistant') this.addBubble(msg.content, 'npc');
+      if (msg.role === 'assistant') this.addBubble(LLM._stripToolText(msg.content), 'npc');
     });
     $('chat-actions').innerHTML = '<span style="font-size:10px;color:var(--text-muted);padding:4px;">One-on-one talks are best for morale, promises, and personal memories.</span>';
     $('chat-input').placeholder = `Say something to ${name}...`;
@@ -7661,6 +7939,8 @@ const CrewChatSystem = {
   close() {
     $('chat-overlay').classList.remove('active');
     $('chat-input').placeholder = 'Say something...';
+    if (this.mode === 'group') LLM.disposeCache(`crew:group:${state.selectedVenue}`);
+    if (this.mode === 'member' && this.contact) LLM.disposeCache(`crew:member:${this.contact.id}:${state.selectedVenue}`);
     this.active = false;
     this.mode = null;
     this.memberName = null;
@@ -7737,30 +8017,40 @@ If they pressure you selfishly, do not reward them.`;
     const typingEl = this.addBubble('', 'npc');
     typingEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
 
-    const history = this._history();
-    history.push({ role: 'user', content: playerText });
-    let result = null;
-    if (LLM.loaded) {
-      result = await LLM.chat([
-        { role: 'system', content: this.mode === 'group' ? this._buildGroupPrompt() : this._buildMemberPrompt() },
-        ...history.slice(-8),
-      ], CREW_TOOLS, 140);
-    }
+    try {
+      const history = this._history();
+      history.push({ role: 'user', content: playerText });
+      let result = null;
+      if (LLM.loaded) {
+        const cacheKey = this.mode === 'group'
+          ? `crew:group:${state.selectedVenue}`
+          : `crew:member:${this.contact?.id}:${state.selectedVenue}`;
+        result = await LLM.chat([
+          { role: 'system', content: this.mode === 'group' ? this._buildGroupPrompt() : this._buildMemberPrompt() },
+          ...history.slice(-8),
+        ], CREW_TOOLS, 140, cacheKey);
+      }
 
-    let text = LLM._stripToolText(result?.text || '');
-    const toolCalls = result?.toolCalls || [];
-    if (!text && toolCalls.length === 0) {
-      text = this.mode === 'group'
-        ? `${state.finalSquad[0]?.name || 'Crew'}: Yeah... okay, let's keep it together.`
-        : `${this.memberName}: Yeah. I needed to hear that.`;
-    }
+      let text = LLM._stripToolText(result?.text || '');
+      const toolCalls = result?.toolCalls || [];
+      if (!text && toolCalls.length === 0) {
+        text = this.mode === 'group'
+          ? `${state.finalSquad[0]?.name || 'Crew'}: Yeah... okay, let's keep it together.`
+          : `${this.memberName}: Yeah. I needed to hear that.`;
+      }
 
-    this._handleToolCalls(toolCalls);
-    history.push({ role: 'assistant', content: text });
-    typingEl.innerHTML = '';
-    typingEl.textContent = text;
-    this.generating = false;
-    $('chat-send').disabled = false;
+      this._handleToolCalls(toolCalls);
+      history.push({ role: 'assistant', content: result?.rawText || text });
+      typingEl.innerHTML = '';
+      typingEl.textContent = text;
+    } catch (e) {
+      console.error('Crew chat generation failed:', e);
+      typingEl.innerHTML = '';
+      typingEl.textContent = '...';
+    } finally {
+      this.generating = false;
+      $('chat-send').disabled = false;
+    }
   },
 
   _handleToolCalls(toolCalls) {
@@ -7807,6 +8097,8 @@ If they pressure you selfishly, do not reward them.`;
 // ============================================================
 
 const KioskSystem = {
+  _closeListenerAttached: false,
+
   open() {
     const panel = $('kiosk-panel');
     panel.innerHTML = `
@@ -7854,7 +8146,12 @@ const KioskSystem = {
       });
     });
 
-    $('kiosk-close-btn')?.addEventListener('click', () => this.close());
+    if (!this._closeListenerAttached) {
+      $('kiosk-panel')?.addEventListener('click', (e) => {
+        if (e.target.id === 'kiosk-close-btn') this.close();
+      });
+      this._closeListenerAttached = true;
+    }
 
     $('kiosk-overlay').classList.add('active');
     state.queue.actionLocked = true;
@@ -7905,99 +8202,6 @@ const BOUNCERS = [
     softSpot: 'Names on the list, proper credentials',
     trigger: 'Arguing or showing attitude',
     portraitProps: { skin: '#f0c5a0', hairColor: '#3d2b1f', hairStyle: 'bob', shirtColor: '#2d2d2d', accessory: 'glasses', faceWidth: 6, faceHeight: 7, eyeSpacing: 3, noseSize: 1, earSize: 1, seed: 0.2 },
-  },
-];
-
-const EXCHANGE_POOL = [
-  {
-    id: 'names', category: 'greeting', weight: 10,
-    lines: { florian: '"Names."', marko: '"Who are you?"', kai: '"Yo, who\'s trying to get in?"', silent: '*holds up one finger, then points at you*', mira: '*flips through clipboard* "Name, please."' },
-    options: [
-      { text: '"We\'re on DJ Synthax\'s list."', score: 30, intel: 'name_drop' },
-      { text: '"Just us — we\'re here for the music."', score: 5 },
-      { text: '"Does it matter? Let us in."', score: -20 },
-    ],
-  },
-  {
-    id: 'shoes', category: 'appearance', weight: 8,
-    lines: { florian: '*looks at your shoes* "Interesting choice."', marko: '"Those shoes clean?"', kai: '"Nice kicks... or not."', silent: '*stares at your feet for five seconds*', mira: '*glances down, makes a note on clipboard*' },
-    options: [
-      { text: '"Yeah, I know the dress code — no white sneakers tonight."', score: 25, intel: 'shoe_rule' },
-      { text: '"Thanks, they\'re comfortable."', score: 5 },
-      { text: '"What about them?"', score: -15 },
-    ],
-  },
-  {
-    id: 'why', category: 'motivation', weight: 10,
-    lines: { florian: '"Why should I let you in?"', marko: '"Give me one good reason."', kai: '"What brings you out tonight?"', silent: '*crosses arms tighter*', mira: '"And what is the purpose of your visit tonight?"' },
-    options: [
-      { text: '"Because we know the residents playing tonight."', score: 30, intel: 'dj_set' },
-      { text: '"We just want to dance."', score: 5 },
-      { text: '"Do you know who I am?"', score: -25 },
-    ],
-  },
-  {
-    id: 'password', category: 'knowledge', weight: 7,
-    lines: { florian: '"There\'s a word for tonight. You know it?"', marko: '"Magic word?"', kai: '"What\'s the vibe check?"', silent: '*raises one eyebrow almost imperceptibly*', mira: '"There\'s a reservation code. Do you have it?"' },
-    options: [
-      { text: '"Systematic Review."', score: 35, intel: 'password' },
-      { text: '"Uh... please?"', score: 0 },
-      { text: '"I don\'t do passwords."', score: -15 },
-    ],
-  },
-  {
-    id: 'group', category: 'assessment', weight: 8,
-    lines: { florian: '*counts your group* "How many?"', marko: '"Big group tonight, huh?"', kai: '"Squad deep or what?"', silent: '*slowly counts heads, expression unchanged*', mira: '"Party size?"' },
-    options: [
-      { text: '"Three of us — that\'s the sweet spot tonight, right?"', score: 25, intel: 'group_size' },
-      { text: `"${(state.finalSquad?.length || 0) + 1} of us."`, score: 5 },
-      { text: '"Why, is there a limit?"', score: -10 },
-    ],
-  },
-  {
-    id: 'mood', category: 'reading', weight: 6,
-    lines: { florian: '*says nothing, just stares*', marko: '"You nervous?"', kai: '"You good? You look tense."', silent: '*...stares...*', mira: '*looks up from clipboard* "Everything alright?"' },
-    options: [
-      { text: '"All good. Heard you\'re in a strict mood tonight — we respect that."', score: 20, intel: 'mood' },
-      { text: '"Yeah, we\'re fine. Just excited."', score: 5 },
-      { text: '"Are YOU nervous? This line\'s not moving."', score: -20 },
-    ],
-  },
-  {
-    id: 'bouncer_name', category: 'personal', weight: 5,
-    lines: { florian: '"You been here before?"', marko: '"First time?"', kai: '"I don\'t recognize you."', silent: '*tilts head slightly*', mira: '"I don\'t see you in our system."' },
-    options: [
-      { text: `"Yeah, Florian let us in last time — good to see you again."`, score: 25, intel: 'bouncer_name' },
-      { text: '"Once or twice. Great spot."', score: 5 },
-      { text: '"We don\'t need to be regulars."', score: -10 },
-    ],
-  },
-  {
-    id: 'music_test', category: 'knowledge', weight: 9,
-    lines: { florian: '"You know who\'s spinning tonight?"', marko: '"What kind of music we play here?"', kai: '"Quick — name one DJ on the lineup."', silent: '*glances at a flyer on the wall, then back at you*', mira: '"Are you familiar with tonight\'s program?"' },
-    options: [
-      { text: () => `"${tonightsDJs?.headliner || 'Koze'} is headlining. Can't miss that set."`, score: 30, intel: 'dj_set' },
-      { text: '"I heard it\'s going to be good tonight."', score: 5 },
-      { text: '"I dunno, whatever\'s on."', score: -15 },
-    ],
-  },
-  {
-    id: 'confidence', category: 'vibe', weight: 7,
-    lines: { florian: '"You look like you want something."', marko: '"How bad do you want in?"', kai: '"Rate your energy 1 to 10."', silent: '*...the silence is deafening...*', mira: '"On a scale of 1-10, how would you rate your commitment to having a good evening?"' },
-    options: [
-      { text: '"We belong inside. Simple as that."', score: 15, trait: 'Big Energy' },
-      { text: '"Honestly? We\'ve been waiting and we\'re ready."', score: 10 },
-      { text: '"Please, man, we\'ve been out here forever."', score: -15 },
-    ],
-  },
-  {
-    id: 'style_check', category: 'appearance', weight: 8,
-    lines: { florian: '*scans your outfit slowly*', marko: '"You dressed for this?"', kai: '"Outfit check... hmm."', silent: '*eyes move slowly from head to toe and back*', mira: '*checks a dress code reference card* "Hmm."' },
-    options: [
-      { text: '*stands confidently, outfit on point*', score: 10, trait: 'Liquid Courage' },
-      { text: '"We tried our best."', score: 5 },
-      { text: '"What, you\'re a fashion critic now?"', score: -20 },
-    ],
   },
 ];
 
@@ -8116,7 +8320,6 @@ const BouncerSystem = {
   bouncer: null,
   messages: [],
   exchangeCount: 0,
-  maxExchanges: 4,
   approval: 0,
   threshold: 40,
   timer: null,
@@ -8129,7 +8332,7 @@ const BouncerSystem = {
 
   _buildSystemPrompt(venue) {
     const djs = tonightsDJs || { headliner: 'Koze', support: ['DJ Synthax'] };
-    const secrets = tonightsSecrets || { facts: {}, password: 'Systematic Review', ownerName: 'Viktor', vipName: 'Regulaido' };
+    const secrets = tonightsSecrets || { facts: {}, password: null, ownerName: 'Viktor', vipName: 'Regulaido' };
     const squadDesc = state.finalSquad.length > 0
       ? `a group of ${state.finalSquad.length + 1} people`
       : 'one person, alone';
@@ -8265,7 +8468,6 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
       generateTonightsSecrets(venue, this.bouncer);
     }
     this.threshold = VENUE_THRESHOLDS[venue?.policy || 'Easy'];
-    this.maxExchanges = venue?.policy === 'Easy' ? 4 : venue?.policy === 'Nightmare' ? 5 : 4;
     this.timerDuration = { Easy: 16000, Moderate: 13500, Ruthless: 10800, Nightmare: 8100 }[venue?.policy || 'Easy'];
 
     const styleBonus = this.calcStyleMatch(venue);
@@ -8491,9 +8693,13 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
     return el;
   },
 
-  async _bouncerSpeak(context) {
-    this.generating = true;
-    $('bouncer-send').disabled = true;
+  async _bouncerSpeak(context, options = {}) {
+    const internal = options.internal;
+    if (!internal && this.generating) return;
+    if (!internal) {
+      this.generating = true;
+      $('bouncer-send').disabled = true;
+    }
 
     const venue = VENUES.find(v => v.id === state.selectedVenue);
     const sysPrompt = this._buildSystemPrompt(venue);
@@ -8503,125 +8709,131 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
     let response = '';
     let bouncerToolCalls = [];
 
-    if (LLM.loaded) {
-      try {
+    try {
+      if (LLM.loaded) {
         const result = await LLM.chat([
           { role: 'system', content: sysPrompt },
           ...this.messages.slice(-10),
-        ], BOUNCER_TOOLS, 100);
+        ], BOUNCER_TOOLS, 100, `bouncer:${state.selectedVenue}:${this.bouncer.id}`);
         if (result) {
           response = result.text || '';
           bouncerToolCalls = result.toolCalls || [];
         }
-      } catch (e) { response = ''; }
-    }
+      }
 
-    if (!response) {
-      // Error fallback — LLM failed to generate
-      response = '*stares at you*';
-      if (this.exchangeCount >= 4) {
-        bouncerToolCalls.push({ function: { name: this.approval >= this.threshold ? 'let_in' : 'reject', arguments: {} } });
+      if (!response) {
+        // Error fallback — LLM failed to generate
+        response = '*stares at you*';
+        if (this.exchangeCount >= 4) {
+          bouncerToolCalls.push({ function: { name: this.approval >= this.threshold ? 'let_in' : 'reject', arguments: {} } });
+        }
+      }
+
+      // Parse tool calls — from native tool calling or text fallback
+      if (bouncerToolCalls.length === 0 && response) {
+        bouncerToolCalls = LLM._parseToolCalls(response);
+      }
+
+      const cleanText = response
+        ? LLM._stripToolText(response)
+        : '';
+
+      // Process tool calls
+      let hasLetIn = false, hasReject = false, hasBan = false, hasInspect = false;
+
+      for (const tc of bouncerToolCalls) {
+        const fn = tc.function?.name || tc.name;
+        let args = tc.function?.arguments || tc.arguments || {};
+        if (typeof args === 'string') {
+          try { args = JSON.parse(args); } catch (e) { args = {}; }
+        }
+        switch (fn) {
+          case 'approve': {
+            const delta = args.amount || 10;
+            this.approval = Math.min(120, this.approval + delta);
+            EventLog.add(`${PX.i('heart','#39ff14',10)} +${delta}: ${args.reason || 'good'}`, 'positive');
+            break;
+          }
+          case 'disapprove': {
+            const delta = args.amount || 10;
+            this.approval = Math.max(0, this.approval - delta);
+            EventLog.add(`${PX.i('skull','#ff4d6d',10)} -${delta}: ${args.reason || 'bad'}`, 'negative');
+            break;
+          }
+          case 'let_in': hasLetIn = true; break;
+          case 'reject': hasReject = true; break;
+          case 'ban': hasBan = true; break;
+          case 'inspect_bag': hasInspect = true; break;
+        }
+      }
+
+      $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
+      $('approval-score').textContent = this.approval;
+
+      this.messages.push({ role: 'assistant', content: response });
+
+      // Show bouncer's spoken line after full cleanup/parsing
+      if (cleanText) this._addBubble(cleanText, 'npc');
+
+      this.exchangeCount++;
+
+      // Handle INSPECT_BAG — show bag contents and let bouncer react
+      if (hasInspect) {
+        const bagItems = [];
+        Object.entries(state.inventory).forEach(([id, qty]) => {
+          if (qty > 0) {
+            const item = [...ITEMS, ...KIOSK_ITEMS].find(i => i.id === id);
+            bagItems.push(`${qty}x ${item?.name || id}`);
+          }
+        });
+        const bagDesc = bagItems.length > 0 ? bagItems.join(', ') : 'Nothing suspicious';
+        this._addBubble(`${PX.i('pack','#ebe4ff',12)} Bouncer inspects your bag: ${bagDesc}`, 'system-msg');
+        EventLog.add(`Bouncer checked your bag: ${bagDesc}`, 'info');
+
+        // Feed result back to bouncer
+        await sleep(1000);
+        const hasSubstances = Object.keys(state.inventory).some(id => ['glitter','turbo','nosecandy'].includes(id) && state.inventory[id] > 0);
+        const bagContext = hasSubstances
+          ? `*The bouncer finds suspicious substances in their bag: ${bagDesc}*`
+          : `*The bouncer checks the bag and finds: ${bagDesc}. Nothing suspicious.*`;
+        await this._bouncerSpeak(bagContext, { internal: true });
+        return;
+      }
+
+      // Handle final decisions
+      if (hasLetIn) {
+        this.finished = true;
+        await sleep(1000);
+        await this._handleVerdict(true);
+        return;
+      }
+      if (hasReject) {
+        this.finished = true;
+        await sleep(1000);
+        await this._handleVerdict(false);
+        return;
+      }
+      if (hasBan) {
+        this.finished = true;
+        this._addBubble(`${PX.i('skull','#ff0000',14)} BANNED from ${VENUES.find(v => v.id === state.selectedVenue)?.name || 'this venue'} tonight.`, 'system-msg negative');
+        EventLog.add('BANNED from this venue!', 'negative');
+        await sleep(2000);
+        await this._handleVerdict(false);
+        return;
+      }
+
+      // Start timer for player response
+      this._startTimer();
+      $('bouncer-input').focus();
+    } catch (e) {
+      console.error('Bouncer speak failed:', e);
+      EventLog.add('Bouncer response failed — try again', 'negative');
+    } finally {
+      if (!internal) {
+        this.generating = false;
+        $('bouncer-send').disabled = false;
       }
     }
-
-    // Parse tool calls — from native tool calling or Gemma call:function{...} text
-    if (bouncerToolCalls.length === 0 && response) {
-      bouncerToolCalls = LLM._parseToolCalls(response);
-    }
-
-    const cleanText = response
-      ? LLM._stripToolText(response)
-      : '';
-
-    // Process tool calls
-    let hasLetIn = false, hasReject = false, hasBan = false, hasInspect = false;
-
-    for (const tc of bouncerToolCalls) {
-      const fn = tc.function?.name || tc.name;
-      let args = tc.function?.arguments || tc.arguments || {};
-      if (typeof args === 'string') {
-        try { args = JSON.parse(args); } catch (e) { args = {}; }
-      }
-      switch (fn) {
-        case 'approve': {
-          const delta = args.amount || 10;
-          this.approval = Math.min(120, this.approval + delta);
-          EventLog.add(`${PX.i('heart','#39ff14',10)} +${delta}: ${args.reason || 'good'}`, 'positive');
-          break;
-        }
-        case 'disapprove': {
-          const delta = args.amount || 10;
-          this.approval = Math.max(0, this.approval - delta);
-          EventLog.add(`${PX.i('skull','#ff4d6d',10)} -${delta}: ${args.reason || 'bad'}`, 'negative');
-          break;
-        }
-        case 'let_in': hasLetIn = true; break;
-        case 'reject': hasReject = true; break;
-        case 'ban': hasBan = true; break;
-        case 'inspect_bag': hasInspect = true; break;
-      }
-    }
-
-    $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
-    $('approval-score').textContent = this.approval;
-
-    this.messages.push({ role: 'assistant', content: response });
-
-    // Show bouncer's spoken line after full cleanup/parsing
-    if (cleanText) this._addBubble(cleanText, 'npc');
-
-    this.exchangeCount++;
-    this.generating = false;
-    $('bouncer-send').disabled = false;
-
-    // Handle INSPECT_BAG — show bag contents and let bouncer react
-    if (hasInspect) {
-      const bagItems = [];
-      Object.entries(state.inventory).forEach(([id, qty]) => {
-        if (qty > 0) {
-          const item = [...ITEMS, ...KIOSK_ITEMS].find(i => i.id === id);
-          bagItems.push(`${qty}x ${item?.name || id}`);
-        }
-      });
-      const bagDesc = bagItems.length > 0 ? bagItems.join(', ') : 'Nothing suspicious';
-      this._addBubble(`${PX.i('pack','#ebe4ff',12)} Bouncer inspects your bag: ${bagDesc}`, 'system-msg');
-      EventLog.add(`Bouncer checked your bag: ${bagDesc}`, 'info');
-
-      // Feed result back to bouncer
-      await sleep(1000);
-      const hasSubstances = Object.keys(state.inventory).some(id => ['glitter','turbo','nosecandy'].includes(id) && state.inventory[id] > 0);
-      const bagContext = hasSubstances
-        ? `*The bouncer finds suspicious substances in their bag: ${bagDesc}*`
-        : `*The bouncer checks the bag and finds: ${bagDesc}. Nothing suspicious.*`;
-      await this._bouncerSpeak(bagContext);
-      return;
-    }
-
-    // Handle final decisions
-    if (hasLetIn) {
-      this.finished = true;
-      await sleep(1000);
-      await this._handleVerdict(true);
-      return;
-    }
-    if (hasReject) {
-      this.finished = true;
-      await sleep(1000);
-      await this._handleVerdict(false);
-      return;
-    }
-    if (hasBan) {
-      this.finished = true;
-      this._addBubble(`${PX.i('skull','#ff0000',14)} BANNED from ${VENUES.find(v => v.id === state.selectedVenue)?.name || 'this venue'} tonight.`, 'system-msg negative');
-      EventLog.add('BANNED from this venue!', 'negative');
-      await sleep(2000);
-      await this._handleVerdict(false);
-      return;
-    }
-
-    // Start timer for player response
-    this._startTimer();
-    $('bouncer-input').focus();
   },
 
   _startTimer() {
@@ -8638,7 +8850,14 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
       if (this.finished || this.generating) return;
       this._addBubble('*silence*', 'player');
       EventLog.add('Said nothing to the bouncer...', 'negative');
-      this._bouncerSpeak('*the player says nothing and just stares awkwardly*');
+      this.approval = Math.max(0, this.approval - 15);
+      $('approval-fill').style.width = Math.min(this.approval, 100) + '%';
+      $('approval-score').textContent = this.approval;
+      EventLog.add(`${PX.i('skull','#ff4d6d',10)} -15: awkward silence`, 'negative');
+      this._bouncerSpeak('*the player says nothing and just stares awkwardly*').catch(e => {
+        console.error('Bouncer speak failed:', e);
+        EventLog.add('Bouncer response failed — try again', 'negative');
+      });
     }, this.timerDuration);
   },
 
@@ -8708,11 +8927,15 @@ INTERJECTIONS: Sometimes other people chime in — friends in the group or someo
       await sleep(800);
     }
 
-    this._bouncerSpeak(fullContext);
+    this._bouncerSpeak(fullContext).catch(e => {
+      console.error('Bouncer speak failed:', e);
+      EventLog.add('Bouncer response failed — try again', 'negative');
+    });
   },
 
   async _handleVerdict(success) {
     const venue = VENUES.find(v => v.id === state.selectedVenue);
+    if (this.bouncer?.id) LLM.disposeCache(`bouncer:${state.selectedVenue}:${this.bouncer.id}`);
 
     if (success) {
       this._addBubble(`*${this.bouncer.name} steps aside. The heavy door swings open.*`, 'system-msg');
@@ -9182,6 +9405,7 @@ const UseItemSystem = {
 async function enterQueue() {
   state.phase = 'LOADING';
   $('flake-overlay').classList.remove('active');
+  LLM.disposeAllCaches();
 
   const venue = VENUES.find(v => v.id === state.selectedVenue);
   const cfg = QUEUE_CONFIG[venue?.policy || 'Easy'];
@@ -9238,20 +9462,37 @@ async function enterQueue() {
 
   // Show loading overlay
   $('loading-overlay').classList.add('active');
-  $('loading-fill').style.width = '0%';
   $('loading-status').textContent = 'Initializing AI...';
+  renderLoadingQueue(0);
 
   // Load LLM
+  state.llm.loadFailed = false;
   if (!LLM.loaded) {
     try {
-      await LLM.load((pct, file) => {
-        $('loading-fill').style.width = pct + '%';
-        $('loading-status').textContent = pct < 100 ? `${pct}% — ${file.split('/').pop() || 'downloading...'}` : 'Ready!';
+      const fmtDuration = (ms) => {
+        const s = Math.max(0, Math.round(ms / 1000));
+        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      };
+      const fmtGB = (bytes) => (bytes / 1e9).toFixed(2);
+      await LLM.load((pct, info) => {
+        renderLoadingQueue(pct);
+        if (pct >= 100 || !info) {
+          $('loading-status').textContent = pct >= 100 ? 'Ready!' : 'Warming up...';
+          return;
+        }
+        // ETA stabilizes once a few seconds of throughput data exist
+        const eta = info.elapsedMs > 3000 && info.remainingMs != null
+          ? ` · ~${fmtDuration(info.remainingMs)} left`
+          : '';
+        $('loading-status').textContent =
+          `${pct}% · ${fmtGB(info.loadedBytes)} / ${fmtGB(info.totalBytes)} GB · ${fmtDuration(info.elapsedMs)} elapsed${eta}`;
       });
       state.llm.loaded = true;
+      renderLoadingQueue(100);
     } catch (e) {
       console.warn('LLM failed to load:', e);
-      $('loading-status').textContent = 'AI failed to load — retrying next time';
+      state.llm.loadFailed = true;
+      $('loading-status').textContent = 'Bonsai model failed to load — retrying next time';
       await sleep(1500);
     }
   }
@@ -9296,6 +9537,10 @@ function startQueuePhase(venue, cfg) {
   SaveSystem.save(prog);
 
   EventLog.add(`Arrived outside ${venue.name}. Position ${cfg.startPos} in line.`, 'info');
+  if (state.llm.loadFailed) {
+    showToast('AI model could not load — NPC dialogue will be limited', 4500);
+    EventLog.add('AI model failed to load. Neighbor and bouncer chat will use fallbacks.', 'negative');
+  }
   EventLog.add(`You don't know who's playing or what the password is. Talk to people to find out.`, 'info');
   if (state.finalSquad.length > 0) {
     EventLog.add(`Squad: ${state.finalSquad.map(s => s.name).join(', ')}`, 'info');
@@ -9314,6 +9559,7 @@ function restartPlanning() {
   state.selectedSquad = [];
   state.inventory = {};
   state.finalSquad = [];
+  LLM.disposeAllCaches();
 
   // Apply progression
   SaveSystem.applyToState();
@@ -9366,6 +9612,8 @@ function init() {
   $('act-icon-crew').innerHTML = PX.i('people', '#7b75ff', 22);
   $('act-icon-eavesdrop').innerHTML = PX.i('ear', '#57f2ff', 22);
   $('act-icon-scout').innerHTML = PX.i('eye', '#39ff14', 22);
+  $('act-icon-flirt').innerHTML = PX.i('heart', '#ff69b4', 22);
+  $('act-icon-alliance').innerHTML = PX.i('hand', '#7b75ff', 22);
   $('log-icon').innerHTML = PX.i('scroll', '#ebe4ff', 12);
   $('mute-icon').innerHTML = PX.i('sound', '#ebe4ff', 18);
   $('battery-icon').innerHTML = PX.i('bolt', '#ebe4ff', 10);
@@ -9401,7 +9649,7 @@ function init() {
     const dx = e.changedTouches[0].clientX - touchStartX;
     const dy = e.changedTouches[0].clientY - touchStartY;
     if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
-      if (dx < 0 && state.currentTab < 2) switchTab(state.currentTab + 1);
+      if (dx < 0 && state.currentTab < 3) switchTab(state.currentTab + 1);
       if (dx > 0 && state.currentTab > 0) switchTab(state.currentTab - 1);
     }
   }, { passive: true });
@@ -9517,6 +9765,14 @@ function init() {
   $('act-scout').addEventListener('click', () => {
     if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
     SocialActions.scoutDoor();
+  });
+  $('act-flirt').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    SocialActions.flirt();
+  });
+  $('act-alliance').addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    SocialActions.formAlliance();
   });
 
   // Phase 1: Chat input
