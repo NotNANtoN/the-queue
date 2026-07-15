@@ -22,6 +22,8 @@ Each venue has:
 | Mainframe Basement | Easy | Deep House 122 BPM | Dark Minimal |
 | The Compliance Vault | Moderate | Techno 136 BPM | All Black, No Logos |
 | Neon Pharmacy | Moderate | Drum & Bass 174 BPM | Streetwear / Eccentric |
+| Sisyphos | Easy | Deep House 120 BPM | Anything Goes (vibe check) |
+| Südpol | Moderate | Techno 130 BPM | Vibe Over Fashion (vibe check) |
 
 #### Unlockable Venues (After Completing Earlier Ones)
 | Venue | Policy | Music | Dress Bias |
@@ -29,6 +31,8 @@ Each venue has:
 | The Boardroom Penthouse | Ruthless | Tech-House 128 BPM | Smart Casual, Watches |
 | Florian's Private Members | Ruthless | Minimal Techno 132 BPM | Invite-Only Aura |
 | The Audit Chamber | Nightmare | Industrial 145 BPM | Full Uniform or Nothing |
+
+*(8 venues total.)*
 
 ### Tab 2: Squad Assembly
 
@@ -48,6 +52,23 @@ Each contact has:
   - *The Fashionista*: Doubles your squad's Style Match score, but refuses to go to venues below "Moderate" policy.
   - *Chaos Agent*: Triggers bonus random events in line (can be good or bad). Unpredictable.
   - *The Insider*: Starts the queue phase with one free piece of Intel already revealed.
+  - *The Dealer (Dex)*: Starts with a random kiosk substance in inventory.
+  - *The Diplomat (Yuki)*: −25% anxiety gains for the whole squad while present.
+  - *The Local Legend (Niko)*: +15 starting bouncer approval.
+  - *The Networker (Priya)*: +50% bond gains on successful runs.
+  - *The Shadow (Ghost)*: Invisible to bouncers — doesn't count toward group size.
+  - *The Algorithm (Jasper)*: Narrows queue movement variance (more predictable waits).
+  - *The Photographer (Zara)*: +1 reputation on successful runs (capped with base rep gain).
+
+#### Wardrobe perks (when equipped)
+- *Lucky Charm*: −5% flake rate during the pre-queue roll.
+- *Hip Flask*: +morale for all squad members at queue start.
+- *Instant Camera (Polaroid)*: +50% bond gains on successful runs (stacks with Priya).
+
+#### Item notes
+- *Earplugs*: passive −40% anxiety gain while owned; active use consumes them and halves anxiety gains for the rest of the night.
+- *Fake VIP Wristband*: visible to the bouncer; can be shown during the door phase (risky).
+- *Rissal's starter kit*: gum + lighter granted at queue start when Rissal is in the final squad.
 
 #### The Flake Roll
 After you confirm your squad and venue, the game does a "loading" animation ("Friday 11:30 PM — Meeting Point"). During this, each contact's Flake Rating is rolled. If they flake:
@@ -181,24 +202,28 @@ Each venue has a pool of possible bouncers. One is randomly selected per run.
 | The Silent One | Says almost nothing, just stares | Evaluates pure Style Match score | No dialogue helps — it's all appearance |
 | Desk Lady Mira | Clipboard, guest list pretense | Name on the list (requires Promoter or Insider intel) | Rejects anyone who argues |
 
-### The Dialogue Duel
+### The Dialogue Duel (Free-Text LLM + Tools)
 
-A timed conversation with 3–5 exchanges. Each exchange:
-1. Bouncer says something or asks a question.
-2. You get 3 response options (one correct, one neutral, one bad).
-3. Timer runs (4–8 seconds depending on difficulty). No response = worst outcome.
+The bouncer phase is a timed, free-text conversation powered by the on-device LLM. There are no multiple-choice buttons — you type what you say, and the bouncer responds in character.
 
-**Scoring**: Each exchange adds or removes points from a hidden "Approval Meter."
-- Correct answer (using Intel): +30
-- Neutral answer: +5
-- Bad answer: -20
-- No answer (timeout): -15
+**Flow:**
+1. Bouncer speaks first (mood/backstory + opening line).
+2. You reply in free text under a policy-based timer (Easy ≈ 16s, Nightmare ≈ 8s per turn).
+3. The model uses structured **tool calls** (not bracket tags): `approve`, `disapprove`, `inspect_bag`, `let_in`, `reject`, `ban`.
+4. Every bouncer turn must include `approve` or `disapprove` (typically ±5–35 approval).
+5. Conversation ends when the bouncer calls `let_in`, `reject`, or `ban` — usually within 3–5 exchanges.
 
-**Threshold**: You need to reach a venue-specific approval score to get in.
-- Easy venue: 40 points needed (2 correct answers out of 4 is enough)
-- Moderate: 60 points
-- Ruthless: 85 points (basically need Intel for every exchange)
-- Nightmare: 100 points (need perfect dialogue + max Style Match)
+**Approval meter:** Starts from Style Match bonus + queue traits (Charmer, Scout Intel, Niko's +15, etc.). You need to reach a venue-specific threshold:
+- Easy: 40 · Moderate: 60 · Ruthless: 85 · Nightmare: 100  
+(Pia in squad eases the effective tier by one step for threshold and timer.)
+
+**Intel in dialogue:** Facts learned in line (password, headliner, bouncer name, dress tips, etc.) are injected into the bouncer system prompt as true intel the player *may* mention. Street Cred, Insider Info, and Scout Intel traits also appear in what the bouncer "sees."
+
+**Interjections:** Queue allies can vouch; squad members can chime in. The bouncer reacts to these in-character.
+
+**Items at the door:** Bag contents are visible on `inspect_bag`. Fake VIP wristband can be shown via the inventory button — prompt-level only, no extra tools.
+
+**Silence:** Letting the timer expire counts as awkward silence (−15 approval).
 
 ### Style Match Bonus
 Before dialogue starts, the bouncer silently evaluates your squad's combined Style Tags against the venue's Dress Code Bias. This gives you a starting bonus:
@@ -214,36 +239,17 @@ Before dialogue starts, the bouncer silently evaluates your squad's combined Sty
 
 Florian: "Names?"
 
-  A) "We're on the list under DJ Synthax's crew." [REQUIRES INTEL]
-     → +30 (his eyebrow raises slightly, he checks the clipboard)
+You type: "We're here for DJ Synthax's set — Synthax crew."
 
-  B) "Anton, Rissal, and Pia."
-     → +5 (neutral, he doesn't care about your actual names)
-
-  C) "Does it matter? Just let us in, it's freezing."
-     → -20 (he hates impatience)
+→ LLM may approve +20 if intel matches; disapprove if tone is off.
 
 [Beat. He looks at your shoes.]
 
-Florian: "Interesting choice of footwear."
+You type: "Berlin vintage boots — bit bold for tonight, but we know the password."
 
-  A) [If wearing dark boots]: "Thanks. Berlin vintage." → +10
-  B) [If wearing white sneakers + no intel]: "What about them?" → -15
-  C) [If wearing white sneakers + HAVE INTEL about shoe bias]:
-     "Yeah, I know — bit bold for tonight. But Synthax vouched for us." → +15 (intel override)
+→ Style + intel in natural language; bouncer tools adjust approval.
 
-[Final exchange]
-
-Florian: "Why should I let you in?"
-
-  A) "Because we actually know the residents playing tonight." [REQUIRES INTEL about lineup]
-     → +30
-
-  B) "We just want to dance, man."
-     → +5
-
-  C) "Do you know who I am?"
-     → -25 (instant fail with Florian)
+[Final exchange — bouncer calls let_in or reject when convinced.]
 ```
 
 ### Outcome
@@ -268,8 +274,8 @@ Florian: "Why should I let you in?"
 
 ### Between Runs ("The Week")
 - New contacts may appear in your phone (unlocked by successful entries or random events).
-- Your "Reputation" grows with each successful entry → better starting Hope, more item budget.
-- Failed attempts still grant XP toward unlocking new contacts.
+- **Reputation** grows with each run (+3 success / +1 failure, +1 more with Zara on success). Higher rep unlocks better **jobs** (weekly pay), new contacts, and contributes to venue/contact unlock gates — it does **not** directly boost starting Hope.
+- Failed attempts still grant rep and small bond gains.
 - Certain contacts are only available after you've entered specific venues.
 
 ### Difficulty Scaling
@@ -277,15 +283,15 @@ Florian: "Why should I let you in?"
 - The queue itself gets longer and has more negative events at higher tiers.
 
 ### Win Condition (MVP)
-Successfully enter all 6 venues at least once. The final venue ("The Audit Chamber") is the ultimate challenge — a gauntlet that requires a perfect crew, full Intel, and flawless dialogue.
+Successfully enter all 8 venues at least once. The final venue ("The Audit Chamber") is the ultimate challenge — a gauntlet that requires a strong crew, solid intel, and a convincing door conversation.
 
 ---
 
 ## Tech Notes (Implementation)
 
-- **Single `index.html` file**, same philosophy as Turbo Kart.
-- **No 3D engine needed** — this is UI-driven with CSS transitions, canvas for the queue visualization, and Web Audio for the soundscape.
-- **State machine**: `PLANNING → FLAKE_ROLL → QUEUE → BOUNCER → RESULT`
-- **Procedural generation**: Neighbors, events, and bouncer selection are randomized per run.
-- **Audio**: Procedural synth kick loop with dynamic lowpass filter is the sonic backbone. Simple to implement with Web Audio API oscillators (similar to Turbo Kart's music system).
-- **Save state**: `localStorage` for unlocked venues, contacts, reputation, and cash.
+- **Classic scripts** under `js/`, loaded in order by `index.html` (shared global scope, no modules).
+- **No 3D engine** — UI-driven with CSS transitions, canvas for queue/bouncer/club visuals, Web Audio for soundscape.
+- **State machine**: `BOOT → PLANNING → FLAKE_ROLL → LOADING → QUEUE → BOUNCER → CLUB → RESULT` (then back to `PLANNING`).
+- **Procedural generation**: Neighbors, events, DJ lineup, and bouncer (deterministic per venue per run) are randomized per night.
+- **Audio**: Procedural synth kick loop with dynamic lowpass filter.
+- **Save state**: `localStorage` for unlocked venues, contacts, reputation, bonds, wardrobe, and cash.

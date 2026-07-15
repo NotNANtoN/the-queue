@@ -4,15 +4,8 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 function loadLlmParser() {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const start = html.indexOf('const LLM = {');
-  const endMarker = '\n// ============================================================\n// GROUP CHAT BANTER';
-  const end = html.indexOf(endMarker, start);
-
-  assert.notEqual(start, -1, 'Could not find LLM object in index.html');
-  assert.notEqual(end, -1, 'Could not find end of LLM object in index.html');
-
-  const source = html.slice(start, end).replace('const LLM =', 'var LLM =');
+  const source = readFileSync(new URL('../js/llm.js', import.meta.url), 'utf8')
+    .replace('const LLM =', 'var LLM =');
   const context = { console };
   vm.createContext(context);
   vm.runInContext(`${source}\nLLM;`, context);
@@ -77,6 +70,17 @@ test('parses and strips supported tool call formats', () => {
     assert.equal(clean, testCase.expectedClean, testCase.name);
     assert.equal(clean.includes(testCase.expectedName), false, testCase.name);
   }
+});
+
+test('parses qwen3 tool call with non-strict JSON (+5 delta, trailing comma)', () => {
+  const raw = 'Nice jacket! <tool_call>\n{"name": "change_affinity", "arguments": {"delta": +5,}}\n</tool_call>';
+  const calls = LLM._parseToolCalls(raw);
+  const clean = LLM._stripToolText(raw);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].function.name, 'change_affinity');
+  assert.deepEqual(plain(calls[0].function.arguments), { delta: 5 });
+  assert.equal(clean, 'Nice jacket!');
 });
 
 test('parses two sequential qwen3 tool call blocks', () => {

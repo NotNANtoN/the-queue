@@ -8,25 +8,35 @@ import vm from 'node:vm';
 const MODEL = 'onnx-community/Ternary-Bonsai-8B-ONNX';
 const SKIP_GENERATION = process.argv.includes('--skip-generation');
 
-function loadFromIndexHtml(startMarker, endMarker, exportExpr) {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const start = html.indexOf(startMarker);
-  const end = html.indexOf(endMarker, start);
-  if (start === -1 || end === -1) throw new Error(`Could not extract ${exportExpr} from index.html`);
-  const source = html.slice(start, end).replace(/^const /, 'var ');
+function loadFromJsFile(file, startMarker, endMarker, exportExpr, replaceExpr = null) {
+  const full = readFileSync(new URL(`../js/${file}`, import.meta.url), 'utf8');
+  const start = full.indexOf(startMarker);
+  const end = endMarker ? full.indexOf(endMarker, start) : full.length;
+  if (start === -1 || (endMarker && end === -1)) throw new Error(`Could not extract ${exportExpr} from js/${file}`);
+  let source = full.slice(start, end);
+  if (replaceExpr) {
+    source = source.replace(replaceExpr, 'var ');
+  } else {
+    source = source.replace(/^const /, 'var ');
+  }
   const context = { console };
   vm.createContext(context);
   vm.runInContext(`${source}\n${exportExpr};`, context);
   return context[exportExpr];
 }
 
-const LLM = loadFromIndexHtml(
-  'const LLM = {',
-  '\n// ============================================================\n// GROUP CHAT BANTER',
-  'LLM',
-);
-const NEIGHBOR_TOOLS = loadFromIndexHtml('const NEIGHBOR_TOOLS = [', '\nconst CREW_TOOLS', 'NEIGHBOR_TOOLS');
-const BOUNCER_TOOLS = loadFromIndexHtml('const BOUNCER_TOOLS = [', '\n// ============================================================\n// LLM ENGINE', 'BOUNCER_TOOLS');
+function loadLlm() {
+  const source = readFileSync(new URL('../js/llm.js', import.meta.url), 'utf8')
+    .replace('const LLM =', 'var LLM =');
+  const context = { console };
+  vm.createContext(context);
+  vm.runInContext(`${source}\nLLM;`, context);
+  return context.LLM;
+}
+
+const LLM = loadLlm();
+const NEIGHBOR_TOOLS = loadFromJsFile('llm.js', 'const NEIGHBOR_TOOLS = [', '\nconst CREW_TOOLS', 'NEIGHBOR_TOOLS');
+const BOUNCER_TOOLS = loadFromJsFile('llm.js', 'const BOUNCER_TOOLS = [', '\nconst ALL_TOOL_NAMES', 'BOUNCER_TOOLS');
 
 const NEIGHBOR_MESSAGES = [
   {
@@ -74,7 +84,10 @@ if (SKIP_GENERATION) {
   console.log('\n(skipping generation — --skip-generation)');
 } else {
   console.log(`\n=== Part B: generation (CPU, this may take a few minutes) ===\n`);
+  // onnxruntime-node's CPU EP lacks 2-bit MatMulNBits kernels; webgpu matches the game.
+  const device = process.argv.includes('--webgpu') ? 'webgpu' : undefined;
   const generator = await pipeline('text-generation', MODEL, {
+    ...(device ? { device } : {}),
     dtype: 'q2f16',
     progress_callback: (p) => {
       if (p.status === 'progress' && p.total && p.file?.endsWith('.onnx_data')) {
