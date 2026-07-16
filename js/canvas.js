@@ -706,11 +706,14 @@ const QueueCanvas = {
         const ry = geo.ry;
         const glowRx = geo.rx + pulse * 3;
         const glowRy = ry + pulse * 2;
-        ctx.fillStyle = `rgba(255,216,107,${0.05 + pulse * 0.06})`;
+        const neighbor = idx === frontIdx ? state.queue.neighborFront : state.queue.neighborBack;
+        const isRegular = !!neighbor?.isRegular;
+        const markerColor = isRegular ? '87,242,255' : '255,216,107';
+        ctx.fillStyle = `rgba(${markerColor},${0.05 + pulse * 0.06})`;
         ctx.beginPath();
         ctx.ellipse(cx, cy, glowRx, glowRy, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = `rgba(255,216,107,${0.35 + pulse * 0.35})`;
+        ctx.strokeStyle = `rgba(${markerColor},${0.35 + pulse * 0.35})`;
         ctx.lineWidth = 1 + pulse * 0.8;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
@@ -718,7 +721,6 @@ const QueueCanvas = {
         ctx.stroke();
         ctx.setLineDash([]);
         // Portrait + "Talk?" label above talkable neighbors
-        const neighbor = idx === frontIdx ? state.queue.neighborFront : state.queue.neighborBack;
         if (neighbor?.portrait && !this._portraitCache) this._portraitCache = {};
         if (neighbor?.portrait) {
           const cacheKey = neighbor.name + '_' + idx;
@@ -733,15 +735,16 @@ const QueueCanvas = {
             const px = cx - ps / 2;
             const py = cy - ry - ps - 8;
             // Border
-            ctx.fillStyle = 'rgba(255,216,107,0.3)';
+            ctx.fillStyle = `rgba(${markerColor},0.3)`;
             ctx.fillRect(px - 2, py - 2, ps + 4, ps + 4);
             ctx.drawImage(img, px, py, ps, ps);
           }
         }
-        ctx.fillStyle = `rgba(255,216,107,${0.55 + pulse * 0.2})`;
+        ctx.fillStyle = `rgba(${markerColor},${0.55 + pulse * 0.2})`;
         ctx.font = `700 ${8}px ${getComputedStyle(document.body).fontFamily}`;
         ctx.textAlign = 'center';
-        ctx.fillText(idx === frontIdx ? '💬 Talk' : '🗣️ Talk', cx, cy - ry - 4);
+        const label = idx === frontIdx ? (isRegular ? '💬 Regular' : '💬 Talk') : (isRegular ? '🗣️ Regular' : '🗣️ Talk');
+        ctx.fillText(label, cx, cy - ry - 4);
       }
     });
 

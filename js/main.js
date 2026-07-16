@@ -33,6 +33,7 @@ function resetRunState() {
   state.queue.behindNeighbors = [];
   state.queue.allyData = null;
   state.queue.earplugsActive = false;
+  state.queue.regularSpawnedThisRun = false;
   state.contactUnlockedThisRun = false;
 
   LLM.disposeAllCaches();
@@ -538,6 +539,10 @@ function init() {
     $('mute-icon').innerHTML = PX.i(state.muted ? 'mute' : 'sound', '#ebe4ff', 18);
   });
   $('debug-clear')?.addEventListener('click', () => Debug.clear());
+  $('codex-btn')?.addEventListener('click', () => CodexSystem.toggle());
+  $('codex-overlay')?.addEventListener('click', (e) => {
+    if (e.target === $('codex-overlay')) CodexSystem.close();
+  });
   $('debug-reset-save')?.addEventListener('click', () => {
     if (confirm('Reset all saved progress? This cannot be undone.')) {
       SaveSystem.clear();

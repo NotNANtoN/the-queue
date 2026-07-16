@@ -164,6 +164,86 @@ function weightedPick(items, weights) {
 const SUBSTANCE_POOL = ['glitter', 'turbo', 'nosecandy'];
 
 function generateNeighbor(venueId, existingIntel) {
+  const progress = SaveSystem.load();
+  const regulars = progress.regulars || {};
+  const venueRegulars = Object.values(regulars).filter(r => r.homeVenueId === venueId);
+  const canSpawnRegular = !state.queue.regularSpawnedThisRun
+    && venueRegulars.length > 0
+    && Math.random() < 0.4;
+
+  if (canSpawnRegular) {
+    const regular = venueRegulars[Math.floor(Math.random() * venueRegulars.length)];
+    state.queue.regularSpawnedThisRun = true;
+    const runNumber = (progress.totalRuns || 0) + 1;
+    const absentRuns = Math.max(0, runNumber - (regular.lastSeenRun || runNumber) - 1);
+    let affinity = regular.affinityCarry || 50;
+    for (let i = 0; i < absentRuns; i++) {
+      if (affinity > 50) affinity = Math.max(50, affinity - 10);
+      else if (affinity < 50) affinity = Math.min(50, affinity + 10);
+    }
+
+    const disp = regular.disposition || 'neutral';
+    const quirk = regular.quirk || 'is here for the first time';
+    const adjectives = regular.adjectives && regular.adjectives.length >= 2
+      ? regular.adjectives
+      : ['average', 'normal'];
+    const adj1 = adjectives[0], adj2 = adjectives[1];
+
+    const available = getIntelPool().filter(i => !existingIntel.includes(i.key));
+    let intel = null;
+    const items = [];
+    const wants = [];
+    let money = 0;
+    let hasSubstance = null;
+
+    switch (disp) {
+      case 'friendly':
+        intel = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+        if (Math.random() < 0.5) items.push(TRADEABLE_ITEMS[Math.floor(Math.random() * TRADEABLE_ITEMS.length)]);
+        money = Math.random() < 0.2 ? 5 : 0;
+        break;
+      case 'drunk':
+        intel = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+        hasSubstance = Math.random() < 0.5 ? SUBSTANCE_POOL[Math.floor(Math.random() * SUBSTANCE_POOL.length)] : null;
+        items.push('lighter');
+        money = 5 + Math.floor(Math.random() * 15);
+        break;
+      case 'hostile':
+        intel = available.length > 0 ? available[0] : null;
+        wants.push(TRADEABLE_ITEMS[Math.floor(Math.random() * 3)]);
+        if (Math.random() < 0.4) hasSubstance = SUBSTANCE_POOL[Math.floor(Math.random() * SUBSTANCE_POOL.length)];
+        money = Math.random() < 0.3 ? 10 + Math.floor(Math.random() * 10) : 0;
+        break;
+      case 'anxious':
+        intel = Math.random() < 0.7 && available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+        if (Math.random() < 0.5) items.push('gum');
+        hasSubstance = Math.random() < 0.3 ? 'turbo' : null;
+        break;
+      default:
+        intel = Math.random() < 0.5 && available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+        money = 5 + Math.floor(Math.random() * 20);
+        if (Math.random() < 0.5) items.push(TRADEABLE_ITEMS[Math.floor(Math.random() * TRADEABLE_ITEMS.length)]);
+        wants.push(TRADEABLE_ITEMS[Math.floor(Math.random() * TRADEABLE_ITEMS.length)]);
+        break;
+    }
+
+    const portraitProps = regular.portraitProps || Portrait.randomProps();
+    const portrait = Portrait.generate(portraitProps, disp, []);
+
+    return {
+      memoryId: regular.id, name: regular.name, disposition: disp, color: DISP_COLORS[disp],
+      intel, items, wants, money, hasSubstance, quirk,
+      initials: regular.name[0], chatHistory: [],
+      portraitProps, portrait,
+      affinity: Math.round(affinity),
+      canUnlock: Math.random() < 0.25,
+      adjectives: [adj1, adj2],
+      desc: `A ${adj1}, ${adj2} person`,
+      isRegular: true,
+      regularId: regular.id,
+    };
+  }
+
   const name = NEIGHBOR_NAMES[Math.floor(Math.random() * NEIGHBOR_NAMES.length)];
   const memoryId = 'stranger_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
   const disp = weightedPick(DISPOSITIONS, DISP_WEIGHTS);
@@ -240,6 +320,7 @@ function buildNeighborSystemPrompt(neighbor, venue) {
   let prompt = `You are ${neighbor.name}, a ${neighbor.adjectives?.[0] || 'average'}, ${neighbor.adjectives?.[1] || 'normal'} person standing in line outside ${venue.name}, a ${venue.music} club.
 You are having a casual conversation with a stranger (the player) who is standing next to you in the queue.
 Your secret backstory (reveal naturally through conversation, don't dump it): you ${neighbor.quirk}.
+${neighbor.isRegular ? '\nYou have met the player before in this queue — you genuinely remember them. Reference shared history naturally; you are not a stranger to each other anymore.\n' : ''}
 
 YOUR PERSONALITY: ${neighbor.disposition === 'friendly' ? 'You are warm and chatty. You enjoy making conversation with strangers. You like helping people.' :
 neighbor.disposition === 'drunk' ? 'You are tipsy and loose-lipped. You talk too much and share things easily. Your speech is slightly slurred and enthusiastic. You love everyone right now.' :

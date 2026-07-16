@@ -2,7 +2,7 @@
 // SAVE / PROGRESSION SYSTEM
 // ============================================================
 
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 const SaveSystem = {
   KEY: 'thequeue_save_v1',
@@ -55,6 +55,9 @@ const SaveSystem = {
       venueVisits: {},
       contactMemories: {},
       strangerMemories: {},
+      regulars: {},
+      currentStreak: 0,
+      bestStreak: 0,
     };
   },
 
@@ -68,6 +71,9 @@ const SaveSystem = {
           console.warn(`Save version ${parsed.version} is newer than supported ${SAVE_VERSION}; using defaults.`);
           return this.defaultProgress();
         }
+        if (parsed.version < SAVE_VERSION) {
+          this._migrate(parsed);
+        }
         const p = { ...this.defaultProgress(), ...parsed };
         this.dedupeVenuesCleared(p);
         return p;
@@ -79,6 +85,71 @@ const SaveSystem = {
   dedupeVenuesCleared(progress) {
     if (!progress?.venuesCleared) return;
     progress.venuesCleared = [...new Set(progress.venuesCleared)];
+  },
+
+  _slug(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  },
+
+  _seededPortraitProps(seedStr) {
+    let h = 2166136261;
+    for (let i = 0; i < seedStr.length; i++) {
+      h ^= seedStr.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const rng = () => {
+      h = Math.imul(h ^ (h >>> 15), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      h ^= h >>> 16;
+      return ((h >>> 0) % 100000) / 100000;
+    };
+    const pick = (a) => a[Math.floor(rng() * a.length)];
+    return {
+      skin: pick(Portrait.SKINS),
+      hairColor: pick(Portrait.HAIRS),
+      hairStyle: pick(Portrait.HAIR_STYLES),
+      shirtColor: pick(Portrait.SHIRTS),
+      accessory: pick(Portrait.ACCESSORIES),
+      faceWidth: 6 + Math.floor(rng() * 3),
+      faceHeight: 7 + Math.floor(rng() * 3),
+      eyeSpacing: 3 + Math.floor(rng() * 2),
+      noseSize: rng() < 0.5 ? 1 : 2,
+      earSize: 1 + Math.floor(rng() * 2),
+      seed: rng(),
+    };
+  },
+
+  _migrate(progress) {
+    if (progress.version < 2) this._migrateV1toV2(progress);
+    progress.version = SAVE_VERSION;
+  },
+
+  _migrateV1toV2(progress) {
+    progress.regulars = progress.regulars || {};
+    progress.currentStreak = progress.currentStreak || 0;
+    progress.bestStreak = progress.bestStreak || 0;
+    progress.strangerMemories = progress.strangerMemories || {};
+    let counter = 0;
+    for (const [oldKey, entry] of Object.entries(progress.strangerMemories)) {
+      if (!entry || !entry.name) continue;
+      const slug = this._slug(entry.name);
+      const regularId = 'regular_' + slug + '_' + (++counter);
+      const venueId = entry.memories?.[0]?.venueId || entry.venueId || null;
+      progress.regulars[regularId] = {
+        id: regularId,
+        name: entry.name,
+        disposition: entry.disposition || 'neutral',
+        quirk: entry.quirk || 'is here for the first time',
+        portraitProps: this._seededPortraitProps(entry.name + '|' + regularId),
+        homeVenueId: venueId,
+        firstMetRun: entry.memories?.[0]?.runNumber || 1,
+        lastSeenRun: entry.memories?.[0]?.runNumber || 1,
+        timesMet: 1,
+        affinityCarry: 50,
+      };
+      progress.strangerMemories[regularId] = entry;
+      if (oldKey !== regularId) delete progress.strangerMemories[oldKey];
+    }
   },
 
   uniqueVenuesClearedCount(progress) {
@@ -173,6 +244,14 @@ const SaveSystem = {
   recordRun(success, venueId) {
     const p = this.load();
     p.totalRuns++;
+    const prevStreak = p.currentStreak || 0;
+    if (success) {
+      p.currentStreak = prevStreak + 1;
+      p.bestStreak = Math.max(p.bestStreak || 0, p.currentStreak);
+    } else {
+      p.currentStreak = 0;
+    }
+    state.brokenStreak = (!success && prevStreak >= 2) ? prevStreak : 0;
     let repGain = success ? 3 : 1;
     if (success && squadHasContact('zara')) repGain += 1;
     repGain = Math.min(repGain, 4);
@@ -251,6 +330,18 @@ const SaveSystem = {
       p.wonAt = Date.now();
     }
 
+    // End-of-night regular promotion sweep over all neighbors seen this night.
+    const seenNeighbors = state.queue.allNeighbors || [];
+    const behindNeighbors = state.queue.behindNeighbors || [];
+    const allSeen = [...seenNeighbors, ...behindNeighbors];
+    const uniqueById = new Map();
+    for (const n of allSeen) {
+      if (n && n.memoryId && !uniqueById.has(n.memoryId)) uniqueById.set(n.memoryId, n);
+    }
+    for (const n of uniqueById.values()) {
+      this.promoteNeighborToRegular(n, p);
+    }
+
     // Save remaining cash as savings for next week
     p.savings = Math.max(0, state.cash);
     this.save(p);
@@ -302,6 +393,90 @@ const SaveSystem = {
       count++;
     }
     return count > 0 ? Math.round(total / count) : 0;
+  },
+
+  _nextRegularId(name, progress) {
+    const prefix = 'regular_' + this._slug(name) + '_';
+    let max = 0;
+    for (const id of Object.keys(progress.regulars || {})) {
+      if (id.startsWith(prefix)) {
+        const n = parseInt(id.slice(prefix.length), 10);
+        if (!Number.isNaN(n) && n > max) max = n;
+      }
+    }
+    return prefix + (max + 1);
+  },
+
+  promoteNeighborToRegular(neighbor, progress) {
+    if (!neighbor || !progress) return null;
+    if (neighbor._promotedToRegular) return null;
+    const venueId = state.selectedVenue;
+    const nightHasMemory = (state.queue.nightMemories || []).some(m => m.sourceMemoryId === neighbor.memoryId);
+    const persistedHasMemory = !!(progress.strangerMemories?.[neighbor.memoryId]?.memories?.length);
+    const affinity = neighbor.affinity || 50;
+    if (!nightHasMemory && !persistedHasMemory && affinity < 70) return null;
+
+    progress.regulars = progress.regulars || {};
+    const runNumber = (progress.totalRuns || 0) + 1;
+    let regularId = neighbor.regularId || null;
+    let existing = regularId ? progress.regulars[regularId] : null;
+
+    if (!existing) {
+      const sameVenue = Object.values(progress.regulars).filter(r => r.homeVenueId === venueId);
+      if (sameVenue.length >= 6) {
+        sameVenue.sort((a, b) => (a.timesMet - b.timesMet) || ((a.lastSeenRun || 0) - (b.lastSeenRun || 0)));
+        const victim = sameVenue[0];
+        if (victim) {
+          delete progress.regulars[victim.id];
+          if (progress.strangerMemories?.[victim.id]) delete progress.strangerMemories[victim.id];
+        }
+      }
+      regularId = this._nextRegularId(neighbor.name, progress);
+      progress.regulars[regularId] = {
+        id: regularId,
+        name: neighbor.name,
+        disposition: neighbor.disposition,
+        quirk: neighbor.quirk,
+        adjectives: neighbor.adjectives || [],
+        portraitProps: neighbor.portraitProps,
+        homeVenueId: venueId,
+        firstMetRun: runNumber,
+        lastSeenRun: runNumber,
+        timesMet: 1,
+        affinityCarry: Math.max(0, Math.min(100, affinity)),
+      };
+    } else {
+      existing.lastSeenRun = runNumber;
+      existing.timesMet = (existing.timesMet || 0) + 1;
+      existing.affinityCarry = Math.max(0, Math.min(100, affinity));
+      existing.disposition = neighbor.disposition;
+      existing.quirk = neighbor.quirk;
+      if (neighbor.adjectives) existing.adjectives = neighbor.adjectives;
+      if (neighbor.portraitProps) existing.portraitProps = neighbor.portraitProps;
+    }
+    // Re-key memories from the old per-run stranger id to the stable regular id,
+    // so future spawns (memoryId = regular.id) can actually find them.
+    if (neighbor.memoryId && neighbor.memoryId !== regularId) {
+      progress.strangerMemories = progress.strangerMemories || {};
+      const oldEntry = progress.strangerMemories[neighbor.memoryId];
+      if (oldEntry) {
+        const target = progress.strangerMemories[regularId];
+        if (target) {
+          target.memories = [...(target.memories || []), ...(oldEntry.memories || [])].slice(-20);
+        } else {
+          progress.strangerMemories[regularId] = oldEntry;
+        }
+        delete progress.strangerMemories[neighbor.memoryId];
+      }
+      (state.queue.nightMemories || []).forEach(m => {
+        if (m.sourceMemoryId === neighbor.memoryId) m.sourceMemoryId = regularId;
+      });
+      neighbor.memoryId = regularId;
+    }
+
+    neighbor._promotedToRegular = true;
+    neighbor.regularId = regularId;
+    return progress.regulars[regularId];
   },
 };
 

@@ -1708,6 +1708,81 @@ body:has(#bouncer-screen.active) #player-badge {
   text-align: center;
   padding: 24px;
 }
+
+/* === NIGHTLIFE CODEX === */
+.codex-btn {
+  position: absolute; top: 12px; right: 16px;
+  background: rgba(20, 18, 45, 0.9);
+  border: 1px solid var(--border-subtle);
+  color: var(--neon-cyan);
+  font-family: var(--font-sans);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 6;
+}
+.codex-btn:active { transform: scale(0.95); }
+.codex-overlay {
+  position: fixed; inset: 0; z-index: 48;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 5, 20, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  padding: 16px;
+}
+.codex-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.codex-panel {
+  background: rgba(20, 18, 45, 0.98);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: 18px 16px 24px;
+  max-width: 420px; width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  position: relative;
+}
+.codex-panel::-webkit-scrollbar { display: none; }
+.codex-close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none;
+  color: var(--text-muted);
+  font-size: 20px; line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.codex-section {
+  margin-bottom: 18px;
+}
+.codex-section-title {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--neon-cyan);
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: 4px;
+}
+.codex-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.codex-row .rl { color: var(--text-muted); }
+.codex-row .rv { color: var(--text); font-weight: 600; }
+.codex-row.locked .rv { color: var(--text-muted); font-style: italic; }
+.codex-row.unlocked .rv { color: var(--neon-green); }
+.codex-badge {
+  display: inline-block; font-size: 9px; font-weight: 800;
+  letter-spacing: 1px; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 4px;
+  background: rgba(255,215,0,0.15); color: var(--neon-gold);
+  margin-left: 6px;
+}
 .result-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
 .result-overlay.success {
   background: radial-gradient(ellipse at center, rgba(57, 255, 20, 0.08) 0%, var(--bg-deep) 70%);
@@ -2094,6 +2169,7 @@ body:has(#bouncer-screen.active) #player-badge {
       <h1>Friday Night</h1>
       <div class="night-label">Plan your move</div>
       <div class="rep-display" id="rep-display">★ 0 rep · $50</div>
+      <button class="codex-btn" id="codex-btn" title="Nightlife Codex">Codex</button>
     </div>
 
     <!-- Tab Content -->
@@ -2365,6 +2441,11 @@ body:has(#bouncer-screen.active) #player-badge {
   <button class="result-btn again" id="result-btn">Try Again</button>
 </div>
 
+<!-- Nightlife Codex -->
+<div class="codex-overlay" id="codex-overlay">
+  <div class="codex-panel" id="codex-panel"></div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -2396,6 +2477,7 @@ body:has(#bouncer-screen.active) #player-badge {
 <script src="js/kiosk.js"></script>
 <script src="js/bouncer.js"></script>
 <script src="js/use-item.js"></script>
+<script src="js/codex.js"></script>
 <script src="js/main.js"></script>
 
 </body>

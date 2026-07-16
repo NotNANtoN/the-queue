@@ -510,6 +510,11 @@ const QueueEngine = {
     SaveSystem.applyToState();
     renderPlayerBadge();
 
+    const brokenStreak = state.brokenStreak || 0;
+    if (brokenStreak >= 2) {
+      $('result-stats').innerHTML += `<div class="result-row"><span class="rl" style="color:var(--neon-red)">Streak broken</span><span class="rv" style="color:var(--neon-red)">Was ${brokenStreak} in a row</span></div>`;
+    }
+
     $('result-btn').textContent = 'Try Again';
     $('result-btn').onclick = () => {
       overlay.classList.remove('active');
@@ -587,6 +592,11 @@ const QueueEngine = {
     renderPlayerBadge();
     const prog = SaveSystem.load();
     const newContacts = SaveSystem.getPendingUnlocks();
+
+    const brokenStreak = state.brokenStreak || 0;
+    if (brokenStreak >= 2) {
+      $('result-stats').innerHTML += `<div class="result-row"><span class="rl" style="color:var(--neon-red)">Streak broken</span><span class="rv" style="color:var(--neon-red)">Was ${brokenStreak} in a row</span></div>`;
+    }
 
     if (newContacts.length > 0) {
       const contactLines = newContacts.map(u => `

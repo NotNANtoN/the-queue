@@ -238,7 +238,8 @@ const ChatSystem = {
     this._getConvo()._pendingPlayerText = null;
 
     $('chat-name').textContent = neighbor.name;
-    $('chat-disp').textContent = neighbor.disposition + ` · ${neighbor.affinity || 50}/100`;
+    const regularSuffix = neighbor.isRegular ? ' · regular — you\'ve met' : '';
+    $('chat-disp').textContent = neighbor.disposition + ` · ${neighbor.affinity || 50}/100` + regularSuffix;
 
     // Generate portrait with current substance effects
     const fx = [];
@@ -317,7 +318,8 @@ const ChatSystem = {
 
   _refreshChatReactiveUi() {
     if (this.currentNeighbor) {
-      $('chat-disp').textContent = this.currentNeighbor.disposition + ` · ${this.currentNeighbor.affinity || 50}/100`;
+      const regularSuffix = this.currentNeighbor.isRegular ? ' · regular — you\'ve met' : '';
+      $('chat-disp').textContent = this.currentNeighbor.disposition + ` · ${this.currentNeighbor.affinity || 50}/100` + regularSuffix;
     }
     this.renderItemButtons();
     renderLoadout();
@@ -355,6 +357,13 @@ const ChatSystem = {
       const aff = this.currentNeighbor.affinity || 50;
       const label = aff >= 80 ? 'They love you' : aff >= 60 ? 'Good vibes' : aff >= 40 ? 'Neutral' : aff >= 20 ? 'Not feeling it' : 'They dislike you';
       showToast(`${this.currentNeighbor.name}: ${label} (${aff}/100)`, 2000);
+      // Dispose under the pre-promotion id: promotion may re-key memoryId.
+      LLM.disposeCache(`neighbor:${this.currentNeighbor.memoryId}`);
+      try {
+        const p = SaveSystem.load();
+        const promoted = SaveSystem.promoteNeighborToRegular(this.currentNeighbor, p);
+        if (promoted) SaveSystem.save(p);
+      } catch (e) {}
     }
     $('chat-overlay').classList.remove('active');
     if (this.currentNeighbor?.memoryId) LLM.disposeCache(`neighbor:${this.currentNeighbor.memoryId}`);

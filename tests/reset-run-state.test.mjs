@@ -115,6 +115,7 @@ function loadMainContext() {
     'js/kiosk.js',
     'js/bouncer.js',
     'js/use-item.js',
+    'js/codex.js',
   ];
   for (const file of scripts) {
     vm.runInContext(prepareSource(readJs(file)), context);

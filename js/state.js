@@ -59,6 +59,7 @@ const state = {
     crewMemberChats: {},
     startingSquadCount: 0,
     earplugsActive: false,
+    regularSpawnedThisRun: false,
   },
   llm: { loaded: false, loadFailed: false },
   contactUnlockedThisRun: false,

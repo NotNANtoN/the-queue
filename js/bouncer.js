@@ -1016,6 +1016,7 @@ ${this._promptRules(venue)}`;
 
     const progBefore = SaveSystem.load();
     const hadWon = !!progBefore.wonAt;
+    const streakBefore = progBefore.currentStreak || 0;
 
     // Progression
     SaveSystem.recordRun(success, venue?.id);
@@ -1025,6 +1026,8 @@ ${this._promptRules(venue)}`;
     const progAfter = SaveSystem.load();
     const justWon = success && progAfter.wonAt && !hadWon;
     const newContacts = SaveSystem.getPendingUnlocks();
+    const streakAfter = progAfter.currentStreak || 0;
+    const brokenStreak = state.brokenStreak || 0;
 
     $('result-title').className = 'result-title ' + (success ? 'win' : 'lose');
     if (success && justWon) {
@@ -1033,15 +1036,46 @@ ${this._promptRules(venue)}`;
       notify('Scene Legend — you cleared every venue in the city', { toastMs: 5000, logType: 'positive' });
     } else {
       $('result-title').textContent = success ? 'Access Granted' : 'Not Tonight';
-      $('result-subtitle').textContent = success
+      let subtitle = success
         ? 'The doors open. The bass hits. You\'re in.'
         : `${this.bouncer.name} shakes their head. Your squad disperses into the night.`;
+      if (!success) {
+        const gap = this.threshold - this.approval;
+        if (gap >= 0 && gap <= 15) {
+          const closeness = gap <= 5 ? 'heartbreakingly close' : gap <= 10 ? 'painfully close' : 'frustratingly close';
+          subtitle = `The bouncer hesitated... you were THIS close. So ${closeness}.`;
+        }
+      }
+      $('result-subtitle').textContent = subtitle;
     }
 
     const waitTime = state.queue.gameTime - (23 * 60 + 35);
     const intelCount = state.queue.revealedIntel.length;
     const traitCount = state.queue.activeTraits.length;
     const squadIntact = state.finalSquad.length === (state.queue.startingSquadCount || 0);
+
+    const extraRows = [];
+    if (!success) {
+      const gap = this.threshold - this.approval;
+      if (gap >= 0 && gap <= 15) {
+        extraRows.push(`<div class="result-row"><span class="rl" style="color:var(--neon-cyan)">Near miss</span><span class="rv" style="color:var(--neon-cyan)">Within ${gap} of the door</span></div>`);
+      }
+      if (brokenStreak >= 2) {
+        extraRows.push(`<div class="result-row"><span class="rl" style="color:var(--neon-red)">Streak broken</span><span class="rv" style="color:var(--neon-red)">Was ${brokenStreak} in a row</span></div>`);
+      }
+    } else {
+      if (streakAfter >= 2) {
+        extraRows.push(`<div class="result-row"><span class="rl" style="color:var(--neon-gold)">Streak</span><span class="rv" style="color:var(--neon-gold)">${streakAfter} nights in a row!</span></div>`);
+      }
+      const cleared = SaveSystem.uniqueVenuesClearedCount(progAfter);
+      const nextThreshold = [2, 3, 5].find(t => t > cleared);
+      if (nextThreshold !== undefined && nextThreshold - cleared <= 1) {
+        const lockedVenue = VENUES.find(v => v.id === (nextThreshold === 2 ? 'boardroom' : nextThreshold === 3 ? 'florians' : 'audit'));
+        if (lockedVenue) {
+          extraRows.push(`<div class="result-row"><span class="rl" style="color:var(--neon-cyan)">Almost there</span><span class="rv" style="color:var(--neon-cyan)">One more unique venue unlocks ${lockedVenue.name}</span></div>`);
+        }
+      }
+    }
 
     $('result-stats').innerHTML = `
       <div class="result-row"><span class="rl">Bouncer</span><span class="rv">${this.bouncer.name}</span></div>
@@ -1051,6 +1085,7 @@ ${this._promptRules(venue)}`;
       <div class="result-row"><span class="rl">Time waited</span><span class="rv">${waitTime} min</span></div>
       <div class="result-row"><span class="rl">Squad intact</span><span class="rv">${squadIntact ? 'Yes' : 'No'}</span></div>
       <div class="result-row"><span class="rl">Cash remaining</span><span class="rv">$${state.cash}</span></div>
+      ${extraRows.join('')}
     `;
 
     if (newContacts.length > 0) {
