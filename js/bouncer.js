@@ -879,11 +879,12 @@ ${this._promptRules(venue)}`;
     const fill = $('timer-fill');
     fill.style.transition = 'none';
     fill.style.width = '100%';
-    fill.classList.remove('urgent');
+    fill.classList.remove('urgent', 'timer-mid');
     void fill.offsetWidth;
     fill.style.transition = `width ${this.timerDuration}ms linear`;
     fill.style.width = '0%';
-    setTimeout(() => fill.classList.add('urgent'), this.timerDuration * 0.4);
+    setTimeout(() => fill.classList.add('timer-mid'), this.timerDuration * 0.35);
+    setTimeout(() => fill.classList.add('urgent'), this.timerDuration * 0.65);
     this.timer = setTimeout(() => {
       if (this.finished || this.generating) return;
       this._addBubble('*silence*', 'player');

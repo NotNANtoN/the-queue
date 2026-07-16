@@ -584,10 +584,40 @@ function init() {
 
   // Event log toggle
   $('log-toggle')?.addEventListener('click', () => {
-    $('event-log-panel').classList.toggle('open');
+    $('event-log-panel').classList.toggle('active');
   });
   $('log-close')?.addEventListener('click', () => {
-    $('event-log-panel').classList.remove('open');
+    $('event-log-panel').classList.remove('active');
+  });
+
+  function talkFront() {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    if (!state.queue.neighborFront) { showToast('No one ahead to talk to', 1500); return; }
+    state.queue.actionLocked = true;
+    ChatSystem.open(state.queue.neighborFront, 'front');
+  }
+
+  function talkBack() {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    if (!state.queue.neighborBack) { showToast('No one behind you yet', 1500); return; }
+    state.queue.actionLocked = true;
+    ChatSystem.open(state.queue.neighborBack, 'back');
+  }
+
+  $('queue-canvas')?.addEventListener('click', (e) => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    const canvas = $('queue-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (QueueCanvas.W / rect.width);
+    const y = (e.clientY - rect.top) * (QueueCanvas.H / rect.height);
+    const hit = QueueCanvas.hitTestTalkTarget(x, y);
+    if (!hit) return;
+    if (hit.type === 'front') talkFront();
+    else if (hit.type === 'back') talkBack();
+    else if (hit.type === 'squad' && hit.name) {
+      state.queue.actionLocked = true;
+      CrewChatSystem.openMember(hit.name);
+    }
   });
 
   // Phase 1: Action buttons
@@ -601,19 +631,9 @@ function init() {
     QueueEngine.showDoorRead();
   });
 
-  $('act-talk-front').addEventListener('click', () => {
-    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
-    if (!state.queue.neighborFront) { showToast('No one ahead to talk to', 1500); return; }
-    state.queue.actionLocked = true;
-    ChatSystem.open(state.queue.neighborFront, 'front');
-  });
+  $('act-talk-front').addEventListener('click', talkFront);
 
-  $('act-talk-back').addEventListener('click', () => {
-    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
-    if (!state.queue.neighborBack) { showToast('No one behind you yet', 1500); return; }
-    state.queue.actionLocked = true;
-    ChatSystem.open(state.queue.neighborBack, 'back');
-  });
+  $('act-talk-back').addEventListener('click', talkBack);
 
   $('act-kiosk').addEventListener('click', () => {
     if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
@@ -661,6 +681,10 @@ function init() {
   });
   $('chat-close').addEventListener('click', () => CrewChatSystem.active ? CrewChatSystem.close() : ChatSystem.close());
   $('chat-leave').addEventListener('click', () => CrewChatSystem.active ? CrewChatSystem.close() : ChatSystem.close());
+  $('chat-overlay')?.addEventListener('click', (e) => {
+    if (e.target !== $('chat-overlay')) return;
+    CrewChatSystem.active ? CrewChatSystem.close() : ChatSystem.close();
+  });
 
   // Bouncer phase: free text input
   $('bouncer-send').addEventListener('click', () => {

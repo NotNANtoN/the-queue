@@ -25,6 +25,8 @@
   --success: #a4ff80;
   --font-sans: 'PP Object Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --radius-card: 20px;
+  --pad-card: 28px 24px;
 }
 
 html, body {
@@ -566,6 +568,10 @@ body::before {
 }
 
 /* === PLAYER BADGE === */
+body:has(#queue-screen.active) #player-badge,
+body:has(#bouncer-screen.active) #player-badge {
+  display: none;
+}
 .player-badge {
   position: fixed;
   top: 14px;
@@ -1100,7 +1106,7 @@ body::before {
   display: flex; align-items: center; gap: 8px;
 }
 .meter-label {
-  font-size: 9px; font-weight: 700;
+  font-size: 10px; font-weight: 700;
   letter-spacing: 1.5px; text-transform: uppercase;
   min-width: 52px;
 }
@@ -1161,14 +1167,25 @@ body::before {
 /* === CHAT OVERLAY === */
 .chat-overlay {
   position: fixed; inset: 0; z-index: 45;
-  display: flex; flex-direction: column;
-  background: rgba(6, 5, 20, 0.97);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  display: flex; align-items: flex-end; justify-content: center;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 0%, transparent 45%);
   opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 .chat-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+.chat-panel {
+  width: 100%; max-width: 480px;
+  height: 60vh; max-height: 520px;
+  display: flex; flex-direction: column;
+  background: rgba(8, 6, 26, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  border-top: 1px solid var(--border-glow);
+  box-shadow: 0 -8px 40px rgba(123, 117, 255, 0.12);
+  animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
 .chat-header {
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px 20px;
@@ -1221,8 +1238,8 @@ body::before {
   max-width: 80%;
   padding: 10px 14px;
   border-radius: 16px;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.45;
   animation: bubbleIn 0.25s ease;
 }
 @keyframes bubbleIn {
@@ -1324,8 +1341,8 @@ body::before {
 .event-card {
   background: rgba(20, 18, 45, 0.95);
   border: 1px solid var(--border-glow);
-  border-radius: 20px;
-  padding: 28px 24px;
+  border-radius: var(--radius-card);
+  padding: var(--pad-card);
   max-width: 360px; width: 100%;
   text-align: center;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(123, 117, 255, 0.08);
@@ -1431,8 +1448,9 @@ body::before {
 .kiosk-panel {
   background: rgba(20, 18, 45, 0.98);
   border: 1px solid var(--border-subtle);
-  border-radius: 20px 20px 0 0;
-  padding: 24px 20px 32px;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  padding: var(--pad-card);
+  padding-bottom: 32px;
   max-width: 420px; width: 100%;
   animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1513,7 +1531,8 @@ body::before {
   background: rgba(8, 6, 26, 0.95);
 }
 .chat-give-btn {
-  padding: 5px 10px;
+  min-height: 32px;
+  padding: 6px 12px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--bg-card);
@@ -1529,13 +1548,14 @@ body::before {
 
 /* === EVENT LOG === */
 .event-log-toggle {
-  padding: 4px 10px;
+  min-height: 32px;
+  padding: 6px 12px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: var(--bg-card);
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: 10px; font-weight: 600;
+  font-size: 11px; font-weight: 600;
   cursor: pointer;
   letter-spacing: 0.5px;
 }
@@ -1551,7 +1571,7 @@ body::before {
   display: none;
   flex-direction: column;
 }
-.event-log-panel.open { display: flex; }
+.event-log-panel.active { display: flex; }
 .event-log-header {
   display: flex; justify-content: space-between; align-items: center;
   padding: 10px 16px;
@@ -1657,69 +1677,27 @@ body::before {
   min-width: 36px;
   text-align: right;
 }
-.bouncer-speech {
-  flex: 1;
-  display: flex; flex-direction: column; justify-content: center;
-  padding: 20px;
-  text-align: center;
-}
 .bouncer-speaker {
   font-size: 11px; font-weight: 700;
   color: var(--neon-pink);
   letter-spacing: 2px; text-transform: uppercase;
   margin-bottom: 8px;
 }
-.bouncer-line {
-  font-size: 18px; font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.5;
-  min-height: 54px;
-  display: flex; align-items: center; justify-content: center;
-}
 .timer-bar-track {
-  width: 100%; height: 4px;
+  width: 100%; height: 8px;
   background: rgba(255, 255, 255, 0.06);
   margin-top: 16px;
+  border-radius: 4px;
+  overflow: hidden;
 }
 .timer-bar-fill {
   height: 100%;
-  background: var(--neon-cyan);
-  transition: width linear;
-  border-radius: 2px;
+  background: var(--neon-green);
+  transition: width linear, background 0.4s ease;
+  border-radius: 4px;
 }
+.timer-bar-fill.timer-mid { background: var(--neon-orange); }
 .timer-bar-fill.urgent { background: var(--neon-pink); }
-.bouncer-options {
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 12px 16px 20px;
-  background: rgba(8, 6, 26, 0.95);
-  border-top: 1px solid var(--border-subtle);
-}
-.bouncer-opt {
-  padding: 12px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-  font-size: 13px; font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-  position: relative;
-}
-.bouncer-opt:hover { background: var(--bg-card-hover); border-color: var(--neon-purple); }
-.bouncer-opt.intel-opt {
-  border-color: rgba(57, 255, 20, 0.2);
-}
-.bouncer-opt.intel-opt::before {
-  content: '🔑';
-  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-  font-size: 14px;
-}
-.bouncer-opt.picked-good { background: rgba(57, 255, 20, 0.1); border-color: var(--neon-green); color: var(--neon-green); }
-.bouncer-opt.picked-bad { background: rgba(255, 77, 109, 0.1); border-color: var(--neon-pink); color: var(--neon-pink); }
-.bouncer-opt.picked-neutral { background: rgba(255, 216, 107, 0.1); border-color: var(--neon-gold); color: var(--neon-gold); }
-.bouncer-opt:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Success / Failure overlays */
 .result-overlay {
@@ -2045,8 +2023,9 @@ body::before {
 }
 .queue-cutoff-warning.active { display: block; }
 .door-read-btn {
-  font-size: 10px;
-  padding: 4px 8px;
+  min-height: 32px;
+  font-size: 11px;
+  padding: 6px 12px;
   border-radius: 6px;
   border: 1px solid var(--border-subtle);
   background: rgba(123, 117, 255, 0.12);
@@ -2061,7 +2040,7 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: 48;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -2297,22 +2276,24 @@ body::before {
 
 <!-- Chat Overlay -->
 <div class="chat-overlay" id="chat-overlay">
-  <div class="chat-header">
-    <div class="chat-header-left">
-      <div class="chat-avatar-sm" id="chat-avatar"></div>
-      <div>
-        <div class="chat-name" id="chat-name">Stranger</div>
-        <div class="chat-disposition" id="chat-disp">Friendly</div>
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <div class="chat-avatar-sm" id="chat-avatar"></div>
+        <div>
+          <div class="chat-name" id="chat-name">Stranger</div>
+          <div class="chat-disposition" id="chat-disp">Friendly</div>
+        </div>
       </div>
+      <button class="chat-close" id="chat-close">✕</button>
     </div>
-    <button class="chat-close" id="chat-close">✕</button>
-  </div>
-  <div class="chat-messages" id="chat-messages"></div>
-  <div class="chat-actions" id="chat-actions"></div>
-  <div class="chat-input-area">
-    <input class="chat-input" id="chat-input" type="text" placeholder="Say something..." autocomplete="off" />
-    <button class="chat-send" id="chat-send">→</button>
-    <button class="chat-leave" id="chat-leave">Leave</button>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-actions" id="chat-actions"></div>
+    <div class="chat-input-area">
+      <input class="chat-input" id="chat-input" type="text" placeholder="Say something..." autocomplete="off" />
+      <button class="chat-send" id="chat-send">→</button>
+      <button class="chat-leave" id="chat-leave">Leave</button>
+    </div>
   </div>
 </div>
 

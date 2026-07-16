@@ -133,6 +133,60 @@ const QueueCanvas = {
     this.layoutPeople(true);
   },
 
+  _getTalkGeometry(p, groundY, t) {
+    const sway = Math.sin(t * p.bobSpeed + p.bobOffset) * p.swayAmp;
+    const cx = p.baseX + sway;
+    const cy = groundY - p.height * this.PERSON_SCALE * 0.5;
+    const rx = 14;
+    const ry = p.height * this.PERSON_SCALE * 0.55;
+    return { cx, cy, rx, ry, sway };
+  },
+
+  getTalkTargets() {
+    const people = state.queue.queuePeople;
+    if (!people?.length) return [];
+    const groundY = this.H * this.GROUND_Y_RATIO;
+    const t = this.time;
+    const playerIdx = people.findIndex(pp => pp.isPlayer);
+    if (playerIdx < 0) return [];
+    const squadLen = state.finalSquad?.length || 0;
+    const frontIdx = playerIdx - 1;
+    const backIdx = playerIdx + 1 + squadLen;
+    const minHit = 22;
+    const targets = [];
+
+    const addTarget = (idx, type, name) => {
+      if (idx < 0 || idx >= people.length) return;
+      const p = people[idx];
+      const geo = this._getTalkGeometry(p, groundY, t);
+      targets.push({
+        type,
+        name: name || null,
+        cx: geo.cx - this.scrollX,
+        cy: geo.cy,
+        rx: Math.max(geo.rx, minHit),
+        ry: Math.max(geo.ry, minHit),
+      });
+    };
+
+    addTarget(frontIdx, 'front');
+    addTarget(backIdx, 'back');
+    for (let i = playerIdx + 1; i < playerIdx + 1 + squadLen; i++) {
+      const p = people[i];
+      if (p?.isSquad) addTarget(i, 'squad', p.name);
+    }
+    return targets;
+  },
+
+  hitTestTalkTarget(canvasX, canvasY) {
+    for (const target of this.getTalkTargets()) {
+      const dx = (canvasX - target.cx) / target.rx;
+      const dy = (canvasY - target.cy) / target.ry;
+      if (dx * dx + dy * dy <= 1) return target;
+    }
+    return null;
+  },
+
   layoutPeople(instant = false) {
     const people = state.queue.queuePeople;
     const sp = this.PERSON_SPACING;
@@ -641,18 +695,26 @@ const QueueCanvas = {
     const squadLen = state.finalSquad?.length || 0;
     const frontIdx = playerIdx - 1;
     const backIdx = playerIdx + 1 + squadLen;
+    const pulse = 0.5 + Math.sin(this.time * 3.5) * 0.35;
 
     [frontIdx, backIdx].forEach(idx => {
       if (idx >= 0 && idx < people.length) {
         const p = people[idx];
-        const sway = Math.sin(this.time * p.bobSpeed + p.bobOffset) * p.swayAmp;
-        const cx = p.baseX + sway;
-        const cy = groundY - p.height * this.PERSON_SCALE * 0.5;
-        ctx.strokeStyle = 'rgba(255,216,107,0.5)';
-        ctx.lineWidth = 1;
+        const geo = this._getTalkGeometry(p, groundY, this.time);
+        const cx = geo.cx;
+        const cy = geo.cy;
+        const ry = geo.ry;
+        const glowRx = geo.rx + pulse * 3;
+        const glowRy = ry + pulse * 2;
+        ctx.fillStyle = `rgba(255,216,107,${0.05 + pulse * 0.06})`;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, glowRx, glowRy, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255,216,107,${0.35 + pulse * 0.35})`;
+        ctx.lineWidth = 1 + pulse * 0.8;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
-        ctx.ellipse(cx, cy, 14, p.height * this.PERSON_SCALE * 0.55, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, geo.rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
         // Portrait + "Talk?" label above talkable neighbors
@@ -669,17 +731,17 @@ const QueueCanvas = {
           if (img.complete) {
             const ps = 20;
             const px = cx - ps / 2;
-            const py = cy - p.height * this.PERSON_SCALE * 0.55 - ps - 8;
+            const py = cy - ry - ps - 8;
             // Border
             ctx.fillStyle = 'rgba(255,216,107,0.3)';
             ctx.fillRect(px - 2, py - 2, ps + 4, ps + 4);
             ctx.drawImage(img, px, py, ps, ps);
           }
         }
-        ctx.fillStyle = 'rgba(255,216,107,0.6)';
+        ctx.fillStyle = `rgba(255,216,107,${0.55 + pulse * 0.2})`;
         ctx.font = `700 ${8}px ${getComputedStyle(document.body).fontFamily}`;
         ctx.textAlign = 'center';
-        ctx.fillText(idx === frontIdx ? '💬 Talk' : '🗣️ Talk', cx, cy - p.height * this.PERSON_SCALE * 0.55 - 4);
+        ctx.fillText(idx === frontIdx ? '💬 Talk' : '🗣️ Talk', cx, cy - ry - 4);
       }
     });
 
