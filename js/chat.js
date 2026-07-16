@@ -153,6 +153,8 @@ const ChatSystem = {
   messages: [],
   _convo: null,
 
+  get active() { return !!this.currentNeighbor; },
+
   _SCRIPTED_LINES: {
     friendly: [
       'Yeah, long night. You here for the music too?',
@@ -343,6 +345,7 @@ const ChatSystem = {
       this._refreshChatReactiveUi();
       this.generateResponse(`*the player hands you a ${name}*`);
     }
+    QueueEngine.resetWaitStreak();
     QueueEngine.advanceTime(1);
     this.renderItemButtons();
   },
@@ -358,6 +361,7 @@ const ChatSystem = {
     this.currentNeighbor = null;
     state.queue.actionLocked = false;
     QueueEngine.updateMeters();
+    QueueEngine.onOverlayClosed();
   },
 
   addBubble(text, cls, opts) {
@@ -369,8 +373,9 @@ const ChatSystem = {
     this.addBubble(text, 'player');
     $('chat-input').value = '';
 
-    // Each message = 1 min game time
-    QueueEngine.advanceTime(1);
+    // Each message = 2 min game time
+    QueueEngine.resetWaitStreak();
+    QueueEngine.advanceTime(2);
 
     await this.generateResponse(text);
   },
@@ -775,6 +780,7 @@ const CrewChatSystem = {
     this._getConvo()._pendingPlayerText = null;
     state.queue.actionLocked = false;
     QueueEngine.updateMeters();
+    QueueEngine.onOverlayClosed();
   },
 
   addBubble(text, cls, opts) {
@@ -827,7 +833,8 @@ NEVER mention tool names in your spoken reply — tools are silent actions.`;
     if (!text.trim() || this.generating) return;
     this.addBubble(text, 'player');
     $('chat-input').value = '';
-    QueueEngine.advanceTime(1);
+    QueueEngine.resetWaitStreak();
+    QueueEngine.advanceTime(2);
     await this.generateResponse(text);
   },
 

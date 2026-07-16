@@ -32,6 +32,7 @@ const KioskSystem = {
         if (!item || state.cash < item.price) return;
         state.cash -= item.price;
         applyConsumable(item.id, { source: 'kiosk' });
+        QueueEngine.resetWaitStreak();
         QueueEngine.advanceTime(2);
         this.open(); // Refresh
         QueueEngine.updateMeters();
@@ -52,6 +53,7 @@ const KioskSystem = {
   close() {
     $('kiosk-overlay').classList.remove('active');
     state.queue.actionLocked = false;
+    QueueEngine.onOverlayClosed();
   },
 };
 

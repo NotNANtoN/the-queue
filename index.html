@@ -2035,6 +2035,44 @@ body::before {
   border-bottom: 1px solid var(--border-subtle);
   background: rgba(8, 6, 26, 0.95);
 }
+.queue-cutoff-warning {
+  display: none;
+  font-size: 10px;
+  color: var(--neon-red, #ff4d6d);
+  letter-spacing: 1px;
+  margin-top: 4px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.queue-cutoff-warning.active { display: block; }
+.door-read-btn {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(123, 117, 255, 0.12);
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-left: 8px;
+}
+.door-read-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.door-read-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.door-read-overlay .event-card { max-width: 320px; }
 </style>
 </head>
 <body>
@@ -2194,7 +2232,7 @@ body::before {
 
 <!-- Queue Screen -->
 <div class="queue-screen" id="queue-screen">
-  <div class="queue-time-display" id="queue-time-display">FRIDAY 11:35 PM</div>
+  <div class="queue-time-display" id="queue-time-display"><span id="queue-time-label">FRIDAY 11:35 PM</span><div class="queue-cutoff-warning" id="queue-cutoff-warning"></div></div>
   <div class="queue-canvas-wrap">
     <canvas id="queue-canvas"></canvas>
   </div>
@@ -2202,6 +2240,7 @@ body::before {
     <div class="queue-info">
       <span>POSITION <span class="pos-label" id="q-position">15</span></span>
       <span id="q-venue-label">Mainframe Basement</span>
+      <button class="door-read-btn" id="act-door-read" title="Check the door">🚪 Door</button>
       <button class="event-log-toggle" id="log-toggle"><span id="log-icon"></span> Log</button>
     </div>
     <div class="meters-row">
@@ -2280,6 +2319,11 @@ body::before {
 <!-- Event Overlay -->
 <div class="event-overlay" id="event-overlay">
   <div class="event-card" id="event-card"></div>
+</div>
+
+<!-- Door Read Overlay -->
+<div class="door-read-overlay" id="door-read-overlay">
+  <div class="event-card" id="door-read-card"></div>
 </div>
 
 <!-- Kiosk Overlay -->

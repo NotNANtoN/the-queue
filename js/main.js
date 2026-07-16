@@ -11,6 +11,12 @@ function resetRunState() {
   state.queue.neighborBack = null;
   state.queue.revealedIntel = [];
   state.queue.turnCount = 0;
+  state.queue.lastTickAt = 23 * 60 + 35;
+  state.queue.tickCount = 0;
+  state.queue.waitStreak = 0;
+  state.queue.pendingEvent = null;
+  state.queue.pendingReachFront = false;
+  state.queue.lastEntryWarningShown = false;
   state.queue.beerDebuff = false;
   state.queue.hadDrink = false;
   state.queue.actionLocked = false;
@@ -209,6 +215,12 @@ async function enterQueue() {
   state.queue.hope = Math.min(100, 70 + groupBonus + wardrobeHope);
   state.queue.anxiety = Math.max(5, 10 - state.finalSquad.length);
   state.queue.gameTime = 23 * 60 + 35;
+  state.queue.lastTickAt = 23 * 60 + 35;
+  state.queue.tickCount = 0;
+  state.queue.waitStreak = 0;
+  state.queue.pendingEvent = null;
+  state.queue.pendingReachFront = false;
+  state.queue.lastEntryWarningShown = false;
   state.queue.revealedIntel = [];
   state.queue.turnCount = 0;
   state.queue.beerDebuff = false;
@@ -582,6 +594,11 @@ function init() {
   $('act-wait').addEventListener('click', () => {
     if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
     QueueEngine.doWait();
+  });
+
+  $('act-door-read')?.addEventListener('click', () => {
+    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
+    QueueEngine.showDoorRead();
   });
 
   $('act-talk-front').addEventListener('click', () => {

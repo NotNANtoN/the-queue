@@ -182,6 +182,7 @@ const UseItemSystem = {
         state.inventory[id]--;
         applyConsumable(id);
         if (state.phase === 'QUEUE') {
+          QueueEngine.resetWaitStreak();
           QueueEngine.advanceTime(1);
           QueueEngine.updateMeters();
           this.open();
@@ -193,7 +194,10 @@ const UseItemSystem = {
 
     $('use-close-btn')?.addEventListener('click', () => {
       $('kiosk-overlay').classList.remove('active');
-      if (state.phase === 'QUEUE') state.queue.actionLocked = false;
+      if (state.phase === 'QUEUE') {
+        state.queue.actionLocked = false;
+        QueueEngine.onOverlayClosed();
+      }
     });
 
     $('kiosk-overlay').classList.add('active');

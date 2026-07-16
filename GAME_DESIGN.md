@@ -282,7 +282,8 @@ Tap to skip flavor and jump straight to the choice; after the choice resolves, t
 
 ### Difficulty Scaling
 - Later venues have: shorter timers, more bouncer exchanges, stricter Style requirements, rarer Intel availability in line, and higher flake rates on good contacts.
-- The queue itself gets longer and has more negative events at higher tiers.
+- The queue itself gets longer, last entry comes sooner relative to expected arrival, and pure waiting alone cannot clear Nightmare doors — prep (intel, allies, look, traits) is required.
+- Queue movement runs on 5-minute time ticks (not on Wait clicks). Wait only advances the clock; chat/kiosk/items spend the slack before cutoff.
 
 ### Win Condition
 Successfully enter all 8 venues at least once. The first time you clear the final venue, a one-time **Scene Legend** victory screen appears (`progress.wonAt` is saved) — every door in the city is open. You can keep playing Fridays after that; there is no hard game over. The final venue ("The Audit Chamber") remains the ultimate challenge — a gauntlet that requires a strong crew, solid intel, and a convincing door conversation.

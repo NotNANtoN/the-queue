@@ -3,10 +3,17 @@
 // ============================================================
 
 const QUEUE_CONFIG = {
-  Easy:      { startPos: 15, moveChance: 0.40, moveMin: 2, moveMax: 5, eventChance: 0.25 },
-  Moderate:  { startPos: 22, moveChance: 0.30, moveMin: 1, moveMax: 4, eventChance: 0.30 },
-  Ruthless:  { startPos: 30, moveChance: 0.22, moveMin: 1, moveMax: 3, eventChance: 0.35 },
-  Nightmare: { startPos: 40, moveChance: 0.18, moveMin: 1, moveMax: 2, eventChance: 0.40 },
+  Easy:      { startPos: 12, moveChance: 0.45, moveMin: 2, moveMax: 4, eventChance: 0.25, lastEntry: 25 * 60 },
+  Moderate:  { startPos: 18, moveChance: 0.40, moveMin: 2, moveMax: 4, eventChance: 0.30, lastEntry: 25 * 60 + 45 },
+  Ruthless:  { startPos: 25, moveChance: 0.34, moveMin: 1, moveMax: 4, eventChance: 0.35, lastEntry: 26 * 60 + 30 },
+  Nightmare: { startPos: 28, moveChance: 0.30, moveMin: 1, moveMax: 3, eventChance: 0.40, lastEntry: 27 * 60 },
+};
+
+const DOOR_STRICTNESS = {
+  Easy: 'They wave most people through.',
+  Moderate: 'They pick and choose.',
+  Ruthless: 'This door turns away half the line.',
+  Nightmare: 'Nobody gets in without a reason.',
 };
 
 const KIOSK_ITEMS = [

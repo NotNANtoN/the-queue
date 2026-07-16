@@ -31,7 +31,7 @@ Run unit tests with `npm test` (Node's built-in test runner over `tests/*.test.m
 ## Game Loop
 
 1. **Plan the night**: choose a venue, assemble up to 3 squad members, buy items, equip outfits, and customize your own avatar.
-2. **Survive the queue**: wait through stalls and bursts, talk to people in front/behind you, and barter for intel through conversation.
+2. **Survive the queue**: time passes continuously — the line moves every five minutes whether you act or not. Waiting fast-forwards; talking, kiosk runs, and items cost minutes. Gather intel through conversation before last entry closes the door.
 3. **Face the bouncer**: answer in free text under pressure. Intel gathered in line is useful when you naturally mention the right names, lineup details, password, door mood, style cues, or connections. Squad traits, wardrobe, and items (VIP wristband, substances) affect what the bouncer sees.
 4. **Inside the club**: a short flavor sequence, one meaningful choice (crew / room / chase), then sunrise and results.
 5. **Progress**: success and failure both move the meta-loop forward via reputation (job tier, unlocks), venue clears, contacts, bonds, outfits, and saved player appearance.
@@ -42,8 +42,8 @@ Run unit tests with `npm test` (Node's built-in test runner over `tests/*.test.m
 - Phone-style planning UI with venues, squad selection, loadout, wardrobe, and player appearance editing.
 - Editable player avatar: skin, hair, hair style, shirt, eye color, face width/height, eye spacing, nose, and ears.
 - Persistent player badge outside the phone UI showing avatar and current job.
-- Procedural queue visualization with player, squad, neighbors, line movement, and mood meters.
-- Hope and anxiety engine with queue stalls, movement bursts, squad bailouts, and random events.
+- Procedural queue visualization with player, squad, neighbors, time-driven line movement (5-minute ticks), mood meters, last-entry deadline, and door-read prep hints.
+- Hope and anxiety engine with passive drift, restlessness on consecutive waits, squad bailouts, and random events (deferred during chat).
 - LLM-driven neighbor chats with tool calls for intel, item offers, money, affinity changes, contact unlocks, leaving the queue, and swapping spots.
 - Queue actions: wait, talk front/back, kiosk, use item, view intel, and crew chat.
 - LLM-driven free-text bouncer dialogue with approval/disapproval tool calls (`let_in`, `reject`, `inspect_bag`, etc.).
@@ -58,7 +58,7 @@ Run unit tests with `npm test` (Node's built-in test runner over `tests/*.test.m
 ## Key Controls
 
 - In planning, use the bottom phone tabs to switch between venue, squad, loadout, and look.
-- In the queue, use action buttons at the bottom to wait, talk, view intel, or manage resources.
+- In the queue, use action buttons to wait (fast-forward 5 min), talk, check the door read, view intel, or manage resources. Chat messages cost 2 minutes.
 - In conversations, type naturally. NPCs can react to persuasion attempts, trades, jokes, flirting, and pressure.
 - At the bouncer, answer quickly and work gathered intel into your replies naturally.
 

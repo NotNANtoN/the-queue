@@ -72,7 +72,7 @@ const GroupChat = {
       if (hasSubstance && Math.random() < 0.3) pool = this.SCRIPTED.substance;
       else if (state.queue.hope > 60) pool = Math.random() < 0.5 ? this.SCRIPTED.hopeful : this.SCRIPTED.vibing;
       else if (state.queue.anxiety > 50) pool = this.SCRIPTED.anxious;
-      else if (state.queue.turnCount > 4) pool = this.SCRIPTED.bored;
+      else if (state.queue.tickCount > 4) pool = this.SCRIPTED.bored;
       else pool = this.SCRIPTED.cold;
       msg = pool[Math.floor(Math.random() * pool.length)].replace('{name}', speaker.name);
     }
@@ -88,13 +88,16 @@ const GroupChat = {
 // ============================================================
 
 const QueueEngine = {
+  TICK_MINUTES: 5,
+
   updateMeters() {
     $('hope-fill').style.width = state.queue.hope + '%';
     $('hope-value').textContent = Math.round(state.queue.hope);
     $('anxiety-fill').style.width = state.queue.anxiety + '%';
     $('anxiety-value').textContent = Math.round(state.queue.anxiety);
     $('q-position').textContent = state.queue.position;
-    $('queue-time-display').textContent = this.formatTime(state.queue.gameTime);
+    $('queue-time-label').textContent = this.formatTime(state.queue.gameTime);
+    this._updateLastEntryWarning();
   },
 
   formatTime(totalMinutes) {
@@ -105,19 +108,124 @@ const QueueEngine = {
     return `FRIDAY ${h12}:${String(m).padStart(2, '0')} ${period}`;
   },
 
+  formatClockTime(totalMinutes) {
+    const h = Math.floor(totalMinutes / 60) % 24;
+    const m = totalMinutes % 60;
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    const periodLabel = h >= 12 ? 'PM' : 'AM';
+    return `${h12}:${String(m).padStart(2, '0')} ${periodLabel}`;
+  },
+
+  _getQueueCfg() {
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    return QUEUE_CONFIG[venue?.policy || 'Easy'];
+  },
+
+  _isSocialOverlayOpen() {
+    if (ChatSystem.active || CrewChatSystem.active) return true;
+    const kiosk = $('kiosk-overlay');
+    return kiosk?.classList?.contains('active') || false;
+  },
+
+  resetWaitStreak() {
+    state.queue.waitStreak = 0;
+  },
+
+  onOverlayClosed() {
+    if (state.queue.pendingReachFront && state.queue.position <= 0 && state.phase === 'QUEUE') {
+      state.queue.pendingReachFront = false;
+      this.reachFront();
+      return;
+    }
+    if (state.queue.pendingEvent) {
+      const event = state.queue.pendingEvent;
+      state.queue.pendingEvent = null;
+      EventLog.add('While you were talking, something happened...', 'info');
+      this.showEvent(event);
+    }
+  },
+
   advanceTime(minutes) {
     state.queue.gameTime += minutes;
 
-    // Sober penalty: hope drops faster if you haven't had a drink
     const hadDrink = state.queue.beerDebuff || state.queue.hadDrink || state.queue.activeTraits.includes('Liquid Courage');
     const soberPenalty = hadDrink ? 1.0 : 1.6;
 
     this.modAnxiety(minutes * 0.4 * soberPenalty);
     this.modHope(-minutes * 0.3 * soberPenalty);
+
+    this._processTimeTicks();
+
+    if (state.phase === 'QUEUE' && !state.queue.pendingReachFront && state.queue.position > 0) {
+      const cfg = this._getQueueCfg();
+      if (state.queue.gameTime >= cfg.lastEntry) {
+        this.missedLastEntry();
+      }
+    }
+  },
+
+  _processTimeTicks() {
+    while (state.queue.gameTime >= state.queue.lastTickAt + this.TICK_MINUTES) {
+      state.queue.lastTickAt += this.TICK_MINUTES;
+      state.queue.tickCount++;
+      const reached = this.moveQueue();
+      if (reached || state.phase !== 'QUEUE') return;
+      this.checkEvent();
+      if (state.phase !== 'QUEUE') return;
+    }
+  },
+
+  _updateLastEntryWarning() {
+    const warnEl = $('queue-cutoff-warning');
+    if (!warnEl || state.phase !== 'QUEUE') return;
+
+    const cfg = this._getQueueCfg();
+    const minsLeft = cfg.lastEntry - state.queue.gameTime;
+
+    if (minsLeft > 30 || minsLeft <= 0) {
+      warnEl.textContent = '';
+      warnEl.classList.remove('active');
+      return;
+    }
+
+    warnEl.textContent = `last entry ${minsLeft} min`;
+    warnEl.classList.add('active');
+
+    if (!state.queue.lastEntryWarningShown) {
+      state.queue.lastEntryWarningShown = true;
+      const cutoffLabel = this.formatClockTime(cfg.lastEntry);
+      EventLog.add(`Last entry at ${cutoffLabel} — ${minsLeft} min left`, 'negative');
+      notify(`Last entry in ${minsLeft} min`, { toastMs: 2500, logType: 'negative' });
+    }
+  },
+
+  _tickBonus(tickCount) {
+    return Math.min(0.20, tickCount * 0.02);
   },
 
   _turnBonus(turnCount) {
-    return Math.min(0.20, turnCount * 0.02);
+    return this._tickBonus(turnCount);
+  },
+
+  rollMove(cfg, tickCount, rng, opts = {}) {
+    const moveChanceBoost = opts.kaiBoost ? 1.15 : 1;
+    const turnBonus = this._tickBonus(tickCount);
+    if (rng() >= (cfg.moveChance + turnBonus) * moveChanceBoost) {
+      return { moved: false, amount: 0 };
+    }
+
+    let moveMin = cfg.moveMin;
+    let moveMax = cfg.moveMax;
+    if (opts.jasperBoost) {
+      const avg = (moveMin + moveMax) / 2;
+      const halfSpan = Math.max(0, (moveMax - moveMin) / 4);
+      moveMin = Math.max(cfg.moveMin, Math.round(avg - halfSpan));
+      moveMax = Math.min(cfg.moveMax, Math.round(avg + halfSpan));
+      if (moveMin > moveMax) moveMax = moveMin;
+    }
+
+    const amount = moveMin + Math.floor(rng() * (moveMax - moveMin + 1));
+    return { moved: true, amount };
   },
 
   modHope(delta) {
@@ -145,55 +253,62 @@ const QueueEngine = {
   },
 
   moveQueue() {
-    const venue = VENUES.find(v => v.id === state.selectedVenue);
-    const cfg = QUEUE_CONFIG[venue?.policy || 'Easy'];
-    const moveChanceBoost = squadHasContact('kai') ? 1.15 : 1;
-    const turnBonus = this._turnBonus(state.queue.turnCount);
-    if (Math.random() < (cfg.moveChance + turnBonus) * moveChanceBoost) {
-      let moveMin = cfg.moveMin;
-      let moveMax = cfg.moveMax;
-      if (squadHasContact('jasper')) {
-        const avg = (moveMin + moveMax) / 2;
-        const halfSpan = Math.max(0, (moveMax - moveMin) / 4);
-        moveMin = Math.max(cfg.moveMin, Math.round(avg - halfSpan));
-        moveMax = Math.min(cfg.moveMax, Math.round(avg + halfSpan));
-        if (moveMin > moveMax) moveMax = moveMin;
-      }
-      const amount = moveMin + Math.floor(Math.random() * (moveMax - moveMin + 1));
-      state.queue.position = Math.max(0, state.queue.position - amount);
-      this.modHope(amount * 4);
+    const cfg = this._getQueueCfg();
+    const roll = this.rollMove(cfg, state.queue.tickCount, () => Math.random(), {
+      kaiBoost: squadHasContact('kai'),
+      jasperBoost: squadHasContact('jasper'),
+    });
 
-      // Front neighbor updates as people ahead get in
-      if (state.queue.allNeighbors.length > 0) {
-        state.queue.neighborFront = state.queue.allNeighbors[state.queue.allNeighbors.length - 1];
-      }
+    if (!roll.moved) {
+      this.modAnxiety(2);
+      return false;
+    }
 
-      // Rebuild canvas people to match new position
-      this.rebuildQueueViz();
+    const amount = roll.amount;
+    state.queue.position = Math.max(0, state.queue.position - amount);
+    this.modHope(amount * 4);
+
+    if (state.queue.allNeighbors.length > 0) {
+      state.queue.neighborFront = state.queue.allNeighbors[state.queue.allNeighbors.length - 1];
+    }
+
+    this.rebuildQueueViz();
+
+    if (this._isSocialOverlayOpen()) {
+      const msg = `The line shuffles forward — you're #${state.queue.position} now`;
+      if (ChatSystem.active) ChatSystem.addBubble(msg, 'system-msg');
+      else if (CrewChatSystem.active) CrewChatSystem.addBubble(msg, 'system-msg');
+    } else {
       notify(`Queue moved! +${amount} positions`, { toastMs: 1500, logType: 'positive', logMsg: `Queue moved forward +${amount} positions` });
+    }
 
-      if (state.queue.position <= 0) {
-        this.reachFront();
+    if (state.queue.position <= 0) {
+      if (this._isSocialOverlayOpen()) {
+        state.queue.pendingReachFront = true;
         return true;
       }
-    } else {
-      this.modAnxiety(2);
-    }
-    return false;
-  },
-
-  checkEvent() {
-    const venue = VENUES.find(v => v.id === state.selectedVenue);
-    const cfg = QUEUE_CONFIG[venue?.policy || 'Easy'];
-    const eventChance = cfg.eventChance * (squadHasContact('sasha') ? 1.5 : 1);
-    if (Math.random() < eventChance) {
-      this.triggerRandomEvent();
+      this.reachFront();
       return true;
     }
     return false;
   },
 
-  triggerRandomEvent() {
+  checkEvent() {
+    const cfg = this._getQueueCfg();
+    const eventChance = cfg.eventChance * (squadHasContact('sasha') ? 1.5 : 1);
+    if (Math.random() >= eventChance) return false;
+
+    const event = this._pickRandomEvent();
+    if (this._isSocialOverlayOpen()) {
+      state.queue.pendingEvent = event;
+      return true;
+    }
+    this.showEvent(event);
+    EventLog.add(`${event.icon} ${event.title}`, event.effects[0]?.cls === 'positive' ? 'positive' : 'negative');
+    return true;
+  },
+
+  _pickRandomEvent() {
     const events = [
       {
         id: 'line_cutter', icon: '😤', title: 'Line Cutters!',
@@ -298,7 +413,11 @@ const QueueEngine = {
 
     // Filter: only show contact_antsy if we have squad
     const pool = events.filter(e => e.id !== 'contact_antsy' || state.finalSquad.length > 0 || Math.random() < 0.3);
-    const event = pool[Math.floor(Math.random() * pool.length)];
+    return pool[Math.floor(Math.random() * pool.length)];
+  },
+
+  triggerRandomEvent() {
+    const event = this._pickRandomEvent();
     this.showEvent(event);
     EventLog.add(`${event.icon} ${event.title}`, event.effects[0]?.cls === 'positive' ? 'positive' : 'negative');
   },
@@ -353,6 +472,87 @@ const QueueEngine = {
       $('queue-screen').classList.remove('active');
       BouncerSystem.start();
     }, 2500);
+  },
+
+  async missedLastEntry() {
+    if (state.phase !== 'QUEUE') return;
+    state.phase = 'ENDED';
+    state.queue.pendingEvent = null;
+    state.queue.pendingReachFront = false;
+    if (ChatSystem.active) ChatSystem.close();
+    if (CrewChatSystem.active) CrewChatSystem.close();
+    $('kiosk-overlay')?.classList.remove('active');
+    QueueCanvas.stopLoop();
+    $('queue-screen').classList.remove('active');
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    const cfg = this._getQueueCfg();
+    const cutoffLabel = this.formatClockTime(cfg.lastEntry);
+    const subtitle = `The door shut at ${cutoffLabel}. The night walks home without you.`;
+
+    await WalkOfShame.play(subtitle);
+
+    const overlay = $('result-overlay');
+    overlay.className = 'result-overlay active failure';
+    $('result-title').className = 'result-title lose';
+    $('result-title').textContent = 'Last Entry';
+    $('result-subtitle').textContent = subtitle;
+
+    const waitTime = state.queue.gameTime - (23 * 60 + 35);
+    $('result-stats').innerHTML = `
+      <div class="result-row"><span class="rl">Reason</span><span class="rv">Missed last entry</span></div>
+      <div class="result-row"><span class="rl">Cutoff</span><span class="rv">${cutoffLabel}</span></div>
+      <div class="result-row"><span class="rl">Time waited</span><span class="rv">${waitTime} min</span></div>
+      <div class="result-row"><span class="rl">Position</span><span class="rv">#${state.queue.position}</span></div>
+      <div class="result-row"><span class="rl">Cash remaining</span><span class="rv">$${state.cash}</span></div>
+    `;
+
+    SaveSystem.recordRun(false, venue?.id);
+    SaveSystem.applyToState();
+    renderPlayerBadge();
+
+    $('result-btn').textContent = 'Try Again';
+    $('result-btn').onclick = () => {
+      overlay.classList.remove('active');
+      restartPlanning();
+    };
+  },
+
+  showDoorRead() {
+    const venue = VENUES.find(v => v.id === state.selectedVenue);
+    if (!venue) return;
+
+    const policy = venue.policy || 'Easy';
+    const styleBonus = BouncerSystem.calcStyleMatch(venue);
+    const hasLook = styleBonus > 0;
+    const hasIntel = state.queue.revealedIntel.length > 0;
+    const hasAlly = !!state.queue.allyData;
+    const hasCharmer = state.queue.activeTraits.includes('Charmer');
+    const hasNiko = squadHasContact('niko');
+
+    const check = (ok) => ok ? '✓' : '✗';
+
+    const card = $('door-read-card');
+    card.innerHTML = `
+      <div class="event-title">${escapeHtml(venue.name)}</div>
+      <div class="event-desc">Dress code: ${escapeHtml(venue.dressCode || 'Unknown')}</div>
+      <div class="event-desc" style="margin-top:8px;font-style:italic;">${escapeHtml(DOOR_STRICTNESS[policy] || '')}</div>
+      <div class="event-effects" style="margin-top:12px;flex-direction:column;align-items:flex-start;gap:6px;">
+        <span class="effect-tag ${hasLook ? 'positive' : 'neutral'}">${check(hasLook)} Look</span>
+        <span class="effect-tag ${hasIntel ? 'positive' : 'neutral'}">${check(hasIntel)} Intel</span>
+        <span class="effect-tag ${hasAlly ? 'positive' : 'neutral'}">${check(hasAlly)} Ally</span>
+        <span class="effect-tag ${hasCharmer ? 'positive' : 'neutral'}">${check(hasCharmer)} Charmer</span>
+        ${hasNiko ? '<span class="effect-tag positive">✓ Niko has the bouncer\'s respect</span>' : ''}
+      </div>
+      <div class="event-choices">
+        <button class="event-choice-btn" id="door-read-close">Close</button>
+      </div>
+    `;
+    $('door-read-overlay').classList.add('active');
+    $('door-read-close').addEventListener('click', () => this.hideDoorRead());
+  },
+
+  hideDoorRead() {
+    $('door-read-overlay').classList.remove('active');
   },
 
   async gameOver() {
@@ -502,13 +702,27 @@ const QueueEngine = {
   async doWait() {
     if (state.queue.actionLocked) return;
     state.queue.actionLocked = true;
-    state.queue.turnCount++;
+
+    state.queue.waitStreak++;
+    const streak = state.queue.waitStreak;
+    let extraAnxiety = 0;
+    if (streak >= 4) extraAnxiety = 6;
+    else if (streak === 3) extraAnxiety = 4;
+    else if (streak === 2) extraAnxiety = 2;
+
     this.advanceTime(5);
+
+    if (extraAnxiety > 0) {
+      if (streak === 2) EventLog.add('Standing in silence is getting to you', 'info');
+      this.modAnxiety(extraAnxiety);
+    }
+
     this.processDelayedEffects();
     this.updateMeters();
 
-    // People arriving behind you (first few turns)
-    if (state.queue.turnCount <= 3 && state.queue.behindNeighbors.length < 6) {
+    if (state.phase !== 'QUEUE') return;
+
+    if (state.queue.tickCount <= 3 && state.queue.behindNeighbors.length < 6) {
       const arrivals = 1 + Math.floor(Math.random() * 2);
       for (let i = 0; i < arrivals; i++) {
         const n = generateNeighbor(state.selectedVenue, state.queue.revealedIntel);
@@ -516,24 +730,20 @@ const QueueEngine = {
       }
       state.queue.neighborBack = state.queue.behindNeighbors[0];
       this.rebuildQueueViz();
-      if (state.queue.turnCount === 1) {
+      if (state.queue.tickCount === 1) {
         showToast('People are lining up behind you...', 1500);
       }
     }
 
-    // Group chat banter from squad
     if (state.finalSquad.length > 0) {
       await GroupChat.maybeSay();
     }
 
     await sleep(600);
 
-    const reached = this.moveQueue();
-    if (reached) return;
+    if (state.phase !== 'QUEUE') return;
 
-    await sleep(400);
-
-    if (!this.checkEvent()) {
+    if (!state.queue.pendingEvent && !$('event-overlay')?.classList?.contains('active')) {
       state.queue.actionLocked = false;
     }
     this.updateMeters();
