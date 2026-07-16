@@ -62,7 +62,7 @@ Each contact has:
 
 #### Wardrobe perks (when equipped)
 - *Lucky Charm*: −5% flake rate during the pre-queue roll.
-- *Hip Flask*: +morale for all squad members at queue start.
+- *Hip Flask*: −10 anxiety at queue start (+3 group hope from wardrobe bonus).
 - *Instant Camera (Polaroid)*: +50% bond gains on successful runs (stacks with Priya).
 
 #### Item notes
@@ -93,8 +93,8 @@ A vertical strip showing the queue from above or from a slight isometric angle. 
 ### Core Mechanic: The Hope & Despair Engine
 
 Two meters run simultaneously:
-- **Hope** (0–100): Starts at 70. Rises when the queue moves. Decays slowly when stalled. Crashes on negative events.
-- **Squad Anxiety** (0–100): Starts at 10. Rises when stalled, when bad events trigger, or when the Hype Engine contact is present. If it hits 100, a squad member bails.
+- **Hope** (0–100): Starts at 70. Rises when the queue moves. Decays slowly when stalled. Crashes on negative events. If it hits 0, everyone goes home.
+- **Squad Anxiety** (0–100): Starts at 10. Rises when stalled, when bad events trigger, or when the Hype Engine contact is present. If it hits 100, a random squad member bails.
 
 The queue itself advances in **bursts**, not smoothly:
 1. Long stall (30–90 seconds of real time, compressed with a "time passes" animation).
@@ -110,16 +110,7 @@ At any time during a stall, you can tap on:
 - **Person Ahead**: They might share intel, or be annoyed, or try to sell you something.
 - **Person Behind**: More likely to be friendly (they want you to move). Might offer items in exchange for favors.
 
-### Social Actions
-
-Beyond basic conversation, you have four additional action buttons:
-
-| Action | Target | Effect | Risk |
-|--------|--------|--------|------|
-| **Eavesdrop** | Nearby conversations | 30% chance to passively gain intel | Failure: waste 3 min, Anxiety +2 |
-| **Scout the Door** | Leave line briefly | Gain intel + Scout Intel trait | 25% chance someone steals your spot (−2 positions) |
-| **Flirt** | Best-affinity neighbor | Affinity +20, Anxiety −8, Charmer trait, may unlock intel | Failure: Anxiety +5, Affinity −10 |
-| **Form Alliance** | Neighbor with affinity ≥55 | Queue Alliance trait (ally may vouch at bouncer) | Requires trust; hostile/low-affinity neighbors refuse |
+Intel comes from neighbor conversation — flirting, alliances, and intel sharing emerge from chat tool calls (`accept_flirt`, `form_alliance`, `share_intel`), not separate action buttons.
 
 ### Conversational Persuasion (Emergent via Chat)
 
@@ -213,11 +204,11 @@ The bouncer phase is a timed, free-text conversation powered by the on-device LL
 4. Every bouncer turn must include `approve` or `disapprove` (typically ±5–35 approval).
 5. Conversation ends when the bouncer calls `let_in`, `reject`, or `ban` — usually within 3–5 exchanges.
 
-**Approval meter:** Starts from Style Match bonus + queue traits (Charmer, Scout Intel, Niko's +15, etc.). You need to reach a venue-specific threshold:
+**Approval meter:** Starts from Style Match bonus + queue traits (Charmer, Queue Alliance, Niko's +15, etc.). You need to reach a venue-specific threshold:
 - Easy: 40 · Moderate: 60 · Ruthless: 85 · Nightmare: 100  
 (Pia in squad eases the effective tier by one step for threshold and timer.)
 
-**Intel in dialogue:** Facts learned in line (password, headliner, bouncer name, dress tips, etc.) are injected into the bouncer system prompt as true intel the player *may* mention. Street Cred, Insider Info, and Scout Intel traits also appear in what the bouncer "sees."
+**Intel in dialogue:** Facts learned in line (password, headliner, bouncer name, dress tips, etc.) are injected into the bouncer system prompt as true intel the player *may* mention. Street Cred, Insider Info, Charmer, and Queue Alliance traits also appear in what the bouncer "sees."
 
 **Interjections:** Queue allies can vouch; squad members can chime in. The bouncer reacts to these in-character.
 
@@ -267,6 +258,17 @@ You type: "Berlin vintage boots — bit bold for tonight, but we know the passwo
 - Your squad disperses into the night. Brief sad animation.
 - You keep any Intel contacts you made (persistent between runs).
 - Try again next Friday.
+
+---
+
+## Phase 3: Inside the Club
+
+After a successful door conversation, a short club scene plays:
+1. **Flavor cards** (2–3): atmospheric beats with no mechanical rewards.
+2. **One choice**: stick with your crew (+bond), work the room (~67% contact unlock + rep), or chase the night (50% cash/item gamble).
+3. **Sunrise** card and results screen.
+
+Tap to skip flavor and jump straight to the choice; after the choice resolves, tap or use **Leave at Sunrise** to finish.
 
 ---
 

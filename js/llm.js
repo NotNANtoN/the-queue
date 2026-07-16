@@ -24,7 +24,6 @@ const NEIGHBOR_TOOLS = [
 const CREW_TOOLS = [
   { type: 'function', function: { name: 'remember', description: 'Store a memory that this crew member may recall in a future conversation', parameters: { type: 'object', properties: { subject: { type: 'string' }, type: { type: 'string' }, text: { type: 'string' }, valence: { type: 'number' }, salience: { type: 'number' }, confidence: { type: 'number' }, tags: { type: 'array', items: { type: 'string' } } }, required: ['text'] } } },
   { type: 'function', function: { name: 'reduce_anxiety', description: 'Reduce overall squad anxiety because the player reassured or grounded the crew', parameters: { type: 'object', properties: { amount: { type: 'number', description: '1 to 12' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
-  { type: 'function', function: { name: 'boost_morale', description: 'Boost one crew member morale because the player supported them', parameters: { type: 'object', properties: { member: { type: 'string' }, amount: { type: 'number', description: '1 to 20' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
   { type: 'function', function: { name: 'boost_hope', description: 'Increase overall hope because the crew feels the night is worth it', parameters: { type: 'object', properties: { amount: { type: 'number', description: '1 to 12' }, reason: { type: 'string' } }, required: ['amount', 'reason'] } } },
 ];
 
@@ -170,6 +169,8 @@ const LLM = {
         this.loading = false;
         this._loadPromise = null;
         throw e;
+      } finally {
+        this._progressListeners = [];
       }
     })();
     return this._loadPromise;
@@ -386,7 +387,7 @@ const LLM = {
     const parts = trimmed.includes('=') ? trimmed.split(',') : [trimmed];
     parts.forEach(part => {
       const [rawKey, ...rawValueParts] = part.split('=');
-      const key = rawValueParts.length > 0 ? rawKey.trim() : (name === 'change_affinity' ? 'delta' : ['give_money', 'reduce_anxiety', 'boost_morale', 'boost_hope'].includes(name) ? 'amount' : name === 'remember' ? 'text' : 'reason');
+      const key = rawValueParts.length > 0 ? rawKey.trim() : (name === 'change_affinity' ? 'delta' : ['give_money', 'reduce_anxiety', 'boost_hope'].includes(name) ? 'amount' : name === 'remember' ? 'text' : 'reason');
       let value = (rawValueParts.length > 0 ? rawValueParts.join('=') : rawKey).trim().replace(/^["']|["']$/g, '');
       if (!isNaN(value) && value !== '') value = Number(value);
       if (key) args[key] = value;
@@ -413,7 +414,7 @@ const LLM = {
 
     if (name === 'change_affinity') args.delta = parseInt(cleaned) || 0;
     else if (name === 'give_money') args.amount = parseInt(cleaned) || 0;
-    else if (name === 'reduce_anxiety' || name === 'boost_morale' || name === 'boost_hope') args.amount = parseInt(cleaned) || 0;
+    else if (name === 'reduce_anxiety' || name === 'boost_hope') args.amount = parseInt(cleaned) || 0;
     else if (name === 'offer_item' || name === 'want_item') args.item = cleaned;
     else if (name === 'share_intel') args.intel = cleaned;
     else if (name === 'remember') {

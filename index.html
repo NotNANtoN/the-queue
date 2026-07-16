@@ -1125,8 +1125,6 @@ body::before {
   gap: 6px;
   padding: 8px 16px 16px;
   background: rgba(8, 6, 26, 0.95);
-  max-height: 200px;
-  overflow-y: auto;
 }
 .action-btn {
   padding: 14px 12px;
@@ -1815,7 +1813,12 @@ body::before {
   box-shadow: 0 8px 24px rgba(123, 117, 255, 0.3);
 }
 
-/* === WALK OF SHAME === */
+.club-choice-card .event-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .shame-overlay {
   position: fixed; inset: 0; z-index: 47;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -1873,96 +1876,6 @@ body::before {
   0% { opacity: 0.9; transform: translateY(0) rotate(0deg); }
   100% { opacity: 0; transform: translateY(110vh) rotate(720deg); }
 }
-
-/* === PER-MEMBER STATS === */
-.squad-status-bar {
-  display: flex; gap: 6px; flex-wrap: wrap;
-  padding: 6px 16px;
-  background: rgba(8, 6, 26, 0.95);
-  border-bottom: 1px solid var(--border-subtle);
-}
-.member-chip {
-  display: flex; align-items: center; gap: 5px;
-  padding: 4px 8px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.member-chip:hover { border-color: var(--neon-purple); background: var(--bg-card-hover); }
-.member-chip .mc-portrait {
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  overflow: hidden;
-}
-.member-chip .mc-portrait img { width: 20px; height: 20px; image-rendering: pixelated; }
-.member-chip .mc-name { font-size: 10px; font-weight: 700; }
-.member-chip .mc-vibe {
-  width: 24px; height: 4px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 2px; overflow: hidden;
-}
-.member-chip .mc-vibe-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
-
-/* Member detail popup */
-.member-detail {
-  position: fixed;
-  bottom: 200px; left: 50%; transform: translateX(-50%);
-  width: calc(100% - 32px); max-width: 340px;
-  background: rgba(15, 12, 35, 0.98);
-  border: 1px solid var(--border-glow);
-  border-radius: 16px;
-  padding: 16px;
-  z-index: 47;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-  animation: eventSlide 0.25s ease;
-  display: none;
-}
-.member-detail.open { display: block; }
-.member-detail-header {
-  display: flex; gap: 12px; align-items: center;
-  margin-bottom: 12px;
-}
-.member-detail-portrait {
-  width: 48px; height: 48px;
-  border-radius: 12px; overflow: hidden;
-}
-.member-detail-portrait img { width: 48px; height: 48px; image-rendering: pixelated; }
-.member-detail-name { font-size: 16px; font-weight: 800; }
-.member-detail-trait { font-size: 11px; color: var(--text-muted); }
-.member-detail-meters { display: flex; flex-direction: column; gap: 8px; }
-.md-meter {
-  display: flex; align-items: center; gap: 8px;
-}
-.md-meter-icon { width: 16px; text-align: center; }
-.md-meter-label {
-  font-size: 10px; font-weight: 600;
-  color: var(--text-muted);
-  min-width: 50px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-.md-meter-track {
-  flex: 1; height: 6px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 3px; overflow: hidden;
-}
-.md-meter-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
-.md-meter-val {
-  font-size: 11px; font-weight: 800;
-  font-family: var(--font-mono);
-  min-width: 28px; text-align: right;
-}
-.member-detail-close {
-  position: absolute; top: 10px; right: 10px;
-  width: 24px; height: 24px;
-  border-radius: 6px; border: 1px solid var(--border-subtle);
-  background: none; color: var(--text-muted);
-  font-size: 12px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.member-detail-close:hover { color: var(--neon-pink); border-color: var(--neon-pink); }
 
 /* === CREW PROFILE CARD === */
 .crew-profile {
@@ -2279,22 +2192,6 @@ body::before {
       <span class="action-icon" id="act-icon-crew"></span>
       <span class="action-label">Crew</span>
     </button>
-    <button class="action-btn" id="act-eavesdrop">
-      <span class="action-icon" id="act-icon-eavesdrop"></span>
-      <span class="action-label">Eavesdrop</span>
-    </button>
-    <button class="action-btn" id="act-scout">
-      <span class="action-icon" id="act-icon-scout"></span>
-      <span class="action-label">Scout Door</span>
-    </button>
-    <button class="action-btn" id="act-flirt">
-      <span class="action-icon" id="act-icon-flirt"></span>
-      <span class="action-label">Flirt</span>
-    </button>
-    <button class="action-btn" id="act-alliance">
-      <span class="action-icon" id="act-icon-alliance"></span>
-      <span class="action-label">Alliance</span>
-    </button>
   </div>
 </div>
 
@@ -2365,12 +2262,6 @@ body::before {
   <div class="club-feed" id="club-feed"></div>
   <div class="skip-hint" id="club-skip-hint">tap to skip</div>
   <button class="club-done-btn" id="club-done" style="display:none">Leave at Sunrise →</button>
-</div>
-
-<!-- Member Detail Popup -->
-<div class="member-detail" id="member-detail">
-  <button class="member-detail-close" id="member-detail-close">✕</button>
-  <div id="member-detail-content"></div>
 </div>
 
 <!-- Walk of Shame -->

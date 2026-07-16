@@ -108,13 +108,12 @@ const QueueEngine = {
   advanceTime(minutes) {
     state.queue.gameTime += minutes;
 
-    // Sober penalty: morale/hope drops faster if you haven't had a drink
+    // Sober penalty: hope drops faster if you haven't had a drink
     const hadDrink = state.queue.beerDebuff || state.queue.hadDrink || state.queue.activeTraits.includes('Liquid Courage');
     const soberPenalty = hadDrink ? 1.0 : 1.6;
 
     this.modAnxiety(minutes * 0.4 * soberPenalty);
     this.modHope(-minutes * 0.3 * soberPenalty);
-    MemberStats.tick(minutes);
   },
 
   _turnBonus(turnCount) {
@@ -334,24 +333,8 @@ const QueueEngine = {
 
   squadMemberBails() {
     if (state.finalSquad.length === 0) return;
-    const stats = state.queue.memberStats;
-    let gone = null;
-    if (stats && Object.keys(stats).length > 0) {
-      let lowestMorale = Infinity;
-      let lowestName = null;
-      for (const member of state.finalSquad) {
-        const morale = stats[member.name]?.morale ?? Infinity;
-        if (morale < lowestMorale) {
-          lowestMorale = morale;
-          lowestName = member.name;
-        }
-      }
-      if (lowestName) {
-        const idx = state.finalSquad.findIndex(m => m.name === lowestName);
-        if (idx >= 0) gone = state.finalSquad.splice(idx, 1)[0];
-      }
-    }
-    if (!gone) gone = state.finalSquad.pop();
+    const idx = Math.floor(Math.random() * state.finalSquad.length);
+    const gone = state.finalSquad.splice(idx, 1)[0];
     showToast(`${gone.name} couldn't take it anymore and left`, 3000);
     state.queue.anxiety = Math.max(state.queue.anxiety - 20, 30);
     this.modHope(-10);
@@ -554,245 +537,6 @@ const QueueEngine = {
       state.queue.actionLocked = false;
     }
     this.updateMeters();
-  },
-};
-
-// ============================================================
-// PHASE 1: SOCIAL ACTIONS (Persuade, Eavesdrop, Scout, Flirt, Alliance)
-// ============================================================
-
-const SocialActions = {
-  scoutUsed: false,
-  allianceFormed: false,
-  flirtTarget: null,
-
-  reset() {
-    this.scoutUsed = false;
-    this.allianceFormed = false;
-    this.flirtTarget = null;
-  },
-
-  eavesdrop() {
-    const available = getIntelPool().filter(i => !state.queue.revealedIntel.includes(i.key));
-    if (available.length === 0) {
-      notify('Nothing new to overhear', { toastMs: 1500, logType: 'info' });
-      return;
-    }
-    state.queue.actionLocked = true;
-
-    const successChance = 0.30;
-    const success = Math.random() < successChance && available.length > 0;
-
-    if (success) {
-      const intel = available[Math.floor(Math.random() * available.length)];
-      const event = {
-        icon: '👂', title: 'Overheard Something',
-        desc: `You lean in slightly and catch a fragment of conversation from people nearby...`,
-        effects: [{ label: 'Intel gained', cls: 'positive' }],
-        choices: [{ label: `🔑 "${intel.text}"`, action: () => {
-          if (!state.queue.revealedIntel.includes(intel.key)) {
-            state.queue.revealedIntel.push(intel.key);
-          }
-          QueueEngine.modHope(3);
-          EventLog.add(`👂 Overheard intel: ${intel.text}`, 'intel');
-          updateEavesdropButton();
-        }}],
-      };
-      QueueEngine.advanceTime(3);
-      QueueEngine.showEvent(event);
-    } else {
-      const fragments = [
-        "...something about the music being different tonight...",
-        "...can't make out what they're saying over the bass...",
-        "...they're just talking about their week...",
-        "...you catch a name but can't place it...",
-        "...just gossip about someone's ex...",
-      ];
-      const frag = fragments[Math.floor(Math.random() * fragments.length)];
-      const event = {
-        icon: '👂', title: 'Nothing Useful',
-        desc: frag,
-        effects: [{ label: 'Time wasted', cls: 'negative' }],
-        choices: [{ label: 'Oh well', action: () => {
-          QueueEngine.modAnxiety(2);
-          EventLog.add('Tried to eavesdrop — heard nothing useful', 'info');
-        }}],
-      };
-      QueueEngine.advanceTime(3);
-      QueueEngine.showEvent(event);
-    }
-  },
-
-  scoutDoor() {
-    if (this.scoutUsed) {
-      showToast("You already scouted — can't leave the line again", 1500);
-      return;
-    }
-    state.queue.actionLocked = true;
-    this.scoutUsed = true;
-
-    const spotStolen = Math.random() < 0.25;
-    const available = getIntelPool().filter(i => !state.queue.revealedIntel.includes(i.key));
-    const intelGain = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
-
-    const effects = [];
-    if (intelGain) effects.push({ label: 'Intel gained', cls: 'positive' });
-    effects.push({ label: 'Trait: Scout Intel', cls: 'positive' });
-    if (spotStolen) effects.push({ label: 'Position −2', cls: 'negative' });
-
-    const desc = spotStolen
-      ? `You sneak forward to observe the bouncer. When you get back, a group has edged into your spot!`
-      : `You slip out of line and get close enough to watch the bouncer work. No one takes your spot.`;
-
-    const event = {
-      icon: '🔭', title: 'Scout the Door',
-      desc,
-      effects,
-      choices: [{ label: spotStolen ? '😩 Worth it?' : '😎 Nice recon', action: () => {
-        if (intelGain && !state.queue.revealedIntel.includes(intelGain.key)) {
-          state.queue.revealedIntel.push(intelGain.key);
-          EventLog.add(`🔭 Scouted intel: ${intelGain.text}`, 'intel');
-        }
-        updateEavesdropButton();
-        QueueEngine.addTrait('Scout Intel');
-        if (spotStolen) {
-          state.queue.position += 2;
-          QueueEngine.modHope(-6);
-          QueueEngine.rebuildQueueViz();
-          EventLog.add('Lost 2 spots while scouting — someone stole your place', 'negative');
-        } else {
-          QueueEngine.modHope(4);
-          EventLog.add('Scouted the door successfully — no spot lost', 'positive');
-        }
-      }}],
-    };
-
-    QueueEngine.advanceTime(5);
-    QueueEngine.showEvent(event);
-  },
-
-  flirt() {
-    const front = state.queue.neighborFront;
-    const back = state.queue.neighborBack;
-    if (!front && !back) { showToast('No one nearby to flirt with', 1500); return; }
-    state.queue.actionLocked = true;
-
-    // Pick target: prefer someone with higher base affinity
-    const target = (front && back)
-      ? ((front.affinity || 50) >= (back.affinity || 50) ? front : back)
-      : (front || back);
-
-    const baseDifficulty = target.disposition === 'friendly' ? 0.55 :
-                           target.disposition === 'drunk' ? 0.65 :
-                           target.disposition === 'anxious' ? 0.35 :
-                           target.disposition === 'hostile' ? 0.15 : 0.30;
-    const affinityBonus = ((target.affinity || 50) - 50) * 0.004;
-    const chance = Math.min(0.80, Math.max(0.10, baseDifficulty + affinityBonus));
-    const success = Math.random() < chance;
-
-    if (success) {
-      const event = {
-        icon: '💫', title: 'Smooth Talker',
-        desc: `You turn on the charm with ${target.name}. They're into it — laughing, leaning in...`,
-        effects: [
-          { label: 'Affinity +20', cls: 'positive' },
-          { label: 'Anxiety −8', cls: 'positive' },
-          { label: 'Trait: Charmer', cls: 'positive' },
-        ],
-        choices: [{ label: '😏 Still got it', action: () => {
-          target.affinity = Math.min(100, (target.affinity || 50) + 20);
-          QueueEngine.modAnxiety(-8);
-          QueueEngine.addTrait('Charmer');
-          // Flirting can unlock intel faster if they have it
-          if (target.intel && !state.queue.revealedIntel.includes(target.intel.key)) {
-            state.queue.revealedIntel.push(target.intel.key);
-            showToast(`${target.name} whispers something useful...`, 2000);
-            EventLog.add(`💫 Flirted intel from ${target.name}: ${target.intel.text}`, 'intel');
-          }
-          updateEavesdropButton();
-          EventLog.add(`Charmed ${target.name} — they're smitten`, 'positive');
-        }}],
-      };
-      QueueEngine.advanceTime(3);
-      QueueEngine.showEvent(event);
-    } else {
-      const reactions = [
-        `${target.name} smiles politely but turns away.`,
-        `${target.name} raises an eyebrow. "Seriously?"`,
-        `${target.name} is clearly not interested.`,
-        `${target.name} laughs awkwardly and checks their phone.`,
-      ];
-      const event = {
-        icon: '💫', title: 'Swing and a Miss',
-        desc: reactions[Math.floor(Math.random() * reactions.length)],
-        effects: [
-          { label: 'Anxiety +5', cls: 'negative' },
-          { label: 'Affinity −10', cls: 'negative' },
-        ],
-        choices: [{ label: '😅 Moving on...', action: () => {
-          target.affinity = Math.max(0, (target.affinity || 50) - 10);
-          QueueEngine.modAnxiety(5);
-          EventLog.add(`Failed to flirt with ${target.name} — cringe`, 'negative');
-        }}],
-      };
-      QueueEngine.advanceTime(2);
-      QueueEngine.showEvent(event);
-    }
-  },
-
-  formAlliance() {
-    if (this.allianceFormed) {
-      showToast('You already have a queue alliance', 1500);
-      return;
-    }
-    const front = state.queue.neighborFront;
-    const back = state.queue.neighborBack;
-    const candidates = [front, back].filter(n => n && (n.affinity || 50) >= 55);
-
-    if (candidates.length === 0) {
-      showToast('No one trusts you enough yet (need affinity ≥55)', 2000);
-      return;
-    }
-    state.queue.actionLocked = true;
-
-    const ally = candidates[0];
-    const chance = ally.disposition === 'friendly' ? 0.75 :
-                   ally.disposition === 'drunk' ? 0.60 :
-                   ally.disposition === 'anxious' ? 0.50 :
-                   ally.disposition === 'hostile' ? 0.20 : 0.40;
-    const success = Math.random() < chance;
-
-    if (success) {
-      this.allianceFormed = true;
-      state.queue.allyData = { name: ally.name, disposition: ally.disposition };
-      const event = {
-        icon: '🤝', title: 'Alliance Formed!',
-        desc: `${ally.name} agrees to vouch for you at the door. "I'll tell the bouncer we're together."`,
-        effects: [
-          { label: 'Trait: Queue Alliance', cls: 'positive' },
-          { label: 'Hope +10', cls: 'positive' },
-        ],
-        choices: [{ label: '🤝 Solid', action: () => {
-          QueueEngine.addTrait('Queue Alliance');
-          QueueEngine.modHope(10);
-          EventLog.add(`Formed alliance with ${ally.name} — they'll vouch at the door`, 'positive');
-        }}],
-      };
-      QueueEngine.advanceTime(2);
-      QueueEngine.showEvent(event);
-    } else {
-      const event = {
-        icon: '🤝', title: 'No Deal',
-        desc: `${ally.name} shrugs. "I barely know you. Not risking my spot for a stranger."`,
-        effects: [{ label: 'Hope −3', cls: 'negative' }],
-        choices: [{ label: 'Fair enough', action: () => {
-          QueueEngine.modHope(-3);
-          EventLog.add(`${ally.name} declined the alliance`, 'info');
-        }}],
-      };
-      QueueEngine.advanceTime(2);
-      QueueEngine.showEvent(event);
-    }
   },
 };
 

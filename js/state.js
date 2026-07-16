@@ -35,20 +35,23 @@ const state = {
     gameTime: 23 * 60 + 35,
     neighborFront: null,
     neighborBack: null,
+    allNeighbors: [],
+    behindNeighbors: [],
+    allyData: null,
     revealedIntel: [],
     turnCount: 0,
     beerDebuff: false,
+    hadDrink: false,
     actionLocked: false,
     queuePeople: [],
     animFrame: null,
     activeTraits: [],
     delayedEffects: [],
-    memberStats: {},
+    allianceFormed: false,
     nightMemories: [],
     crewChatHistory: [],
     crewMemberChats: {},
     startingSquadCount: 0,
-    warmthBonus: 0,
     earplugsActive: false,
   },
   llm: { loaded: false, loadFailed: false },
@@ -182,172 +185,6 @@ const Debug = {
     }
 
     this.log('tool tests', 'done');
-  },
-};
-
-// ============================================================
-// PER-MEMBER STATS
-// ============================================================
-
-const MemberStats = {
-  init(squad) {
-    state.queue.memberStats = {};
-    const venue = VENUES.find(v => v.id === state.selectedVenue);
-    squad.forEach(member => {
-      const contact = CONTACTS.find(c => c.name === member.name);
-      const warmthRate = contact?.styles?.some(s => ['Dark Minimal', 'All Black', 'Chains'].includes(s)) ? 0.3 : 0.6;
-
-      // Music affinity boost to starting morale
-      let moraleBonus = 0;
-      if (contact?.musicPref && venue?.music) {
-        if (contact.musicPref === venue.music) moraleBonus = 15;
-        else moraleBonus = -5;
-      }
-
-      // Bond with other squad members boosts morale
-      const otherIds = squad.filter(m => m.name !== member.name).map(m => CONTACTS.find(c => c.name === m.name)?.id).filter(Boolean);
-      const friendBonus = otherIds.reduce((sum, otherId) => {
-        const bond = SaveSystem.getBond(contact?.id || '', otherId);
-        return sum + (bond >= 30 ? 5 : bond > 0 ? 2 : 0);
-      }, 0);
-
-      state.queue.memberStats[member.name] = {
-        warmth: 100 + (state.queue.warmthBonus || 0),
-        morale: Math.min(100, 80 + Math.random() * 20 + moraleBonus + friendBonus),
-        warmthDecay: warmthRate,
-        anxietyThreshold: contact?.anxiety ? contact.anxiety * 10 : 60,
-      };
-    });
-  },
-
-  tick(minutes) {
-    const stats = state.queue.memberStats;
-    for (const name of Object.keys(stats)) {
-      const s = stats[name];
-      s.warmth = Math.max(0, s.warmth - s.warmthDecay * minutes);
-      s.morale = Math.max(0, s.morale - 0.2 * minutes);
-
-      if (state.queue.anxiety > s.anxietyThreshold) {
-        s.morale = Math.max(0, s.morale - 0.5 * minutes);
-      }
-
-      if (s.warmth <= 10 || s.morale <= 10) {
-        this.memberLeaves(name);
-      }
-    }
-    this.render();
-  },
-
-  memberLeaves(name) {
-    const idx = state.finalSquad.findIndex(m => m.name === name);
-    if (idx < 0) return;
-    const stats = state.queue.memberStats[name];
-
-    const reason = stats?.warmth <= 10
-      ? `${name} is freezing and went home`
-      : `${name}'s morale collapsed — they left`;
-    state.finalSquad.splice(idx, 1);
-    delete state.queue.memberStats[name];
-    notify(reason, { toastMs: 2500, logType: 'negative' });
-    QueueEngine.modHope(-8);
-    this.render();
-  },
-
-  boostWarmth(name, amount) {
-    const s = state.queue.memberStats[name];
-    if (s) s.warmth = Math.min(100, s.warmth + amount);
-    this.render();
-  },
-
-  boostMorale(name, amount) {
-    const s = state.queue.memberStats[name];
-    if (s) s.morale = Math.min(100, s.morale + amount);
-    this.render();
-  },
-
-  render() {
-    let container = $('squad-status-bar');
-    if (!container) {
-      container = document.createElement('div');
-      container.id = 'squad-status-bar';
-      container.className = 'squad-status-bar';
-      const timeDisplay = $('queue-time-display');
-      if (timeDisplay) timeDisplay.after(container);
-    }
-    if (state.finalSquad.length === 0) {
-      container.style.display = 'none';
-      return;
-    }
-    container.style.display = 'flex';
-    container.innerHTML = state.finalSquad.map(m => {
-      const s = state.queue.memberStats[m.name];
-      if (!s) return '';
-      const warmthPct = Math.min(100, s.warmth);
-      const avg = (warmthPct + s.morale) / 2;
-      const vibeColor = avg > 60 ? '#39ff14' : avg > 30 ? '#fd9927' : '#ff4d6d';
-      const contact = CONTACTS.find(c => c.name === m.name);
-      const portrait = contact?.portraitProps ? Portrait.generate(contact.portraitProps, 'friendly', []) : '';
-      return `<div class="member-chip" data-member="${m.name}">
-        <div class="mc-portrait">${portrait ? `<img src="${portrait}" alt="${m.name}">` : ''}</div>
-        <span class="mc-name" style="color:${m.color || '#ebe4ff'}">${m.name}</span>
-        <span class="mc-vibe"><span class="mc-vibe-fill" style="width:${avg}%;background:${vibeColor};"></span></span>
-      </div>`;
-    }).join('');
-
-    container.querySelectorAll('.member-chip').forEach(chip => {
-      chip.addEventListener('click', () => this.showDetail(chip.dataset.member));
-    });
-  },
-
-  showDetail(name) {
-    const s = state.queue.memberStats[name];
-    if (!s) return;
-    const m = state.finalSquad.find(sq => sq.name === name);
-    const contact = CONTACTS.find(c => c.name === name);
-    const portrait = contact?.portraitProps ? Portrait.generate(contact.portraitProps, 'friendly', []) : '';
-    const warmthPct = Math.min(100, s.warmth);
-
-    const content = $('member-detail-content');
-    content.innerHTML = `
-      <div class="member-detail-header">
-        <div class="member-detail-portrait">${portrait ? `<img src="${portrait}" alt="${name}">` : ''}</div>
-        <div>
-          <div class="member-detail-name" style="color:${m?.color || '#fff'}">${name}</div>
-          <div class="member-detail-trait">${contact?.trait || ''} — ${contact?.traitDesc || ''}</div>
-        </div>
-      </div>
-      <div class="member-detail-meters">
-        <div class="md-meter">
-          ${PX.i('fire','#ff6b35',14)}
-          <span class="md-meter-label">Warmth</span>
-          <div class="md-meter-track"><div class="md-meter-fill" style="width:${warmthPct}%;background:${s.warmth > 60 ? '#39ff14' : s.warmth > 30 ? '#fd9927' : '#ff4d6d'};"></div></div>
-          <span class="md-meter-val" style="color:${s.warmth > 60 ? '#39ff14' : s.warmth > 30 ? '#fd9927' : '#ff4d6d'}">${Math.round(s.warmth)}</span>
-        </div>
-        <div class="md-meter">
-          ${PX.i('heart','#ff69b4',14)}
-          <span class="md-meter-label">Morale</span>
-          <div class="md-meter-track"><div class="md-meter-fill" style="width:${s.morale}%;background:${s.morale > 60 ? '#ffd86b' : s.morale > 30 ? '#fd9927' : '#ff4d6d'};"></div></div>
-          <span class="md-meter-val" style="color:${s.morale > 60 ? '#ffd86b' : s.morale > 30 ? '#fd9927' : '#ff4d6d'}">${Math.round(s.morale)}</span>
-        </div>
-        <div class="md-meter">
-          ${PX.i('shield','#57f2ff',14)}
-          <span class="md-meter-label">Anxiety</span>
-          <div class="md-meter-track"><div class="md-meter-fill" style="width:${Math.min(100, s.anxietyThreshold)}%;background:rgba(255,255,255,0.1);"></div></div>
-          <span class="md-meter-val" style="color:var(--text-muted)">lv${Math.round(s.anxietyThreshold / 10)}</span>
-        </div>
-      </div>
-      <div style="margin-top:10px;font-size:10px;color:var(--text-muted);">
-        ${PX.i('note','#666',10)} Likes: ${contact?.musicPref || '?'} · 
-        Styles: ${contact?.styles?.join(', ') || '?'}
-      </div>
-      <button class="event-choice-btn" id="talk-member-btn" style="margin-top:12px;text-align:center;">Talk to ${name}</button>
-    `;
-
-    $('member-detail').classList.add('open');
-    $('talk-member-btn')?.addEventListener('click', () => {
-      $('member-detail').classList.remove('open');
-      CrewChatSystem.openMember(name);
-    });
   },
 };
 

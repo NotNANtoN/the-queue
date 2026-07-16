@@ -31,9 +31,9 @@ Run unit tests with `npm test` (Node's built-in test runner over `tests/*.test.m
 ## Game Loop
 
 1. **Plan the night**: choose a venue, assemble up to 3 squad members, buy items, equip outfits, and customize your own avatar.
-2. **Survive the queue**: wait through stalls and bursts, talk to people in front/behind you, barter for intel, eavesdrop, scout the door, flirt, and form alliances.
+2. **Survive the queue**: wait through stalls and bursts, talk to people in front/behind you, and barter for intel through conversation.
 3. **Face the bouncer**: answer in free text under pressure. Intel gathered in line is useful when you naturally mention the right names, lineup details, password, door mood, style cues, or connections. Squad traits, wardrobe, and items (VIP wristband, substances) affect what the bouncer sees.
-4. **Inside the club**: short event feed on success, then results and meta progression.
+4. **Inside the club**: a short flavor sequence, one meaningful choice (crew / room / chase), then sunrise and results.
 5. **Progress**: success and failure both move the meta-loop forward via reputation (job tier, unlocks), venue clears, contacts, bonds, outfits, and saved player appearance.
 
 ## Current Features
@@ -45,10 +45,10 @@ Run unit tests with `npm test` (Node's built-in test runner over `tests/*.test.m
 - Procedural queue visualization with player, squad, neighbors, line movement, and mood meters.
 - Hope and anxiety engine with queue stalls, movement bursts, squad bailouts, and random events.
 - LLM-driven neighbor chats with tool calls for intel, item offers, money, affinity changes, contact unlocks, leaving the queue, and swapping spots.
-- Queue actions: wait, talk front/back, kiosk, use item, view intel, eavesdrop, scout the door, flirt, and form alliance.
+- Queue actions: wait, talk front/back, kiosk, use item, view intel, and crew chat.
 - LLM-driven free-text bouncer dialogue with approval/disapproval tool calls (`let_in`, `reject`, `inspect_bag`, etc.).
 - Contact traits wired to queue/bouncer/save (Hype Engine, Promoter intel, Insider auto-intel, Dealer stash, Diplomat calm, Niko rep, Networker/Polaroid bonds, Ghost head-count, Jasper variance, Zara rep, Mona 2× style).
-- Wardrobe perks: Lucky Charm flake reduction, Hip Flask morale, Polaroid bond boost.
+- Wardrobe perks: Lucky Charm flake reduction, Hip Flask anxiety ease, Polaroid bond boost.
 - Items: Rissal starter kit, earplugs passive/active, fake VIP wristband at the door.
 - Loyalty subtly reduces flake rate; memory disposition `chance` gates remember rolls.
 - Bouncer interjections: squad members can chime in and queue allies can vouch for you.
@@ -58,7 +58,7 @@ Run unit tests with `npm test` (Node's built-in test runner over `tests/*.test.m
 ## Key Controls
 
 - In planning, use the bottom phone tabs to switch between venue, squad, loadout, and look.
-- In the queue, use action buttons at the bottom to wait, talk, scout, eavesdrop, or manage resources.
+- In the queue, use action buttons at the bottom to wait, talk, view intel, or manage resources.
 - In conversations, type naturally. NPCs can react to persuasion attempts, trades, jokes, flirting, and pressure.
 - At the bouncer, answer quickly and work gathered intel into your replies naturally.
 
@@ -80,7 +80,7 @@ The page should become available at:
 
 ## Design Notes
 
-- The queue should feel psychologically real: long stalls, sudden hope, strange strangers, and fragile group morale.
+- The queue should feel psychologically real: long stalls, sudden hope, strange strangers, and squad anxiety that can break the group.
 - Intel gathered in line gives you concrete facts to mention during the free-text bouncer conversation.
 - LLM tool calls drive game state, while the visible text stays conversational.
 - The Regulaido visual style is deep lavender, cyber green, hot pink, glass panels, and neon club haze.

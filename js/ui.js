@@ -4,6 +4,15 @@
 
 function $(id) { return document.getElementById(id); }
 
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function showToast(msg, duration = 2000) {
   const el = $('toast');
   el.textContent = msg;
@@ -802,22 +811,9 @@ function sleep(ms) {
 // ============================================================
 
 // ============================================================
-// QUEUE UI HELPERS
+// EVENT LOG
 // ============================================================
 
-function updateEavesdropButton() {
-  const btn = $('act-eavesdrop');
-  if (!btn) return;
-  const available = typeof getIntelPool === 'function'
-    ? getIntelPool().filter(i => !state.queue.revealedIntel.includes(i.key))
-    : [];
-  const disabled = available.length === 0;
-  btn.disabled = disabled;
-  btn.style.opacity = disabled ? '0.45' : '';
-  btn.title = disabled ? 'Nothing new to overhear' : '';
-}
-
-// ============================================================
 // EVENT LOG
 // ============================================================
 
@@ -838,7 +834,7 @@ const EventLog = {
       const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
       const period = h >= 12 ? 'PM' : 'AM';
       const ts = `${h12}:${String(m).padStart(2, '0')} ${period}`;
-      return `<div class="log-entry"><span class="log-time">${ts}</span><span class="log-text ${e.type}">${e.text}</span></div>`;
+      return `<div class="log-entry"><span class="log-time">${escapeHtml(ts)}</span><span class="log-text ${e.type}">${escapeHtml(e.text)}</span></div>`;
     }).join('');
   },
 

@@ -353,7 +353,6 @@ const BouncerSystem = {
     if (state.queue.activeTraits.includes('Liquid Courage')) visible.push('One of them seems a bit tipsy but confident.');
     if (state.queue.activeTraits.includes('Queue Alliance')) visible.push('Someone in line vouches for them — they seem to know people here.');
     if (state.queue.activeTraits.includes('Charmer')) visible.push('One of them has confident, flirtatious energy — socially smooth.');
-    if (state.queue.activeTraits.includes('Scout Intel')) visible.push('They seem to know exactly how you operate — like they\'ve been watching.');
     if (state.queue.activeTraits.includes('Street Cred')) visible.push('They carry themselves like someone the regulars recognize — social proof in the line.');
     if (state.queue.activeTraits.includes('Insider Info')) visible.push('They drop specific details about tonight like they already know the door.');
     if ((state.inventory.vip || 0) > 0) visible.push('The lead person wears a VIP wristband — it might be real, or an obvious fake.');
@@ -512,7 +511,6 @@ ${this._promptRules(venue)}`;
     const styleBonus = this.calcStyleMatch(venue);
     let traitBonus = 0;
     if (state.queue.activeTraits.includes('Charmer')) traitBonus += 5;
-    if (state.queue.activeTraits.includes('Scout Intel')) traitBonus += 8;
     if (squadHasContact('niko')) traitBonus += 15;
     this.approval = styleBonus + traitBonus;
     this.exchangeCount = 0;
@@ -727,11 +725,13 @@ ${this._promptRules(venue)}`;
     img.src = portrait;
   },
 
-  _addBubble(text, cls) {
-    return this._getConvo().addBubble(text, cls);
+  _addBubble(text, cls, opts) {
+    return this._getConvo().addBubble(text, cls, opts);
   },
 
   async _bouncerSpeak(context, options = {}) {
+    if (!LLM.loaded) return this._scriptedBouncerSpeak(context, options);
+
     const internal = options.internal;
     if (!internal && this.generating) return;
     if (!internal) {
@@ -748,17 +748,13 @@ ${this._promptRules(venue)}`;
     let bouncerToolCalls = [];
 
     try {
-      if (LLM.loaded) {
-        const result = await LLM.chat([
-          { role: 'system', content: sysPrompt },
-          ...this.messages.slice(-10),
-        ], BOUNCER_TOOLS, 100, `bouncer:${state.selectedVenue}:${this.bouncer.id}`);
-        if (result) {
-          response = result.text || '';
-          bouncerToolCalls = result.toolCalls || [];
-        }
-      } else {
-        return this._scriptedBouncerSpeak(context, options);
+      const result = await LLM.chat([
+        { role: 'system', content: sysPrompt },
+        ...this.messages.slice(-10),
+      ], BOUNCER_TOOLS, 100, `bouncer:${state.selectedVenue}:${this.bouncer.id}`);
+      if (result) {
+        response = result.text || '';
+        bouncerToolCalls = result.toolCalls || [];
       }
 
       if (!response) {
@@ -824,7 +820,7 @@ ${this._promptRules(venue)}`;
           }
         });
         const bagDesc = bagItems.length > 0 ? bagItems.join(', ') : 'Nothing suspicious';
-        this._addBubble(`${PX.i('pack','#ebe4ff',12)} Bouncer inspects your bag: ${bagDesc}`, 'system-msg');
+        this._addBubble(`${PX.i('pack','#ebe4ff',12)} Bouncer inspects your bag: ${bagDesc}`, 'system-msg', { html: true });
         EventLog.add(`Bouncer checked your bag: ${bagDesc}`, 'info');
 
         // Feed result back to bouncer
@@ -852,7 +848,7 @@ ${this._promptRules(venue)}`;
       }
       if (hasBan) {
         this.finished = true;
-        this._addBubble(`${PX.i('skull','#ff0000',14)} BANNED from ${VENUES.find(v => v.id === state.selectedVenue)?.name || 'this venue'} tonight.`, 'system-msg negative');
+        this._addBubble(`${PX.i('skull','#ff0000',14)} BANNED from ${VENUES.find(v => v.id === state.selectedVenue)?.name || 'this venue'} tonight.`, 'system-msg negative', { html: true });
         EventLog.add('BANNED from this venue!', 'negative');
         await sleep(2000);
         await this._handleVerdict(false);
@@ -1225,12 +1221,55 @@ const CLUB_EVENTS = [
   { px: 'heart', pxColor: '#ff69b4', text: (sq) => `${sq.length > 1 ? sq[0].name + ' and ' + sq[1].name : 'You and a stranger'} have an amazing conversation about life.`, effect: '+Deep bond', type: 'special', bondBoost: 15 },
 ];
 
+const ClubChoiceEffects = {
+  applyBondBoost(bondBoost, squad, bonds = {}) {
+    const ids = squad.map(m => m.id).filter(Boolean);
+    const next = { ...bonds };
+    ids.forEach(id => {
+      const key = ['player', id].sort().join(':');
+      next[key] = Math.min(100, (next[key] || 0) + bondBoost);
+    });
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const key = [ids[i], ids[j]].sort().join(':');
+        next[key] = Math.min(100, (next[key] || 0) + bondBoost);
+      }
+    }
+    return { bonds: next, memberCount: ids.length, bondBoost };
+  },
+
+  resolveWorkTheRoom(chance, contactUnlockedThisRun, venueId, progress, pickLockedContact, tryUnlockContact) {
+    const repGain = 1;
+    let contact = null;
+    if (!contactUnlockedThisRun && chance < 0.675) {
+      const newId = pickLockedContact(progress, { id: venueId });
+      if (newId) contact = tryUnlockContact(progress, newId, { where: 'inside the club', bond: 25 });
+    }
+    return { repGain, contact, unlocked: !!contact };
+  },
+
+  resolveChaseTheNight(chance) {
+    if (chance < 0.5) {
+      const rewards = [
+        { type: 'cash', value: 10 + Math.floor(Math.random() * 16) },
+        { type: 'cash', value: 15 },
+        { type: 'item', value: 'lighter' },
+        { type: 'item', value: 'gum' },
+      ];
+      return { success: true, reward: rewards[Math.floor(Math.random() * rewards.length)] };
+    }
+    return { success: false, reward: null };
+  },
+};
+
 const ClubScene = {
   eventIndex: 0,
-  events: [],
+  flavorEvents: [],
   timer: null,
   _venue: null,
   _finished: false,
+  _phase: 'flavor',
+  _choiceMade: false,
 
   _finish() {
     if (this._finished) return;
@@ -1241,112 +1280,213 @@ const ClubScene = {
     BouncerSystem.showResult(true, this._venue);
   },
 
+  _handleSkip() {
+    if (this._finished) return;
+    if (this._phase === 'flavor') {
+      clearTimeout(this.timer);
+      this._showChoice();
+    } else if (this._phase === 'sunrise') {
+      this._finish();
+    }
+  },
+
+  _appendCard({ px, pxColor, text, effect, effectType }) {
+    const feed = $('club-feed');
+    const el = document.createElement('div');
+    el.className = 'club-event';
+    el.innerHTML = `
+      <span class="ce-icon">${PX.i(px || 'star', pxColor || '#ebe4ff', 20)}</span>
+      <div>
+        <div class="ce-text">${text}</div>
+        ${effect ? `<div class="ce-effect ${effectType || 'positive'}">${effect}</div>` : ''}
+      </div>
+    `;
+    feed.appendChild(el);
+    feed.scrollTop = feed.scrollHeight;
+    return el;
+  },
+
   async start(venue) {
     state.phase = 'CLUB';
     this._venue = venue;
     this._finished = false;
+    this._phase = 'flavor';
+    this._choiceMade = false;
+    this.eventIndex = 0;
     $('bouncer-screen').classList.remove('active');
     $('club-screen').classList.add('active');
-    $('club-screen').onclick = () => this._finish();
+    $('club-screen').onclick = () => this._handleSkip();
     $('club-name').textContent = venue.name;
     $('club-sub').textContent = `${venue.music} · ${venue.bpm} BPM · The night unfolds...`;
     $('club-feed').innerHTML = '';
     $('club-done').style.display = 'none';
 
-    // Draw club atmosphere on canvas
     this.drawClubViz(venue);
 
-    // Select 6-8 events, always end with sunrise
-    const pool = CLUB_EVENTS.filter(e => {
-      if (e.final) return false;
-      if (e.conditionalOnSubstance && state.queue.activeTraits.filter(t => ['The Vibe', 'Motor Mouth', 'Big Energy'].includes(t)).length === 0) return false;
-      return true;
-    });
+    const pool = CLUB_EVENTS.filter(e => !e.final && !e.conditionalOnSubstance);
     const shuffled = pool.sort(() => Math.random() - 0.5);
-    this.events = shuffled.slice(0, 6 + Math.floor(Math.random() * 3));
-    this.events.push(CLUB_EVENTS.find(e => e.final));
-    this.eventIndex = 0;
+    this.flavorEvents = shuffled.slice(0, 2 + Math.floor(Math.random() * 2));
 
-    await sleep(1500);
-    this.nextEvent();
+    await sleep(1200);
+    this._playNextFlavor();
   },
 
-  async nextEvent() {
-    if (this._finished) return;
-    if (this.eventIndex >= this.events.length) {
-      $('club-done').style.display = 'block';
+  async _playNextFlavor() {
+    if (this._finished || this._phase !== 'flavor') return;
+    if (this.eventIndex >= this.flavorEvents.length) {
+      this._showChoice();
       return;
     }
 
-    const evt = this.events[this.eventIndex];
-    const feed = $('club-feed');
-
+    const evt = this.flavorEvents[this.eventIndex];
     const text = typeof evt.text === 'function' ? evt.text(state.finalSquad) : evt.text;
+    this._appendCard({ px: evt.px, pxColor: evt.pxColor, text });
+    this.eventIndex++;
 
+    this.timer = setTimeout(() => this._playNextFlavor(), 1500 + Math.random() * 500);
+  },
+
+  _showChoice() {
+    if (this._finished || this._choiceMade) return;
+    this._phase = 'choice';
+    clearTimeout(this.timer);
+
+    const feed = $('club-feed');
     const el = document.createElement('div');
-    el.className = 'club-event';
+    el.className = 'club-event club-choice-card';
     el.innerHTML = `
-      <span class="ce-icon">${PX.i(evt.px || 'star', evt.pxColor || '#ebe4ff', 20)}</span>
-      <div>
-        <div class="ce-text">${text}</div>
-        <div class="ce-effect ${evt.type}">${evt.effect}</div>
+      <span class="ce-icon">${PX.i('star', '#ffd86b', 20)}</span>
+      <div style="flex:1;">
+        <div class="ce-text" style="font-weight:700;color:var(--text-primary);">How do you spend the peak of the night?</div>
+        <div class="event-choices" style="margin-top:10px;">
+          <button class="event-choice-btn" data-choice="crew">Stick with your crew</button>
+          <button class="event-choice-btn" data-choice="room">Work the room</button>
+          <button class="event-choice-btn" data-choice="chase">Chase the night</button>
+        </div>
       </div>
     `;
     feed.appendChild(el);
     feed.scrollTop = feed.scrollHeight;
 
-    // Apply effects
-    if (evt.bondBoost) {
+    el.querySelectorAll('[data-choice]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._resolveChoice(btn.dataset.choice);
+      });
+    });
+  },
+
+  async _resolveChoice(choiceId) {
+    if (this._choiceMade || this._finished) return;
+    this._choiceMade = true;
+    this._phase = 'resolving';
+    $('club-screen').onclick = null;
+
+    const feed = $('club-feed');
+    feed.querySelectorAll('.club-choice-card').forEach(card => {
+      card.querySelectorAll('.event-choice-btn').forEach(btn => { btn.disabled = true; });
+    });
+
+    if (choiceId === 'crew') {
       const p = SaveSystem.load();
       const ids = state.finalSquad.map(m => CONTACTS.find(c => c.name === m.name)?.id).filter(Boolean);
       ids.forEach(id => {
         const key = ['player', id].sort().join(':');
-        p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + evt.bondBoost);
+        p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + 1);
       });
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
           const key = [ids[i], ids[j]].sort().join(':');
-          p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + evt.bondBoost);
+          p.bonds[key] = Math.min(100, (p.bonds[key] || 0) + 1);
         }
       }
       SaveSystem.save(p);
-    }
-    if (evt.rep) {
+      const names = state.finalSquad.map(m => m.name).join(', ') || 'your crew';
+      this._appendCard({
+        px: 'people', pxColor: '#39ff14',
+        text: `You stay close to ${names}. No drama, just the crew.`,
+        effect: '+Bond with every squad member',
+        effectType: 'positive',
+      });
+      EventLog.add('Inside the club: stuck with the crew — bonds strengthened', 'positive');
+    } else if (choiceId === 'room') {
+      const roll = Math.random();
       const p = SaveSystem.load();
-      p.reputation += evt.rep;
-      SaveSystem.save(p);
-    }
-    if (evt.cash) state.cash += evt.cash;
-    if (evt.cost) state.cash = Math.max(0, state.cash - evt.cost);
-    if (evt.item) state.inventory[evt.item] = (state.inventory[evt.item] || 0) + 1;
-    if (evt.hope) state.queue.hope = Math.min(100, state.queue.hope + evt.hope);
-    if (evt.anxiety) state.queue.anxiety = Math.max(0, state.queue.anxiety + evt.anxiety);
-
-    if (evt.contactChance && !state.contactUnlockedThisRun) {
-      const p = SaveSystem.load();
-      if (Math.random() < 0.5) {
+      p.reputation += 1;
+      let unlockText = '';
+      if (!state.contactUnlockedThisRun && roll < 0.675) {
         const newId = SaveSystem.pickLockedContact(p, this._venue);
         const contact = newId ? SaveSystem.tryUnlockContact(p, newId, { where: 'inside the club', bond: 25 }) : null;
         if (contact) {
-          SaveSystem.save(p);
-          const unlockEl = document.createElement('div');
-          unlockEl.className = 'club-event';
-          unlockEl.innerHTML = `<span class="ce-icon">${PX.i('hand','#39ff14',20)}</span><div><div class="ce-text" style="color:var(--neon-green)">You exchanged numbers with ${contact.name}! New contact unlocked.</div></div>`;
-          await sleep(800);
-          feed.appendChild(unlockEl);
-          feed.scrollTop = feed.scrollHeight;
+          state.contactUnlockedThisRun = true;
+          unlockText = ` You exchanged numbers with ${contact.name}!`;
         }
+      }
+      SaveSystem.save(p);
+      this._appendCard({
+        px: 'hand', pxColor: '#ffd86b',
+        text: `You work the room — smiling, nodding, making yourself known.${unlockText}`,
+        effect: unlockText ? '+Rep, new connection' : '+Rep',
+        effectType: 'positive',
+      });
+      EventLog.add(`Inside the club: worked the room (+rep${unlockText ? ', met someone new' : ''})`, 'positive');
+    } else if (choiceId === 'chase') {
+      const success = Math.random() < 0.5;
+      if (success) {
+        const rewards = [
+          { type: 'cash', value: 10 + Math.floor(Math.random() * 16) },
+          { type: 'item', value: 'lighter' },
+          { type: 'item', value: 'gum' },
+        ];
+        const reward = rewards[Math.floor(Math.random() * rewards.length)];
+        if (reward.type === 'cash') {
+          state.cash += reward.value;
+          this._appendCard({
+            px: 'coin', pxColor: '#ffd86b',
+            text: `Fortune favors the bold — you find $${reward.value} and ride the wave.`,
+            effect: `+$${reward.value}`,
+            effectType: 'positive',
+          });
+          EventLog.add(`Inside the club: chased the night — found $${reward.value}`, 'positive');
+        } else {
+          state.inventory[reward.value] = (state.inventory[reward.value] || 0) + 1;
+          const itemName = [...ITEMS, ...KIOSK_ITEMS].find(i => i.id === reward.value)?.name || reward.value;
+          this._appendCard({
+            px: 'fire', pxColor: '#fd9927',
+            text: `The night delivers — someone presses a ${itemName.toLowerCase()} into your hand.`,
+            effect: `+${itemName}`,
+            effectType: 'positive',
+          });
+          EventLog.add(`Inside the club: chased the night — scored ${itemName}`, 'positive');
+        }
+      } else {
+        this._appendCard({
+          px: 'clock', pxColor: '#666',
+          text: 'You chase every corner of the club, but the night slips away between beats.',
+          effect: 'Nothing gained',
+          effectType: 'negative',
+        });
+        EventLog.add('Inside the club: chased the night — it slipped away', 'info');
       }
     }
 
-    this.eventIndex++;
+    await sleep(1800);
+    this._showSunrise();
+  },
 
+  _showSunrise() {
     if (this._finished) return;
-    if (!evt.final) {
-      this.timer = setTimeout(() => this.nextEvent(), 2500 + Math.random() * 1500);
-    } else {
-      $('club-done').style.display = 'block';
-    }
+    this._phase = 'sunrise';
+    const sunrise = CLUB_EVENTS.find(e => e.final);
+    this._appendCard({
+      px: sunrise.px,
+      pxColor: sunrise.pxColor,
+      text: typeof sunrise.text === 'function' ? sunrise.text(state.finalSquad) : sunrise.text,
+      effect: sunrise.effect,
+      effectType: 'special',
+    });
+    $('club-done').style.display = 'block';
+    $('club-screen').onclick = () => this._finish();
   },
 
   drawClubViz(venue) {

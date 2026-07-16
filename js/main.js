@@ -18,19 +18,17 @@ function resetRunState() {
   state.queue.animFrame = null;
   state.queue.activeTraits = [];
   state.queue.delayedEffects = [];
-  state.queue.memberStats = {};
+  state.queue.allianceFormed = false;
   state.queue.nightMemories = [];
   state.queue.crewChatHistory = [];
   state.queue.crewMemberChats = {};
   state.queue.startingSquadCount = 0;
-  state.queue.warmthBonus = 0;
   state.queue.allNeighbors = [];
   state.queue.behindNeighbors = [];
   state.queue.allyData = null;
   state.queue.earplugsActive = false;
   state.contactUnlockedThisRun = false;
 
-  SocialActions.reset();
   LLM.disposeAllCaches();
   clearTimeout(BouncerSystem.timer);
   BouncerSystem.generating = false;
@@ -102,11 +100,9 @@ async function enterQueue() {
   // Apply wardrobe bonuses
   const prog = SaveSystem.load();
   let wardrobeHope = 0;
-  let wardrobeWarmth = 0;
   prog.equippedOutfits.forEach(id => {
     const w = WARDROBE.find(i => i.id === id);
     if (w?.groupBonus) wardrobeHope += w.groupBonus;
-    if (w?.warmthBonus) wardrobeWarmth += w.warmthBonus;
   });
 
   const groupBonus = state.finalSquad.length * 3;
@@ -161,12 +157,11 @@ async function enterQueue() {
   state.queue.behindNeighbors = [];
   state.queue.activeTraits = [];
   state.queue.delayedEffects = [];
-  state.queue.memberStats = {};
+  state.queue.allianceFormed = false;
   state.queue.nightMemories = [];
   state.queue.crewChatHistory = [];
   state.queue.crewMemberChats = {};
   state.queue.startingSquadCount = state.finalSquad.length;
-  state.queue.warmthBonus = wardrobeWarmth;
   state.queue.allyData = null;
 
   // Show loading overlay
@@ -235,15 +230,38 @@ function startQueuePhase(venue, cfg) {
   // Update HUD
   QueueEngine.updateMeters();
 
-  // Initialize per-member stats
-  MemberStats.init(state.finalSquad);
-
-  // Flask: morale boost for whole squad at queue start
+  // Hip flask: eases squad anxiety at queue start
   const progOutfits = SaveSystem.load();
   if (progOutfits.equippedOutfits.includes('flask')) {
-    state.finalSquad.forEach(m => MemberStats.boostMorale(m.name, 15));
-    notify('Hip flask shared — squad morale up', { toastMs: 2000, logType: 'positive' });
+    QueueEngine.modAnxiety(-10);
+    notify('Hip flask shared — anxiety eases', { toastMs: 2000, logType: 'positive' });
+    EventLog.add('Hip flask shared — the squad feels steadier', 'positive');
   }
+
+  // Music taste and crew bonds → small hope boosts at queue start
+  const loggedBondPairs = new Set();
+  state.finalSquad.forEach(member => {
+    const contact = CONTACTS.find(c => c.name === member.name);
+    if (contact?.musicPref && venue?.music && contact.musicPref === venue.music) {
+      QueueEngine.modHope(3);
+      EventLog.add(`${member.name} is hyped for ${venue.music} tonight (+hope)`, 'positive');
+    }
+    const otherIds = state.finalSquad
+      .filter(m => m.name !== member.name)
+      .map(m => CONTACTS.find(c => c.name === m.name)?.id)
+      .filter(Boolean);
+    otherIds.forEach(otherId => {
+      const pairKey = [contact?.id || '', otherId].sort().join(':');
+      if (loggedBondPairs.has(pairKey)) return;
+      const bond = SaveSystem.getBond(contact?.id || '', otherId);
+      if (bond > 0) {
+        loggedBondPairs.add(pairKey);
+        QueueEngine.modHope(3);
+        const other = CONTACTS.find(c => c.id === otherId);
+        EventLog.add(`${member.name} and ${other?.name || 'crew'} have history — good vibes (+hope)`, 'positive');
+      }
+    });
+  });
 
   // Log active squad trait effects
   if (squadHasContact('kai')) EventLog.add("Kai's hype speeds up the line (+15% move, +20% anxiety)", 'info');
@@ -253,8 +271,6 @@ function startQueuePhase(venue, cfg) {
   if (squadHasContact('priya')) EventLog.add("Priya's network boosts bond gains (+50%)", 'info');
   if (squadHasContact('zara')) EventLog.add('Zara will document a successful night (+rep)', 'info');
   if (squadHasContact('ghost')) EventLog.add('Ghost fades from the bouncer head-count', 'info');
-
-  updateEavesdropButton();
 
   // Show queue screen
   $('queue-screen').classList.add('active');
@@ -344,10 +360,6 @@ function init() {
   $('bouncer-use-item').innerHTML = PX.i('pack', '#a4ff80', 16);
   $('act-icon-intel').innerHTML = PX.i('key', '#ffd86b', 22);
   $('act-icon-crew').innerHTML = PX.i('people', '#7b75ff', 22);
-  $('act-icon-eavesdrop').innerHTML = PX.i('ear', '#57f2ff', 22);
-  $('act-icon-scout').innerHTML = PX.i('eye', '#39ff14', 22);
-  $('act-icon-flirt').innerHTML = PX.i('heart', '#ff69b4', 22);
-  $('act-icon-alliance').innerHTML = PX.i('hand', '#7b75ff', 22);
   $('log-icon').innerHTML = PX.i('scroll', '#ebe4ff', 12);
   $('mute-icon').innerHTML = PX.i('sound', '#ebe4ff', 18);
   $('battery-icon').innerHTML = PX.i('bolt', '#ebe4ff', 10);
@@ -499,24 +511,6 @@ function init() {
     CrewChatSystem.openGroup();
   });
 
-  // Phase 1: Social action buttons
-  $('act-eavesdrop').addEventListener('click', () => {
-    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
-    SocialActions.eavesdrop();
-  });
-  $('act-scout').addEventListener('click', () => {
-    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
-    SocialActions.scoutDoor();
-  });
-  $('act-flirt').addEventListener('click', () => {
-    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
-    SocialActions.flirt();
-  });
-  $('act-alliance').addEventListener('click', () => {
-    if (state.phase !== 'QUEUE' || state.queue.actionLocked) return;
-    SocialActions.formAlliance();
-  });
-
   // Phase 1: Chat input
   $('chat-send').addEventListener('click', () => {
     if (CrewChatSystem.active) CrewChatSystem.sendMessage($('chat-input').value);
@@ -530,11 +524,6 @@ function init() {
   });
   $('chat-close').addEventListener('click', () => CrewChatSystem.active ? CrewChatSystem.close() : ChatSystem.close());
   $('chat-leave').addEventListener('click', () => CrewChatSystem.active ? CrewChatSystem.close() : ChatSystem.close());
-
-  // Member detail close
-  $('member-detail-close')?.addEventListener('click', () => {
-    $('member-detail').classList.remove('open');
-  });
 
   // Bouncer phase: free text input
   $('bouncer-send').addEventListener('click', () => {

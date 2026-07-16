@@ -19,14 +19,27 @@ const Conversation = {
   }) {
     return {
       generating: false,
+      _token: 0,
       _pendingPlayerText: null,
       _pendingOptions: null,
       _typingEl: null,
 
+      invalidate() {
+        this._token++;
+        this._pendingPlayerText = null;
+        this._pendingOptions = null;
+      },
+
+      _clearTypingEl() {
+        if (!this._typingEl) return;
+        this._typingEl.remove?.();
+        this._typingEl = null;
+      },
+
       addBubble(text, cls, { html } = {}) {
         const el = document.createElement('div');
         el.className = 'chat-bubble ' + cls;
-        if (html || text.includes('<img') || text.includes('<span')) {
+        if (html) {
           el.innerHTML = text;
         } else {
           el.textContent = text;
@@ -47,6 +60,7 @@ const Conversation = {
         }
         this.generating = true;
         this._pendingOptions = options;
+        const token = this._token;
         const sendBtn = getSendBtn();
         if (options.disableSend !== false && sendBtn) sendBtn.disabled = true;
 
@@ -65,6 +79,10 @@ const Conversation = {
               options.maxTokens,
               options.cacheKey,
             );
+            if (token !== this._token) {
+              this._clearTypingEl();
+              return;
+            }
           }
 
           let dialogText = '';
@@ -78,6 +96,15 @@ const Conversation = {
           if (!dialogText && toolCalls.length === 0) {
             dialogText = typeof fb === 'function' ? fb() : fb;
             if (dialogText !== '...') await sleep(500);
+            if (token !== this._token) {
+              this._clearTypingEl();
+              return;
+            }
+          }
+
+          if (token !== this._token) {
+            this._clearTypingEl();
+            return;
           }
 
           if (options.onToolCalls) options.onToolCalls(toolCalls);
@@ -105,7 +132,11 @@ const Conversation = {
           const pendingOpts = this._pendingOptions;
           this._pendingPlayerText = null;
           if (pending && pendingOpts) {
-            await this.generate(pending, pendingOpts);
+            try {
+              await this.generate(pending, pendingOpts);
+            } catch (e) {
+              console.warn('Queued chat generation failed:', e);
+            }
           }
         }
       },
@@ -200,6 +231,7 @@ const ChatSystem = {
   open(neighbor, direction) {
     this.currentNeighbor = neighbor;
     this.messages = neighbor.chatHistory.length > 0 ? [...neighbor.chatHistory] : [];
+    this._getConvo().invalidate();
     this._getConvo().generating = false;
     this._getConvo()._pendingPlayerText = null;
 
@@ -245,10 +277,7 @@ const ChatSystem = {
 
     // Initial greeting only on first conversation
     if (neighbor.chatHistory.length === 0) {
-      this.generateResponse('*you make eye contact*').catch(e => {
-        console.error('Chat generation failed:', e);
-        EventLog.add('Neighbor chat failed — try again', 'negative');
-      });
+      this.generateResponse('*you make eye contact*');
     }
   },
 
@@ -302,10 +331,7 @@ const ChatSystem = {
       this.addBubble('💵 You gave $5', 'system-msg');
       EventLog.add(`Gave $5 to ${this.currentNeighbor.name}`, 'info');
       this._refreshChatReactiveUi();
-      this.generateResponse('*the player hands you $5*').catch(e => {
-        console.error('Chat generation failed:', e);
-        EventLog.add('Neighbor chat failed — try again', 'negative');
-      });
+      this.generateResponse('*the player hands you $5*');
     } else {
       if ((state.inventory[itemId] || 0) <= 0) { showToast('You don\'t have that'); return; }
       state.inventory[itemId]--;
@@ -315,10 +341,7 @@ const ChatSystem = {
       this.addBubble(`${item?.icon || '📦'} You gave ${name}`, 'system-msg');
       EventLog.add(`Gave ${name} to ${this.currentNeighbor.name}`, 'info');
       this._refreshChatReactiveUi();
-      this.generateResponse(`*the player hands you a ${name}*`).catch(e => {
-        console.error('Chat generation failed:', e);
-        EventLog.add('Neighbor chat failed — try again', 'negative');
-      });
+      this.generateResponse(`*the player hands you a ${name}*`);
     }
     QueueEngine.advanceTime(1);
     this.renderItemButtons();
@@ -337,8 +360,8 @@ const ChatSystem = {
     QueueEngine.updateMeters();
   },
 
-  addBubble(text, cls) {
-    return this._getConvo().addBubble(text, cls);
+  addBubble(text, cls, opts) {
+    return this._getConvo().addBubble(text, cls, opts);
   },
 
   async sendMessage(text) {
@@ -397,7 +420,7 @@ const ChatSystem = {
           const amt = args.amount || 0;
           if (amt > 0) {
             state.cash += amt;
-            setTimeout(() => this.addBubble(`${PX.i('coin','#ffd86b',12)} Received $${amt}`, 'system-msg'), 200);
+            setTimeout(() => this.addBubble(`${PX.i('coin','#ffd86b',12)} Received $${amt}`, 'system-msg', { html: true }), 200);
             this._refreshChatReactiveUi();
           }
           break;
@@ -470,10 +493,7 @@ const ChatSystem = {
           const nudge = intelText
             ? `*the player gave you the ${itemName} you wanted* Now share the intel you promised. Your intel: ${intelText}`
             : `*the player gave you the ${itemName} you wanted* Now share the intel you promised.`;
-          this.generateResponse(nudge).catch(e => {
-            console.error('Chat generation failed:', e);
-            EventLog.add('Neighbor chat failed — try again', 'negative');
-          });
+          this.generateResponse(nudge);
         });
       }, 200);
     }
@@ -489,7 +509,7 @@ const ChatSystem = {
       return;
     }
     setTimeout(() => {
-      this.addBubble(`${PX.i('heart','#ff69b4',12)} ${n.name} wants to exchange numbers!`, 'system-msg');
+      this.addBubble(`${PX.i('heart','#ff69b4',12)} ${n.name} wants to exchange numbers!`, 'system-msg', { html: true });
       const acceptBtn = this.addBubble('Add to contacts?', 'system-msg');
       acceptBtn.style.cursor = 'pointer';
       acceptBtn.style.textDecoration = 'underline';
@@ -511,7 +531,8 @@ const ChatSystem = {
           SaveSystem.save(p);
           this.addBubble(
             `${PX.i('star','#39ff14',12)} ${n.name} gave you their number — turns out they know ${contact.name}, who's now in your contacts.`,
-            'system-msg'
+            'system-msg',
+            { html: true },
           );
           notify(`${n.name} introduced you to ${contact.name}`, { toastMs: 3000, logType: 'positive' });
           EventLog.add(`${n.name} introduced you to ${contact.name} (affinity ${n.affinity})`, 'positive');
@@ -624,11 +645,11 @@ const ChatSystem = {
     const neighbor = this.currentNeighbor;
     if (!neighbor) return;
     setTimeout(() => {
-      if (SocialActions.allianceFormed) {
+      if (state.queue.allianceFormed) {
         this.addBubble(`🤝 You already have a queue alliance tonight.`, 'system-msg');
         return;
       }
-      SocialActions.allianceFormed = true;
+      state.queue.allianceFormed = true;
       state.queue.allyData = { name: neighbor.name, disposition: neighbor.disposition };
       neighbor.affinity = Math.min(100, (neighbor.affinity || 50) + 10);
       QueueEngine.addTrait('Queue Alliance');
@@ -676,6 +697,8 @@ const CrewChatSystem = {
     this.contact = null;
     state.queue.actionLocked = true;
 
+    this._getConvo().invalidate();
+
     $('chat-name').textContent = 'Your Crew';
     $('chat-disp').textContent = `${state.finalSquad.length} friend${state.finalSquad.length > 1 ? 's' : ''} · hope ${Math.round(state.queue.hope)} · anxiety ${Math.round(state.queue.anxiety)}`;
     const avatar = $('chat-avatar');
@@ -689,7 +712,14 @@ const CrewChatSystem = {
       if (msg.role === 'user') this.addBubble(msg.content, 'player');
       if (msg.role === 'assistant') this.addBubble(LLM._stripToolText(msg.content), 'npc');
     });
-    $('chat-actions').innerHTML = '<span style="font-size:10px;color:var(--text-muted);padding:4px;">Crew chat can calm anxiety, restore morale, and create memories.</span>';
+    const memberBtns = state.finalSquad.map(m =>
+      `<button class="chat-give-btn" data-member="${m.name}" title="Step aside with ${m.name}">${PX.i('people', '#7b75ff', 14)} ${m.name} 1:1</button>`
+    ).join('');
+    const actions = $('chat-actions');
+    actions.innerHTML = memberBtns;
+    actions.querySelectorAll('[data-member]').forEach(btn => {
+      btn.onclick = () => this.openMember(btn.dataset.member);
+    });
     $('chat-input').placeholder = 'Say something to the crew...';
     $('chat-overlay').classList.add('active');
     $('chat-input').focus();
@@ -705,9 +735,12 @@ const CrewChatSystem = {
     this.contact = contact;
     state.queue.actionLocked = true;
 
+    this._getConvo().invalidate();
+
     $('chat-name').textContent = name;
-    const stats = state.queue.memberStats[name];
-    $('chat-disp').textContent = `${contact.trait} · morale ${Math.round(stats?.morale ?? 0)} · warmth ${Math.round(stats?.warmth ?? 0)}`;
+    const playerBond = SaveSystem.getBond('player', contact.id);
+    const bondLabel = playerBond >= 50 ? 'tight crew' : playerBond >= 20 ? 'good friends' : playerBond > 0 ? 'getting closer' : 'new to the squad';
+    $('chat-disp').textContent = `${contact.trait} · ${contact.musicPref || 'music'} · ${bondLabel}`;
     const portrait = contact.portraitProps ? Portrait.generate(contact.portraitProps, 'friendly', []) : '';
     const avatar = $('chat-avatar');
     avatar.style.background = 'none';
@@ -721,7 +754,9 @@ const CrewChatSystem = {
       if (msg.role === 'user') this.addBubble(msg.content, 'player');
       if (msg.role === 'assistant') this.addBubble(LLM._stripToolText(msg.content), 'npc');
     });
-    $('chat-actions').innerHTML = '<span style="font-size:10px;color:var(--text-muted);padding:4px;">One-on-one talks are best for morale, promises, and personal memories.</span>';
+    const actions = $('chat-actions');
+    actions.innerHTML = `<button class="chat-give-btn" data-back-to-group title="Rejoin the group huddle">${PX.i('people', '#7b75ff', 14)} Back to crew</button>`;
+    actions.querySelector('[data-back-to-group]').onclick = () => this.openGroup();
     $('chat-input').placeholder = `Say something to ${name}...`;
     $('chat-overlay').classList.add('active');
     $('chat-input').focus();
@@ -740,11 +775,10 @@ const CrewChatSystem = {
     this._getConvo()._pendingPlayerText = null;
     state.queue.actionLocked = false;
     QueueEngine.updateMeters();
-    MemberStats.render();
   },
 
-  addBubble(text, cls) {
-    return this._getConvo().addBubble(text, cls);
+  addBubble(text, cls, opts) {
+    return this._getConvo().addBubble(text, cls, opts);
   },
 
   _history() {
@@ -757,9 +791,8 @@ const CrewChatSystem = {
     const venue = VENUES.find(v => v.id === state.selectedVenue);
     const crewLines = state.finalSquad.map(m => {
       const c = CONTACTS.find(ct => ct.name === m.name);
-      const stats = state.queue.memberStats[m.name];
       const memory = c ? MemorySystem.buildPromptContextForContact(c.id) : '';
-      return `- ${m.name}: ${c?.trait || 'Crew member'}, likes ${c?.musicPref || 'music'}, morale ${Math.round(stats?.morale ?? 0)}, warmth ${Math.round(stats?.warmth ?? 0)}${memory ? `\n${memory}` : ''}`;
+      return `- ${m.name}: ${c?.trait || 'Crew member'}, likes ${c?.musicPref || 'music'}${memory ? `\n${memory}` : ''}`;
     }).join('\n');
     return `You are writing the crew's group-chat style response while everyone waits outside ${venue?.name || 'the club'}.
 Current meters: Hope ${Math.round(state.queue.hope)}, Anxiety ${Math.round(state.queue.anxiety)}, queue position ${state.queue.position}.
@@ -769,7 +802,6 @@ ${crewLines}
 Reply as one or more crew members in short casual lines. Keep the total response under 4 short sentences.
 Use reduce_anxiety if the player's message genuinely calms the group.
 Use boost_hope if it makes the night feel worth it again.
-Use boost_morale when a specific member feels supported.
 Use remember for promises, inside jokes, emotional moments, or funny details worth future callbacks.
 NEVER mention tool names in the chat lines themselves — tools are silent actions, the lines are only what the crew actually types.`;
   },
@@ -777,16 +809,15 @@ NEVER mention tool names in the chat lines themselves — tools are silent actio
   _buildMemberPrompt() {
     const venue = VENUES.find(v => v.id === state.selectedVenue);
     const contact = this.contact;
-    const stats = state.queue.memberStats[this.memberName];
     const memories = MemorySystem.buildPromptContextForContact(contact.id);
     return `You are ${contact.name}, a crew member waiting with the player outside ${venue?.name || 'the club'}.
 Trait: ${contact.trait} — ${contact.traitDesc}
 Music preference: ${contact.musicPref}
-Current state: morale ${Math.round(stats?.morale ?? 0)}, warmth ${Math.round(stats?.warmth ?? 0)}, squad anxiety ${Math.round(state.queue.anxiety)}, hope ${Math.round(state.queue.hope)}.
+Current state: squad anxiety ${Math.round(state.queue.anxiety)}, hope ${Math.round(state.queue.hope)}.
 ${memories || 'No strong memories with the player yet.'}
 
 Reply to the player in 1-2 short sentences, in character.
-If they reassure you, use reduce_anxiety and boost_morale.
+If they reassure you, use reduce_anxiety or boost_hope.
 If they make a meaningful promise, share a vulnerable detail, or create an inside joke, use remember.
 If they pressure you selfishly, do not reward them.
 NEVER mention tool names in your spoken reply — tools are silent actions.`;
@@ -847,16 +878,6 @@ NEVER mention tool names in your spoken reply — tools are silent actions.`;
         const amount = Math.min(12, Math.max(1, Math.abs(Number(args.amount) || 4)));
         QueueEngine.modHope(amount);
         this.addBubble(`Hope +${amount}: ${args.reason || 'the night feels worth it'}`, 'system-msg');
-      } else if (fn === 'boost_morale') {
-        const amount = Math.min(20, Math.max(1, Math.abs(Number(args.amount) || 6)));
-        const target = args.member || this.memberName;
-        if (target && state.queue.memberStats[target]) {
-          MemberStats.boostMorale(target, amount);
-          this.addBubble(`${target} morale +${amount}: ${args.reason || 'supported'}`, 'system-msg');
-        } else if (this.mode === 'group') {
-          state.finalSquad.forEach(m => MemberStats.boostMorale(m.name, Math.ceil(amount / 2)));
-          this.addBubble(`Crew morale +${Math.ceil(amount / 2)}: ${args.reason || 'group support'}`, 'system-msg');
-        }
       }
     }
   },

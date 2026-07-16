@@ -30,7 +30,6 @@ const TRAIT_DEFS = {
   'Street Cred':     { px: 'hand', desc: 'Made friends in line — bouncer sees social proof', color: '#ffd86b' },
   'Queue Alliance':  { px: 'hand', desc: 'Allied with a neighbor — they may vouch for you at the door', color: '#7b75ff' },
   'Charmer':         { px: 'heart', desc: 'Flirted your way through the queue — confidence boost', color: '#ff4d6d' },
-  'Scout Intel':     { px: 'eye', desc: 'Observed bouncer behavior up close', color: '#57f2ff' },
 };
 
 // ============================================================
@@ -255,7 +254,8 @@ neighbor.disposition === 'drunk' ? 'You will share this easily — you can barel
 neighbor.disposition === 'hostile' ? 'You will ONLY share this if the player gives you something you want first.' :
 neighbor.disposition === 'anxious' ? 'You will share this if the player reassures you or bonds with you.' :
 'You will share this if the player offers a fair trade.'}
-Use the share_intel tool when you decide to reveal this.`;
+Use the share_intel tool when you decide to reveal this.
+If your affinity with the player is decent (around 55+), you are more willing to share intel unprompted when the conversation feels natural — intel now comes only from neighbor chat, not passive eavesdropping.`;
   }
 
   if (neighbor.wants.length > 0) {
@@ -353,9 +353,9 @@ const WARDROBE = [
   { id: 'designer_watch', name: 'Designer Watch', styles: ['Smart Casual', 'Designer'], price: 30, icon: 'clock', iconColor: '#ffd86b', groupBonus: 0, desc: 'Subtle flex. Boardroom approved.', accentOverride: '#ffd86b' },
   { id: 'band_tee', name: 'Obscure Band Tee', styles: ['No Logo', 'Eccentric'], price: 10, icon: 'note', iconColor: '#7b75ff', groupBonus: 0, desc: 'Shows you have taste. Or pretend to.', shirtOverride: '#2d1b4e' },
   { id: 'gold_chain', name: 'Gold Chain', styles: ['Chains', 'Bold'], price: 25, icon: 'diamond', iconColor: '#ffd86b', groupBonus: 0, desc: 'Drip. Pure drip.', accentOverride: '#ffd86b' },
-  { id: 'flask', name: 'Hip Flask', styles: [], price: 12, icon: 'beer', iconColor: '#fd9927', groupBonus: 3, desc: 'Share drinks, boost morale. +3 group hope.' },
+  { id: 'flask', name: 'Hip Flask', styles: [], price: 12, icon: 'beer', iconColor: '#fd9927', groupBonus: 3, desc: 'Share drinks, ease anxiety. +3 group hope.' },
   { id: 'bluetooth_speaker', name: 'Portable Speaker', styles: [], price: 18, icon: 'sound', iconColor: '#57f2ff', groupBonus: 5, desc: 'Pre-game in the queue. +5 group hope.' },
-  { id: 'hand_warmers', name: 'Hand Warmers', styles: [], price: 8, icon: 'fire', iconColor: '#ff6b35', groupBonus: 0, warmthBonus: 20, desc: 'Keep warm. Squad warmth +20.' },
+  { id: 'hand_warmers', name: 'Hand Warmers', styles: [], price: 8, icon: 'fire', iconColor: '#ff6b35', groupBonus: 3, desc: 'Keep warm in line. +3 group hope.' },
   { id: 'polaroid', name: 'Instant Camera', styles: ['Eccentric', 'Vintage'], price: 15, icon: 'eye', iconColor: '#ff69b4', groupBonus: 2, desc: 'Take pics in line. +bond gains, +2 hope.' },
   { id: 'lucky_charm', name: 'Lucky Charm', styles: [], price: 20, icon: 'star', iconColor: '#39ff14', groupBonus: 0, luckBonus: 5, desc: 'A little extra luck. +5% flake reduction.' },
 ];

@@ -2,6 +2,8 @@
 // SAVE / PROGRESSION SYSTEM
 // ============================================================
 
+const SAVE_VERSION = 1;
+
 const SaveSystem = {
   KEY: 'thequeue_save_v1',
 
@@ -15,6 +17,7 @@ const SaveSystem = {
 
   defaultProgress() {
     return {
+      version: SAVE_VERSION,
       reputation: 0,
       savings: 0,
       job: 'barista',
@@ -39,7 +42,13 @@ const SaveSystem = {
     try {
       const raw = localStorage.getItem(this.KEY);
       if (raw) {
-        const p = { ...this.defaultProgress(), ...JSON.parse(raw) };
+        const parsed = JSON.parse(raw);
+        if (parsed.version === undefined) parsed.version = 1;
+        if (parsed.version > SAVE_VERSION) {
+          console.warn(`Save version ${parsed.version} is newer than supported ${SAVE_VERSION}; using defaults.`);
+          return this.defaultProgress();
+        }
+        const p = { ...this.defaultProgress(), ...parsed };
         this.dedupeVenuesCleared(p);
         return p;
       }
