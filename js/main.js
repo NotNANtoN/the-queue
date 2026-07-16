@@ -52,6 +52,8 @@ function resetRunState() {
 function updatePlanningAiIndicator(pct, status) {
   const el = $('ai-load-indicator');
   if (!el) return;
+  el.classList.remove('clickable');
+  el.removeAttribute('title');
   if (LLM.loaded || status === 'ready') {
     el.classList.add('hidden');
     return;
@@ -59,17 +61,29 @@ function updatePlanningAiIndicator(pct, status) {
   if (status === 'failed') {
     el.textContent = 'AI unavailable — simple dialogue';
     el.classList.remove('hidden');
+    el.classList.add('clickable');
+    el.title = 'Tap to change';
+    return;
+  }
+  if (status === 'off') {
+    el.textContent = 'AI off — simple dialogue';
+    el.classList.remove('hidden');
+    el.classList.add('clickable');
+    el.title = 'Tap to change';
+    return;
+  }
+  if (status === 'unsupported') {
+    el.textContent = 'AI unsupported — simple dialogue';
+    el.classList.remove('hidden');
+    el.classList.add('clickable');
+    el.title = 'Tap to change';
     return;
   }
   el.classList.remove('hidden');
   el.textContent = pct >= 100 ? 'AI warming up…' : `AI loading… ${pct}%`;
 }
 
-function startLlmPreload() {
-  if (LLM.loaded) {
-    updatePlanningAiIndicator(100, 'ready');
-    return;
-  }
+function beginLlmPreload() {
   updatePlanningAiIndicator(0, 'loading');
   LLM.load((pct) => updatePlanningAiIndicator(pct, 'loading'))
     .then(() => {
@@ -81,6 +95,92 @@ function startLlmPreload() {
       state.llm.loadFailed = true;
       updatePlanningAiIndicator(0, 'failed');
     });
+}
+
+function hideAiConsentOverlay() {
+  $('ai-consent-overlay')?.classList.remove('active');
+}
+
+function showAiConsentOverlay(preflight) {
+  const overlay = $('ai-consent-overlay');
+  const warningEl = $('ai-consent-warning');
+  const loadBtn = $('ai-consent-load');
+  const skipBtn = $('ai-consent-skip');
+  const choicesEl = $('ai-consent-choices');
+  if (!overlay || !loadBtn || !skipBtn) return;
+
+  const lowMemory = preflight.level === 'low-memory';
+  if (warningEl) {
+    if (lowMemory) {
+      warningEl.textContent =
+        `Your device reports ${preflight.deviceMemory} GB of RAM — loading the AI will likely freeze this machine. Simple dialogue mode is recommended.`;
+      warningEl.classList.remove('hidden');
+    } else {
+      warningEl.textContent = '';
+      warningEl.classList.add('hidden');
+    }
+  }
+
+  loadBtn.classList.toggle('caution', lowMemory);
+  loadBtn.classList.remove('recommended');
+  skipBtn.classList.toggle('recommended', lowMemory);
+  skipBtn.classList.remove('caution');
+
+  if (lowMemory && choicesEl) {
+    choicesEl.appendChild(skipBtn);
+    choicesEl.appendChild(loadBtn);
+  } else if (choicesEl) {
+    choicesEl.appendChild(loadBtn);
+    choicesEl.appendChild(skipBtn);
+  }
+
+  const onLoad = () => {
+    SaveSystem.setAiChoice('on');
+    hideAiConsentOverlay();
+    beginLlmPreload();
+  };
+  const onSkip = () => {
+    SaveSystem.setAiChoice('off');
+    hideAiConsentOverlay();
+    updatePlanningAiIndicator(0, 'off');
+  };
+
+  loadBtn.onclick = onLoad;
+  skipBtn.onclick = onSkip;
+  overlay.classList.add('active');
+}
+
+async function startLlmPreload() {
+  if (LLM.loaded) {
+    updatePlanningAiIndicator(100, 'ready');
+    return;
+  }
+
+  const choice = SaveSystem.getAiChoice();
+  if (choice === 'off') {
+    updatePlanningAiIndicator(0, 'off');
+    return;
+  }
+  if (choice === 'on') {
+    beginLlmPreload();
+    return;
+  }
+
+  let preflight;
+  try {
+    preflight = await LLM.preflight();
+  } catch (e) {
+    console.warn('LLM preflight failed:', e);
+    updatePlanningAiIndicator(0, 'unsupported');
+    return;
+  }
+
+  if (preflight.level === 'unsupported') {
+    updatePlanningAiIndicator(0, 'unsupported');
+    return;
+  }
+
+  showAiConsentOverlay(preflight);
 }
 
 async function enterQueue() {
@@ -166,12 +266,13 @@ async function enterQueue() {
 
   // Show loading overlay
   $('loading-overlay').classList.add('active');
-  $('loading-status').textContent = 'Initializing AI...';
   renderLoadingQueue(0);
 
-  // Load LLM — await in-flight preload or show full overlay progress
+  const aiChoice = SaveSystem.getAiChoice();
   state.llm.loadFailed = false;
-  if (!LLM.loaded) {
+
+  if (aiChoice === 'on' && !LLM.loaded) {
+    $('loading-status').textContent = 'Initializing AI...';
     try {
       const fmtDuration = (ms) => {
         const s = Math.max(0, Math.round(ms / 1000));
@@ -200,8 +301,14 @@ async function enterQueue() {
       updatePlanningAiIndicator(0, 'failed');
       await sleep(1500);
     }
-  } else {
+  } else if (LLM.loaded) {
+    $('loading-status').textContent = 'Ready!';
+    renderLoadingQueue(100);
     updatePlanningAiIndicator(100, 'ready');
+  } else {
+    $('loading-status').textContent = 'Simple dialogue mode';
+    renderLoadingQueue(100);
+    await sleep(600);
   }
 
   startQueuePhase(venue, cfg);
@@ -288,6 +395,11 @@ function startQueuePhase(venue, cfg) {
       toastMs: 4500,
       logType: 'negative',
       logMsg: 'AI model failed to load. Neighbor and bouncer chat will use fallbacks.',
+    });
+  } else if (SaveSystem.getAiChoice() === 'off') {
+    notify('Playing with simple dialogue — tap the AI indicator to enable the model later', {
+      toastMs: 4500,
+      logType: 'info',
     });
   }
   EventLog.add(`You don't know who's playing or what the password is. Talk to people to find out.`, 'info');
@@ -421,6 +533,14 @@ function init() {
     }
   });
   $('debug-run-tests')?.addEventListener('click', () => Debug.runToolTests());
+
+  $('ai-load-indicator')?.addEventListener('click', () => {
+    const el = $('ai-load-indicator');
+    if (!el?.classList.contains('clickable')) return;
+    SaveSystem.setAiChoice(null);
+    startLlmPreload();
+  });
+
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
       e.preventDefault();

@@ -54,6 +54,33 @@ const LLM = {
   _toolStripRegexes: null,
   _toolParseRegexes: null,
 
+  _assessPreflight({ hasWebGPU, deviceMemory }) {
+    const reasons = [];
+    if (!hasWebGPU) {
+      reasons.push('WebGPU is not available in this browser');
+      return { level: 'unsupported', reasons };
+    }
+    if (deviceMemory !== undefined && deviceMemory < 8) {
+      reasons.push(`Device reports ${deviceMemory} GB of total RAM`);
+      reasons.push('The AI model needs roughly 6–8 GB of free memory while running');
+      return { level: 'low-memory', reasons };
+    }
+    reasons.push('WebGPU is available');
+    if (deviceMemory === undefined) {
+      reasons.push('Total RAM could not be detected');
+    } else {
+      reasons.push(`Device reports ${deviceMemory} GB of RAM`);
+    }
+    return { level: 'ok', reasons };
+  },
+
+  async preflight() {
+    const hasWebGPU = !!navigator.gpu && !!(await navigator.gpu.requestAdapter().catch(() => null));
+    const deviceMemory = navigator.deviceMemory;
+    const assessment = this._assessPreflight({ hasWebGPU, deviceMemory });
+    return { ...assessment, hasWebGPU, deviceMemory };
+  },
+
   _getToolNameAlternation() {
     if (!this._toolNameAlternation) {
       this._toolNameAlternation = ALL_TOOL_NAMES.join('|');

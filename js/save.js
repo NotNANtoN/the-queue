@@ -6,6 +6,26 @@ const SAVE_VERSION = 1;
 
 const SaveSystem = {
   KEY: 'thequeue_save_v1',
+  AI_CHOICE_KEY: 'thequeue_ai_choice',
+
+  getAiChoice() {
+    try {
+      const v = localStorage.getItem(this.AI_CHOICE_KEY);
+      return v === 'on' || v === 'off' ? v : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  setAiChoice(value) {
+    try {
+      if (value === 'on' || value === 'off') {
+        localStorage.setItem(this.AI_CHOICE_KEY, value);
+      } else {
+        localStorage.removeItem(this.AI_CHOICE_KEY);
+      }
+    } catch (e) {}
+  },
 
   JOBS: [
     { id: 'barista', name: 'Barista', pay: 30, minRep: 0 },
